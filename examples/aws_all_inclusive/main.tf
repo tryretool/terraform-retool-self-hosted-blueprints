@@ -11,14 +11,14 @@ locals {
 }
 
 module "vpc" {
-  source  = "tryretool/self-hosted-blueprints/retool//modules/aws/vpc"
+  source  = "tryretool/self-hosted-blueprints/retool//modules/aws-vpc"
   version = "~> 0.0.1"
 
-  prefix  = local.prefix
+  prefix = local.prefix
 }
 
 module "eks" {
-  source  = "tryretool/self-hosted-blueprints/retool//modules/aws/eks"
+  source  = "tryretool/self-hosted-blueprints/retool//modules/aws-eks"
   version = "~> 0.0.1"
 
   prefix = local.prefix
@@ -27,7 +27,7 @@ module "eks" {
 }
 
 module "db-main" {
-  source  = "tryretool/self-hosted-blueprints/retool//modules/aws/database"
+  source  = "tryretool/self-hosted-blueprints/retool//modules/aws-database"
   version = "~> 0.0.1"
 
   prefix     = local.prefix
@@ -43,7 +43,7 @@ module "db-main" {
 }
 
 module "retool-services" {
-  source  = "tryretool/self-hosted-blueprints/retool//modules/aws/retool-services"
+  source  = "tryretool/self-hosted-blueprints/retool//modules/aws-retool-services"
   version = "~> 0.0.1"
 
   prefix = local.prefix
@@ -104,7 +104,7 @@ module "retool" {
 }
 
 module "user-ingress" {
-  source  = "tryretool/self-hosted-blueprints/retool//modules/aws/user-ingress"
+  source  = "tryretool/self-hosted-blueprints/retool//modules/aws-user-ingress"
   version = "~> 0.0.1"
 
   domain_name           = local.domain_name
