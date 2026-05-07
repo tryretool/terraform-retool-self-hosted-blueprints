@@ -13,6 +13,7 @@ locals {
 module "vpc" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/aws/vpc"
   version = "~> 0.0.1"
+
   prefix  = local.prefix
 }
 
