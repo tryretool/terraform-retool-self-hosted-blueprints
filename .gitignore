@@ -20,7 +20,6 @@ crash.log
 # values.yaml
 kubeconfig
 provider.tf
-!/examples/*/provider.tf
 backend.tf
 *.pem
 *.key
