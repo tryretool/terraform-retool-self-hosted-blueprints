@@ -21,6 +21,7 @@ crash.log
 # onprem-values.yaml
 kubeconfig
 provider.tf
+!/examples/*/provider.tf
 backend.tf
 **/modules/helm/onprem-services/onprem-services-chart/templates/issuers.yaml
 *.pem

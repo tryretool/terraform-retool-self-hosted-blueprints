@@ -1,5 +1,5 @@
 locals {
-  prefix      = "blueprint-04"
+  prefix      = "retool-prod"
   aws_profile = "retool"
   region      = "us-west-2"
   tags        = {}
@@ -11,19 +11,25 @@ locals {
 }
 
 module "vpc" {
-  source = "../../modules/aws/vpc"
+  source  = "tryretool/self-hosted-blueprints/retool//modules/aws/vpc"
+  version = "~> 0.0.1"
+
   prefix = local.prefix
 }
 
 module "eks" {
-  source = "../../modules/aws/eks"
+  source  = "tryretool/self-hosted-blueprints/retool//modules/aws/eks"
+  version = "~> 0.0.1"
+
   prefix = local.prefix
   region = local.region
   vpc    = module.vpc.outputs
 }
 
 module "db-main" {
-  source     = "../../modules/aws/database"
+  source  = "tryretool/self-hosted-blueprints/retool//modules/aws/database"
+  version = "~> 0.0.1"
+
   prefix     = local.prefix
   db_purpose = "main"
 
@@ -37,7 +43,9 @@ module "db-main" {
 }
 
 module "retool-services" {
-  source = "../../modules/aws/retool-services"
+  source  = "tryretool/self-hosted-blueprints/retool//modules/aws/retool-services"
+  version = "~> 0.0.1"
+
   prefix = local.prefix
   region = local.region
   vpc    = module.vpc.outputs
@@ -52,12 +60,15 @@ module "retool-services" {
 }
 
 module "retool" {
-  source                                   = "../../modules/common/retool-helm"
+  source  = "tryretool/self-hosted-blueprints/retool//modules/common/retool-helm"
+  version = "~> 0.0.1"
+
   retool_helm_name                         = "retool"
   retool_helm_chart_version                = "6.11.0"
   retool_helm_chart_use_unpublished_branch = "lfoster/agent-sandbox-support"
   db                                       = module.db-main.outputs
   retool_services                          = module.retool-services.outputs
+
   retool_helm_extra_values = [yamlencode({
     image = {
       repository = "753800337063.dkr.ecr.us-west-2.amazonaws.com/onprem"
@@ -136,7 +147,8 @@ module "retool" {
 }
 
 module "user-ingress" {
-  source = "../../modules/aws/user-ingress"
+  source  = "tryretool/self-hosted-blueprints/retool//modules/aws/user-ingress"
+  version = "~> 0.0.1"
 
   domain_name                = local.domain_name
   enable_https_listener      = local.enable_user_ingress_https
