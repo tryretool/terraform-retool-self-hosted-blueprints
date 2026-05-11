@@ -1,5 +1,5 @@
 locals {
-  prefix      = "blueprint-04"
+  prefix      = "retool-prod"
   aws_profile = "retool"
   region      = "us-west-2"
   tags        = {}
@@ -11,19 +11,25 @@ locals {
 }
 
 module "vpc" {
-  source = "../../modules/aws/vpc"
+  source  = "tryretool/self-hosted-blueprints/retool//modules/aws-vpc"
+  version = "~> 0.0.1"
+
   prefix = local.prefix
 }
 
 module "eks" {
-  source = "../../modules/aws/eks"
+  source  = "tryretool/self-hosted-blueprints/retool//modules/aws-eks"
+  version = "~> 0.0.1"
+
   prefix = local.prefix
   region = local.region
   vpc    = module.vpc.outputs
 }
 
 module "db-main" {
-  source     = "../../modules/aws/database"
+  source  = "tryretool/self-hosted-blueprints/retool//modules/aws-database"
+  version = "~> 0.0.1"
+
   prefix     = local.prefix
   db_purpose = "main"
 
@@ -37,31 +43,30 @@ module "db-main" {
 }
 
 module "retool-services" {
-  source = "../../modules/aws/retool-services"
+  source  = "tryretool/self-hosted-blueprints/retool//modules/aws-retool-services"
+  version = "~> 0.0.1"
+
   prefix = local.prefix
   region = local.region
   vpc    = module.vpc.outputs
   eks    = module.eks.outputs
   db     = module.db-main.outputs
 
-  enable_agent_sandbox = true
-  enable_rr_git_s3     = true
-  license_key          = "SECRET"
-
   depends_on = [module.eks]
 }
 
 module "retool" {
-  source                                   = "../../modules/common/retool-helm"
-  retool_helm_name                         = "retool"
-  retool_helm_chart_version                = "6.11.0"
-  retool_helm_chart_use_unpublished_branch = "lfoster/agent-sandbox-support"
-  db                                       = module.db-main.outputs
-  retool_services                          = module.retool-services.outputs
+  source  = "tryretool/self-hosted-blueprints/retool//modules/common/retool-helm"
+  version = "~> 0.0.1"
+
+  retool_helm_name          = "retool"
+  retool_helm_chart_version = "6.8.1"
+  db                        = module.db-main.outputs
+  retool_services           = module.retool-services.outputs
+
   retool_helm_extra_values = [yamlencode({
     image = {
-      repository = "753800337063.dkr.ecr.us-west-2.amazonaws.com/onprem"
-      tag        = "dev-3.380.0-940f7d8"
+      tag = "3.334.0-stable"
     }
     config = {
       useInsecureCookies = !local.enable_user_ingress_https
@@ -80,15 +85,6 @@ module "retool" {
       enabled  = true
       replicas = 2
     }
-    r2Agent = {
-      enabled = true
-    }
-    telemetry = {
-      enabled = true
-      image = {
-        tag = "3.334.0-stable"
-      }
-    }
     workflows = {
       enabled = true
       worker = {
@@ -101,34 +97,6 @@ module "retool" {
     codeExecutor = {
       enabled      = true
       replicaCount = 2
-      image = {
-        repository = "753800337063.dkr.ecr.us-west-2.amazonaws.com/code-executor-service"
-        tag        = "dev-3.380.0-940f7d8"
-      }
-    }
-    jsExecutor = {
-      replicaCount = 2
-      image = {
-        repository = "753800337063.dkr.ecr.us-west-2.amazonaws.com/js-executor-service"
-        tag        = "dev-3.380.0-940f7d8"
-      }
-    }
-    agentSandbox = {
-      enabled = true
-      image = {
-        repository = "753800337063.dkr.ecr.us-west-2.amazonaws.com/agent-executor-service"
-        tag        = "dev-3.380.0-940f7d8"
-      }
-      postgres = {
-        schema = "agent_executor"
-      }
-      externalSecret = {
-        name = module.retool-services.outputs.agent_sandbox_secret_name
-      }
-      frontendWsProxyDomain = "${local.enable_user_ingress_https ? "https" : "http"}://agent-proxy.${local.domain_name}"
-      proxy = {
-        backendDomainSuffixes = local.domain_name
-      }
     }
   })]
 
@@ -136,11 +104,11 @@ module "retool" {
 }
 
 module "user-ingress" {
-  source = "../../modules/aws/user-ingress"
+  source  = "tryretool/self-hosted-blueprints/retool//modules/aws-user-ingress"
+  version = "~> 0.0.1"
 
-  domain_name                = local.domain_name
-  enable_https_listener      = local.enable_user_ingress_https
-  enable_agent_sandbox_proxy = true
+  domain_name           = local.domain_name
+  enable_https_listener = local.enable_user_ingress_https
 
   vpc = module.vpc.outputs
   eks = module.eks.outputs

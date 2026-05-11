@@ -18,12 +18,11 @@ crash.log
 *.tfvars
 
 # values.yaml
-# onprem-values.yaml
 kubeconfig
 provider.tf
 backend.tf
-**/modules/helm/onprem-services/onprem-services-chart/templates/issuers.yaml
 *.pem
+*.key
 
 .DS_Store
 .vscode/
