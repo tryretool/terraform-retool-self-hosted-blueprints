@@ -38,7 +38,7 @@ resource "azurerm_kubernetes_cluster" "main" {
     max_count                   = var.node_max_count
     vm_size                     = var.node_vm_size
     os_disk_size_gb             = var.node_os_disk_size_gb
-    vnet_subnet_id              = var.aks_subnet_id
+    vnet_subnet_id              = var.vnet.aks_subnet_id
     tags                        = var.tags
 
     upgrade_settings {

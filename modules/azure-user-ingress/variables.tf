@@ -18,17 +18,21 @@ variable "domain_name" {
   description = "Domain name for the Retool deployment (e.g. retool.example.com)"
 }
 
-variable "appgw_subnet_id" {
-  type        = string
-  description = "ID of the Application Gateway dedicated subnet (from the VNet module)"
+variable "vnet" {
+  type = object({
+    appgw_subnet_id = string
+  })
+  description = <<-EOD
+    VNet related inputs:
+      appgw_subnet_id: ID of the Application Gateway dedicated subnet
+  EOD
 }
 
 variable "aks" {
   type = object({
-    cluster_name    = string
     oidc_issuer_url = string
   })
-  description = "AKS cluster details for Workload Identity federation."
+  description = "AKS cluster outputs for Workload Identity federation (e.g. module.aks.outputs)."
 }
 
 variable "retool_service_port" {

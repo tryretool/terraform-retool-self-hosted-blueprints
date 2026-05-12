@@ -1,7 +1,7 @@
 # Output shape mirrors the GKE and EKS modules' cluster output for consistency.
-output "cluster" {
-  description = "AKS cluster details"
-  value = {
+
+locals {
+  outputs = {
     name = azurerm_kubernetes_cluster.main.name
 
     # Used to configure kubernetes/helm providers.
@@ -25,4 +25,14 @@ output "cluster" {
     kube_config_raw       = azurerm_kubernetes_cluster.main.kube_config_raw
     kube_admin_config_raw = try(azurerm_kubernetes_cluster.main.kube_admin_config_raw, null)
   }
+}
+
+output "cluster" {
+  description = "AKS cluster details"
+  value       = local.outputs
+}
+
+output "outputs" {
+  value       = local.outputs
+  description = "Structured AKS cluster outputs for composition with downstream modules."
 }

@@ -60,7 +60,7 @@ resource "azurerm_federated_identity_credential" "eso" {
 data "azurerm_client_config" "current" {}
 
 resource "azurerm_key_vault_access_policy" "eso" {
-  key_vault_id = var.key_vault_id
+  key_vault_id = var.vnet.key_vault_id
   tenant_id    = data.azurerm_client_config.current.tenant_id
   object_id    = azurerm_user_assigned_identity.eso.principal_id
 
@@ -106,7 +106,7 @@ resource "kubectl_manifest" "secret_store" {
         azurekv = {
           authType = "WorkloadIdentity"
           tenantId = data.azurerm_client_config.current.tenant_id
-          vaultUrl = var.key_vault_uri
+          vaultUrl = var.vnet.key_vault_uri
           serviceAccountRef = {
             name      = local.eso.service_account_name
             namespace = local.eso.namespace

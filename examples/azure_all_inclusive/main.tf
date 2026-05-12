@@ -1,7 +1,7 @@
 locals {
-  prefix              = "blessed-04"
+  prefix              = "retool-prod"
   location            = "eastus2"
-  resource_group_name = "retool-blessed-04"
+  resource_group_name = "retool-prod"
   domain_name         = "retool.example.com" # replace with your domain
 
   # user-ingress defaults to HTTP-only until you delegate DNS and flip this on.
@@ -16,7 +16,8 @@ resource "azurerm_resource_group" "main" {
 }
 
 module "vnet" {
-  source = "../../modules/azure/vnet"
+  source  = "tryretool/self-hosted-blueprints/retool//modules/azure-vnet"
+  version = "~> 0.0.1"
 
   prefix              = local.prefix
   resource_group_name = local.resource_group_name
@@ -24,90 +25,67 @@ module "vnet" {
 }
 
 module "aks" {
-  source = "../../modules/azure/aks"
+  source  = "tryretool/self-hosted-blueprints/retool//modules/azure-aks"
+  version = "~> 0.0.1"
 
   prefix              = local.prefix
   resource_group_name = local.resource_group_name
   location            = local.location
-  aks_subnet_id       = module.vnet.aks_subnet_id
+  vnet                = module.vnet.outputs
 
   depends_on = [module.vnet]
 }
 
 module "db-main" {
-  source = "../../modules/azure/database"
+  source  = "tryretool/self-hosted-blueprints/retool//modules/azure-database"
+  version = "~> 0.0.1"
 
   prefix              = local.prefix
   resource_group_name = local.resource_group_name
   location            = local.location
   db_purpose          = "main"
-  vnet_id             = module.vnet.vnet_id
-  postgres_subnet_id  = module.vnet.postgres_subnet_id
-  key_vault_id        = module.vnet.key_vault_id
+  vnet                = module.vnet.outputs
 
   depends_on = [module.vnet]
 }
 
 module "retool-services" {
-  source = "../../modules/azure/retool-services"
+  source  = "tryretool/self-hosted-blueprints/retool//modules/azure-retool-services"
+  version = "~> 0.0.1"
 
   prefix              = local.prefix
   resource_group_name = local.resource_group_name
   location            = local.location
+  vnet                = module.vnet.outputs
+  aks                 = module.aks.outputs
 
-  aks = {
-    cluster_name    = module.aks.cluster.name
-    oidc_issuer_url = module.aks.cluster.oidc_issuer_url
-  }
-
-  key_vault_id  = module.vnet.key_vault_id
-  key_vault_uri = module.vnet.key_vault_uri
-
-  db_credentials_secret_name = module.db-main.db_password_kv_secret_name
+  db_credentials_secret_name = module.db-main.master_secret_name
 }
 
 module "user-ingress" {
-  source = "../../modules/azure/user-ingress"
+  source  = "tryretool/self-hosted-blueprints/retool//modules/azure-user-ingress"
+  version = "~> 0.0.1"
 
   prefix              = local.prefix
   resource_group_name = local.resource_group_name
   location            = local.location
   domain_name         = local.domain_name
-  appgw_subnet_id     = module.vnet.appgw_subnet_id
+  vnet                = module.vnet.outputs
+  aks                 = module.aks.outputs
   enable_https        = local.enable_https
-
-  aks = {
-    cluster_name    = module.aks.cluster.name
-    oidc_issuer_url = module.aks.cluster.oidc_issuer_url
-  }
 
   depends_on = [module.aks, module.retool-services]
 }
 
 module "retool" {
-  source = "../../modules/common/retool-helm"
+  source  = "tryretool/self-hosted-blueprints/retool//modules/common/retool-helm"
+  version = "~> 0.0.1"
 
   retool_helm_name          = "retool"
   retool_helm_chart_version = "6.10.0"
 
-  db = {
-    address  = module.db-main.db_instance_fqdn
-    port     = module.db-main.db_instance_port
-    name     = module.db-main.db_instance_name
-    username = module.db-main.db_instance_username
-  }
-
-  retool_services = {
-    encryption_key_secret_name = module.retool-services.k8s_encryption_key_secret_name
-    jwt_secret_name            = module.retool-services.k8s_jwt_secret_name
-    db_credentials_secret_name = module.retool-services.k8s_db_credentials_secret_name
-    db_credentials_secret_key  = module.retool-services.k8s_db_credentials_secret_key
-    db_credentials_secret_path = module.retool-services.kv_db_credentials_secret_name
-    extra_env_vars_secret_name = module.retool-services.k8s_extra_env_vars_secret_name
-    extra_env_vars_secret_path = module.retool-services.kv_extra_env_vars_secret_name
-    secret_store_name          = module.retool-services.secret_store_name
-    backend_type               = module.retool-services.backend_type
-  }
+  db              = module.db-main.outputs
+  retool_services = module.retool-services.outputs
 
   retool_helm_extra_values = [
     yamlencode({
@@ -145,8 +123,8 @@ module "retool" {
 output "modules" {
   sensitive = true
   value = {
-    vpc             = module.vpc
-    eks             = module.eks
+    vnet            = module.vnet
+    aks             = module.aks
     db-main         = module.db-main
     retool-services = module.retool-services
     user-ingress    = module.user-ingress

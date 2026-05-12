@@ -13,22 +13,24 @@ variable "location" {
   description = "Azure region"
 }
 
+variable "vnet" {
+  type = object({
+    key_vault_id  = string
+    key_vault_uri = string
+  })
+  description = <<-EOD
+    VNet related inputs:
+      key_vault_id: ID of the shared Key Vault
+      key_vault_uri: URI of the shared Key Vault (e.g. https://name.vault.azure.net)
+  EOD
+}
+
 variable "aks" {
   type = object({
-    cluster_name    = string
+    name            = string
     oidc_issuer_url = string
   })
-  description = "AKS cluster details. Use module.aks.cluster.name and .oidc_issuer_url."
-}
-
-variable "key_vault_id" {
-  type        = string
-  description = "ID of the shared Key Vault (from the VNet module)"
-}
-
-variable "key_vault_uri" {
-  type        = string
-  description = "URI of the shared Key Vault (e.g. https://name.vault.azure.net)"
+  description = "AKS cluster outputs (e.g. module.aks.outputs)."
 }
 
 variable "db_credentials_secret_name" {

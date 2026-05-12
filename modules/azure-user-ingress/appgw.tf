@@ -46,7 +46,7 @@ resource "azurerm_application_gateway" "main" {
 
   gateway_ip_configuration {
     name      = "appgw-ip-config"
-    subnet_id = var.appgw_subnet_id
+    subnet_id = var.vnet.appgw_subnet_id
   }
 
   frontend_ip_configuration {
@@ -139,7 +139,7 @@ resource "azurerm_role_assignment" "agic_rg_reader" {
 
 # AGIC needs Network Contributor on the AppGW subnet to perform subnets/join/action.
 resource "azurerm_role_assignment" "agic_subnet_network_contributor" {
-  scope                = var.appgw_subnet_id
+  scope                = var.vnet.appgw_subnet_id
   role_definition_name = "Network Contributor"
   principal_id         = azurerm_user_assigned_identity.agic.principal_id
 }

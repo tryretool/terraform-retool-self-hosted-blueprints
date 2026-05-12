@@ -13,7 +13,7 @@ resource "azurerm_private_dns_zone" "postgres" {
 resource "azurerm_private_dns_zone_virtual_network_link" "postgres" {
   name                  = "${var.prefix}-${var.db_purpose}-vnet-link"
   private_dns_zone_name = azurerm_private_dns_zone.postgres.name
-  virtual_network_id    = var.vnet_id
+  virtual_network_id    = var.vnet.vnet_id
   resource_group_name   = var.resource_group_name
 }
 
@@ -27,7 +27,7 @@ resource "random_password" "pg_password" {
 resource "azurerm_key_vault_secret" "pg_password" {
   name         = "retool-${var.prefix}-${var.db_purpose}-db-password"
   value        = random_password.pg_password.result
-  key_vault_id = var.key_vault_id
+  key_vault_id = var.vnet.key_vault_id
 }
 
 # ---------- PostgreSQL Flexible Server ----------
@@ -41,7 +41,7 @@ resource "azurerm_postgresql_flexible_server" "main" {
   administrator_login           = var.master_username
   administrator_password        = random_password.pg_password.result
   public_network_access_enabled = false
-  delegated_subnet_id           = var.postgres_subnet_id
+  delegated_subnet_id           = var.vnet.postgres_subnet_id
   private_dns_zone_id           = azurerm_private_dns_zone.postgres.id
   storage_mb                    = var.storage_mb
   auto_grow_enabled             = var.auto_grow_enabled

@@ -19,19 +19,18 @@ variable "db_purpose" {
   default     = "main"
 }
 
-variable "vnet_id" {
-  type        = string
-  description = "ID of the VNet (for Private DNS Zone link)"
-}
-
-variable "postgres_subnet_id" {
-  type        = string
-  description = "ID of the delegated subnet for PostgreSQL Flexible Server"
-}
-
-variable "key_vault_id" {
-  type        = string
-  description = "ID of the Key Vault to store the database password"
+variable "vnet" {
+  type = object({
+    vnet_id            = string
+    postgres_subnet_id = string
+    key_vault_id       = string
+  })
+  description = <<-EOD
+    VNet related inputs:
+      vnet_id: ID of the VNet (for Private DNS Zone link)
+      postgres_subnet_id: ID of the delegated subnet for PostgreSQL Flexible Server
+      key_vault_id: ID of the Key Vault to store the database password
+  EOD
 }
 
 variable "postgres_version" {

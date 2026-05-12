@@ -13,9 +13,14 @@ variable "location" {
   description = "Azure region"
 }
 
-variable "aks_subnet_id" {
-  type        = string
-  description = "ID of the AKS node pool subnet"
+variable "vnet" {
+  type = object({
+    aks_subnet_id = string
+  })
+  description = <<-EOD
+    VNet related inputs:
+      aks_subnet_id: ID of the AKS node pool subnet
+  EOD
 }
 
 variable "kubernetes_version" {
