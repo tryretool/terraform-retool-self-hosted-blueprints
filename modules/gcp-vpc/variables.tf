@@ -31,6 +31,18 @@ variable "services_ip_range" {
   default     = "10.2.0.0/20"
 }
 
+variable "default_tags" {
+  type        = map(string)
+  default     = { "service" = "retool" }
+  description = "Default labels applied to all resources. Merged with var.tags (tags take precedence)."
+}
+
+variable "tags" {
+  type        = map(string)
+  default     = {}
+  description = "Labels to apply to GCP resources."
+}
+
 # A /24 is sufficient; Cloud SQL private service access requires a range of at least /24.
 # Unlike AWS, this is not a separate subnet — it's a reserved range for the VPC peering
 # connection to Google-managed services (Cloud SQL). Any pod in the primary subnet can

@@ -1,6 +1,7 @@
 locals {
   cluster_name = "${var.prefix}-gke"
   location     = var.location != "" ? var.location : var.region
+  all_labels   = merge(var.default_tags, var.tags)
 
   master_authorized_networks_config = length(var.master_authorized_networks) == 0 ? [] : [{
     cidr_blocks = var.master_authorized_networks
@@ -57,8 +58,8 @@ resource "google_container_cluster" "gke" {
   # cheaper single-zone deployments.
   location = local.location
 
-  network    = var.network_name
-  subnetwork = var.subnet_name
+  network    = var.vpc.network_name
+  subnetwork = var.vpc.subnet_name
 
   remove_default_node_pool = true
   initial_node_count       = 1
@@ -68,8 +69,8 @@ resource "google_container_cluster" "gke" {
   # VPC-native (alias IP) mode is required for Workload Identity and is the
   # recommended networking mode for all new GKE clusters.
   ip_allocation_policy {
-    cluster_secondary_range_name  = var.pods_range_name
-    services_secondary_range_name = var.services_range_name
+    cluster_secondary_range_name  = var.vpc.pods_range_name
+    services_secondary_range_name = var.vpc.services_range_name
   }
 
   # Workload Identity is the GCP equivalent of EKS IRSA / Pod Identity.
@@ -119,7 +120,7 @@ resource "google_container_cluster" "gke" {
     channel = "CHANNEL_STANDARD"
   }
 
-  resource_labels = var.tags
+  resource_labels = local.all_labels
 }
 
 resource "google_container_node_pool" "primary" {
@@ -156,7 +157,7 @@ resource "google_container_node_pool" "primary" {
       enable_secure_boot = true
     }
 
-    labels = var.tags
+    labels = local.all_labels
   }
 
   lifecycle {

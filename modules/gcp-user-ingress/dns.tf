@@ -1,5 +1,5 @@
 locals {
-  all_labels = var.tags
+  all_labels = merge(var.default_tags, var.tags)
 }
 
 resource "google_project_service" "compute" {
@@ -24,7 +24,7 @@ resource "google_dns_managed_zone" "main" {
   depends_on = [google_project_service.dns]
 
   name          = "${var.prefix}-zone"
-  dns_name      = "${var.base_domain}."
+  dns_name      = "${var.domain_name}."
   description   = "Managed zone for Retool deployment"
   project       = var.project_id
   labels        = local.all_labels

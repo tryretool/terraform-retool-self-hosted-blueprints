@@ -1,3 +1,7 @@
+locals {
+  all_labels = merge(var.default_tags, var.tags)
+}
+
 resource "random_password" "pg_password" {
   length  = 32
   special = false
@@ -34,7 +38,7 @@ module "pg" {
   ip_configuration = {
     ipv4_enabled    = false
     ssl_mode        = "ENCRYPTED_ONLY"
-    private_network = var.network_id
+    private_network = var.vpc.network_id
   }
 
   backup_configuration = {
@@ -58,7 +62,7 @@ module "pg" {
   user_name     = var.master_username
   user_password = random_password.pg_password.result
 
-  user_labels = var.tags
+  user_labels = local.all_labels
 }
 
 resource "google_project_service" "secretmanager" {
@@ -78,7 +82,7 @@ resource "google_secret_manager_secret" "db_password" {
     auto {}
   }
 
-  labels = var.tags
+  labels = local.all_labels
 }
 
 resource "google_secret_manager_secret_version" "db_password" {

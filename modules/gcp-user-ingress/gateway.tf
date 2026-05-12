@@ -71,7 +71,7 @@ resource "kubectl_manifest" "httproute_redirect" {
         name        = "retool"
         sectionName = "http"
       }]
-      hostnames = [var.base_domain]
+      hostnames = [var.domain_name]
       rules = [{
         filters = [{
           type = "RequestRedirect"

@@ -19,12 +19,12 @@ resource "google_service_account" "eso" {
   project      = var.project_id
 }
 
-# var.gke.cluster_endpoint is "known after apply" — this resource exists solely to
+# var.gke.endpoint is "known after apply" — this resource exists solely to
 # carry that dependency into the graph so that eso_workload_identity (below) waits
 # until the GKE cluster is up and its Workload Identity pool ({project_id}.svc.id.goog)
 # has been created before we try to bind it.
 resource "terraform_data" "gke_workload_identity_pool_ready" {
-  input = var.gke.cluster_endpoint
+  input = var.gke.endpoint
 }
 
 # Workload Identity binding: k8s ServiceAccount external-secrets/external-secrets → GCP SA
@@ -71,7 +71,7 @@ resource "google_secret_manager_secret_iam_member" "eso_extra_env_vars" {
 
 resource "google_secret_manager_secret_iam_member" "eso_db_credentials" {
   project   = var.project_id
-  secret_id = var.db_credentials_secret_name
+  secret_id = var.db.master_user_secret_name
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.eso.email}"
 }
@@ -109,8 +109,8 @@ resource "kubectl_manifest" "secret_store" {
           projectID = var.project_id
           auth = {
             workloadIdentity = {
-              clusterLocation  = var.gke.cluster_location
-              clusterName      = var.gke.cluster_name
+              clusterLocation  = var.gke.location
+              clusterName      = var.gke.name
               clusterProjectID = var.project_id
               serviceAccountRef = {
                 name      = local.eso.service_account_name
@@ -150,7 +150,7 @@ locals {
       name = "db-credentials"
       data = [{
         secretKey = "password"
-        remoteRef = { key = var.db_credentials_secret_name }
+        remoteRef = { key = var.db.master_user_secret_name }
       }]
       target_deletion_policy = "Retain"
     },

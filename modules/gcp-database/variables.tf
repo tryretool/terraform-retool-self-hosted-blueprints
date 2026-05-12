@@ -17,9 +17,9 @@ variable "region" {
 # access is governed by VPC peering (set up in the vpc module). Any pod in the VPC
 # can reach Cloud SQL on its private IP once the vpc module's private_service_access
 # connection is established.
-variable "network_id" {
-  type        = string
-  description = "VPC network ID for Cloud SQL private IP (from the vpc module's network_id output)"
+variable "vpc" {
+  type        = object({ network_id = string })
+  description = "VPC outputs (e.g. module.vpc.outputs). Only network_id is used."
 }
 
 variable "db_purpose" {
@@ -121,6 +121,12 @@ variable "database_flags" {
   }))
   description = "Custom database flags (equivalent to AWS RDS parameters)"
   default     = []
+}
+
+variable "default_tags" {
+  type        = map(string)
+  default     = { "service" = "retool" }
+  description = "Default labels applied to all resources. Merged with var.tags (tags take precedence)."
 }
 
 variable "tags" {

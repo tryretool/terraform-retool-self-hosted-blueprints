@@ -1,6 +1,7 @@
 locals {
   pods_range_name     = "${var.prefix}-pods"
   services_range_name = "${var.prefix}-services"
+  all_labels          = merge(var.default_tags, var.tags)
 
   psa_address       = split("/", var.private_service_access_ip_range)[0]
   psa_prefix_length = tonumber(split("/", var.private_service_access_ip_range)[1])

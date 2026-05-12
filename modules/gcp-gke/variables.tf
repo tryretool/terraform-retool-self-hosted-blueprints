@@ -13,24 +13,14 @@ variable "region" {
   description = "GCP region for the cluster"
 }
 
-variable "network_name" {
-  type        = string
-  description = "Name of the VPC network (from the vpc module's network_name output)"
-}
-
-variable "subnet_name" {
-  type        = string
-  description = "Name of the subnet for GKE nodes (from the vpc module's subnet_name output)"
-}
-
-variable "pods_range_name" {
-  type        = string
-  description = "Name of the secondary IP range for pods (from the vpc module's pods_range_name output)"
-}
-
-variable "services_range_name" {
-  type        = string
-  description = "Name of the secondary IP range for services (from the vpc module's services_range_name output)"
+variable "vpc" {
+  type = object({
+    network_name        = string
+    subnet_name         = string
+    pods_range_name     = string
+    services_range_name = string
+  })
+  description = "VPC outputs (e.g. module.vpc.outputs)."
 }
 
 # Setting location to a region (default) creates a regional cluster with masters
@@ -96,6 +86,12 @@ variable "deletion_protection" {
   type        = bool
   description = "Prevent Terraform from destroying the cluster"
   default     = false
+}
+
+variable "default_tags" {
+  type        = map(string)
+  default     = { "service" = "retool" }
+  description = "Default labels applied to all resources. Merged with var.tags (tags take precedence)."
 }
 
 variable "tags" {

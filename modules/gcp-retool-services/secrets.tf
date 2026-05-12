@@ -1,3 +1,7 @@
+locals {
+  all_labels = merge(var.default_tags, var.tags)
+}
+
 resource "google_project_service" "secretmanager" {
   project            = var.project_id
   service            = "secretmanager.googleapis.com"
@@ -24,7 +28,7 @@ resource "google_secret_manager_secret" "encryption_key" {
     auto {}
   }
 
-  labels     = var.tags
+  labels     = local.all_labels
   depends_on = [google_project_service.secretmanager]
 }
 
@@ -42,7 +46,7 @@ resource "google_secret_manager_secret" "jwt_secret" {
     auto {}
   }
 
-  labels     = var.tags
+  labels     = local.all_labels
   depends_on = [google_project_service.secretmanager]
 }
 
@@ -59,7 +63,7 @@ resource "google_secret_manager_secret" "extra_env_vars" {
     auto {}
   }
 
-  labels     = var.tags
+  labels     = local.all_labels
   depends_on = [google_project_service.secretmanager]
 }
 

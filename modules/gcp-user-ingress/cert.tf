@@ -6,7 +6,7 @@ resource "google_certificate_manager_dns_authorization" "main" {
 
   name        = "${var.prefix}-cert-auth"
   description = "DNS authorization for Retool managed certificate"
-  domain      = var.base_domain
+  domain      = var.domain_name
   project     = var.project_id
   labels      = local.all_labels
 }
@@ -30,7 +30,7 @@ resource "google_certificate_manager_certificate" "main" {
   labels      = local.all_labels
 
   managed {
-    domains            = [var.base_domain]
+    domains            = [var.domain_name]
     dns_authorizations = [google_certificate_manager_dns_authorization.main.id]
   }
 }
@@ -46,7 +46,7 @@ resource "google_certificate_manager_certificate_map_entry" "main" {
   name         = "${var.prefix}-cert-map-entry"
   map          = google_certificate_manager_certificate_map.main.name
   certificates = [google_certificate_manager_certificate.main.id]
-  hostname     = var.base_domain
+  hostname     = var.domain_name
   project      = var.project_id
   labels       = local.all_labels
 }

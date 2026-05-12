@@ -1,8 +1,5 @@
-# The cluster output shape mirrors the AWS EKS module's cluster output for the
-# fields used by Kubernetes and Helm providers, so provider.example.tf is recognizable.
-output "cluster" {
-  description = "GKE cluster details"
-  value = {
+locals {
+  outputs = {
     name     = google_container_cluster.gke.name
     location = google_container_cluster.gke.location
 
@@ -18,4 +15,16 @@ output "cluster" {
     # application pods via Workload Identity will reference this.
     node_service_account_email = google_service_account.gke_nodes.email
   }
+}
+
+# The cluster output shape mirrors the AWS EKS module's cluster output for the
+# fields used by Kubernetes and Helm providers, so provider.example.tf is recognizable.
+output "cluster" {
+  description = "GKE cluster details"
+  value       = local.outputs
+}
+
+output "outputs" {
+  value       = local.outputs
+  description = "Structured GKE cluster outputs for composition with downstream modules."
 }

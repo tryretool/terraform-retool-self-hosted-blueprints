@@ -14,25 +14,31 @@ variable "region" {
 # with module.gke.cluster.endpoint and certificate_authority_data when needed.
 variable "gke" {
   type = object({
-    cluster_name     = string
-    cluster_location = string
-    # cluster_endpoint is "known after apply" from the GKE cluster. Passing it here
+    name     = string
+    location = string
+    # endpoint is "known after apply" from the GKE cluster. Passing it here
     # ensures that Workload Identity IAM bindings (which reference the pool
     # {project_id}.svc.id.goog created by GKE) are not applied until the cluster exists.
-    cluster_endpoint = string
+    endpoint = string
   })
-  description = "GKE cluster details. Use module.gke.cluster.name, .location, and .endpoint."
+  description = "GKE cluster outputs (e.g. module.gke.outputs)."
+}
+
+variable "db" {
+  type        = object({ master_user_secret_name = string })
+  description = "Database outputs (e.g. module.db-main.outputs). Only master_user_secret_name is used."
+}
+
+variable "default_tags" {
+  type        = map(string)
+  default     = { "service" = "retool" }
+  description = "Default labels applied to all resources. Merged with var.tags (tags take precedence)."
 }
 
 variable "tags" {
   type        = map(string)
   default     = {}
   description = "Labels applied to GCP resources created by this module."
-}
-
-variable "db_credentials_secret_name" {
-  type        = string
-  description = "Name of the GCP Secret Manager secret for the database password (e.g. module.db-main.db_instance_master_user_secret_name)."
 }
 
 variable "encryption_key_secret_name" {
