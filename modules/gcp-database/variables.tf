@@ -114,12 +114,18 @@ variable "deletion_protection" {
   default     = false
 }
 
+variable "max_connections" {
+  type        = number
+  default     = null
+  description = "Override the PostgreSQL max_connections setting. Cloud SQL defaults vary by tier (e.g. 25 for db-f1-micro, 200 for db-g1-small). Set this when hitting connection limits. Also configurable via database_flags."
+}
+
 variable "database_flags" {
   type = list(object({
     name  = string
     value = string
   }))
-  description = "Custom database flags (equivalent to AWS RDS parameters)"
+  description = "Custom database flags (equivalent to AWS RDS parameters). max_connections set here takes precedence over the var.max_connections shorthand."
   default     = []
 }
 

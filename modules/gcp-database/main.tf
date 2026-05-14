@@ -1,5 +1,15 @@
 locals {
   all_labels = merge(var.default_tags, var.tags)
+
+  # Merge var.max_connections into database_flags unless the caller already set
+  # max_connections explicitly in database_flags (explicit flags take precedence).
+  has_explicit_max_connections = anytrue([for f in var.database_flags : f.name == "max_connections"])
+  max_connections_flag = (
+    var.max_connections != null && !local.has_explicit_max_connections
+    ? [{ name = "max_connections", value = tostring(var.max_connections) }]
+    : []
+  )
+  database_flags = concat(var.database_flags, local.max_connections_flag)
 }
 
 resource "random_password" "pg_password" {
@@ -26,7 +36,7 @@ module "pg" {
 
   deletion_protection = var.deletion_protection
 
-  database_flags = var.database_flags
+  database_flags = local.database_flags
 
   # Cloud SQL does not use security groups. With private IP, access is controlled by
   # the VPC peering connection (private_service_access) created in the vpc module.
