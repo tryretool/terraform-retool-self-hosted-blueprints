@@ -28,7 +28,7 @@ locals {
       name = "db-credentials"
       data = [{
         secretKey = "password"
-        remoteRef = { key = var.db_credentials_secret_name }
+        remoteRef = { key = var.db.master_secret_name }
       }]
       target_deletion_policy = "Retain"
     },
@@ -211,5 +211,77 @@ resource "kubectl_manifest" "external_secret_license_key" {
   depends_on = [
     kubectl_manifest.secret_store,
     azurerm_key_vault_secret.license_key,
+  ]
+}
+
+# Agent sandbox ExternalSecret (conditional)
+resource "kubectl_manifest" "external_secret_agent_sandbox" {
+  count = var.enable_agent_sandbox ? 1 : 0
+
+  yaml_body = yamlencode({
+    apiVersion = "external-secrets.io/v1beta1"
+    kind       = "ExternalSecret"
+    metadata = {
+      name      = "agent-sandbox"
+      namespace = local.retool_namespace
+    }
+    spec = {
+      refreshInterval = "1m"
+      secretStoreRef = {
+        kind = "ClusterSecretStore"
+        name = "azure-keyvault"
+      }
+      target = {
+        name           = "agent-sandbox"
+        creationPolicy = "Owner"
+        deletionPolicy = "Retain"
+      }
+      dataFrom = [{
+        extract = {
+          key = "retool-${var.prefix}-agent-sandbox"
+        }
+      }]
+    }
+  })
+
+  depends_on = [
+    kubectl_manifest.secret_store,
+    azurerm_key_vault_secret.agent_sandbox,
+  ]
+}
+
+# RR Git Blob ExternalSecret (conditional)
+resource "kubectl_manifest" "external_secret_rr_git_blob" {
+  count = var.enable_rr_git_blob ? 1 : 0
+
+  yaml_body = yamlencode({
+    apiVersion = "external-secrets.io/v1beta1"
+    kind       = "ExternalSecret"
+    metadata = {
+      name      = "rr-git-blob-credentials"
+      namespace = local.retool_namespace
+    }
+    spec = {
+      refreshInterval = "1m"
+      secretStoreRef = {
+        kind = "ClusterSecretStore"
+        name = "azure-keyvault"
+      }
+      target = {
+        name           = "rr-git-blob-credentials"
+        creationPolicy = "Owner"
+        deletionPolicy = "Retain"
+      }
+      dataFrom = [{
+        extract = {
+          key = "retool-${var.prefix}-rr-git-blob"
+        }
+      }]
+    }
+  })
+
+  depends_on = [
+    kubectl_manifest.secret_store,
+    azurerm_key_vault_secret.rr_git_blob,
   ]
 }

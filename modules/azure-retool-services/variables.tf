@@ -33,9 +33,15 @@ variable "aks" {
   description = "AKS cluster outputs (e.g. module.aks.outputs)."
 }
 
-variable "db_credentials_secret_name" {
-  type        = string
-  description = "Name of the Key Vault secret for the database password (from the database module)"
+variable "db" {
+  type = object({
+    address            = string
+    port               = number
+    name               = string
+    username           = string
+    master_secret_name = string
+  })
+  description = "Database outputs (e.g. module.db-main.outputs). Connection info is used to build the agent sandbox Postgres URL when enable_agent_sandbox is true."
 }
 
 variable "encryption_key_secret_name" {
@@ -49,6 +55,18 @@ variable "license_key" {
   default     = null
   sensitive   = true
   description = "Retool license key. If provided, stored in Key Vault and synced to K8s."
+}
+
+variable "enable_agent_sandbox" {
+  type        = bool
+  default     = false
+  description = "When true, generates agent sandbox secrets (JWT keypair, encryption key, API secret, Postgres URL) synced to K8s via ESO."
+}
+
+variable "enable_rr_git_blob" {
+  type        = bool
+  default     = false
+  description = "Whether to create an Azure Storage Account and Blob container for Retool Remote Repository Git storage."
 }
 
 variable "tags" {

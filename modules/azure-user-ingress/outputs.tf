@@ -17,3 +17,8 @@ output "appgw_name" {
   description = "Name of the Application Gateway resource."
   value       = azurerm_application_gateway.main.name
 }
+
+output "agent_sandbox_proxy_url" {
+  description = "Public URL for the agent sandbox proxy, or null when agent sandbox proxy is disabled."
+  value       = var.enable_agent_sandbox_proxy ? "${var.enable_https ? "https" : "http"}://agent-proxy.${var.domain_name}" : null
+}

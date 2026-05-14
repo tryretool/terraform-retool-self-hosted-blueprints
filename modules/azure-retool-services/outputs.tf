@@ -4,10 +4,13 @@ locals {
     jwt_secret_name                  = "jwt-secret"
     db_credentials_secret_name       = "db-credentials"
     db_credentials_secret_key        = "password"
-    db_credentials_secret_store_path = var.db_credentials_secret_name
+    db_credentials_secret_store_path = var.db.master_secret_name
     extra_env_vars_secret_name       = "extra-env-vars"
     extra_env_vars_secret_path       = "retool-${var.prefix}-extra-env-vars"
     license_key_secret_name          = nonsensitive(var.license_key != null) ? "license-key" : null
+    agent_sandbox_secret_name        = var.enable_agent_sandbox ? "agent-sandbox" : null
+    rr_git_bucket_k8s_secret_name    = var.enable_rr_git_blob ? "rr-git-blob-credentials" : null
+    rr_git_bucket_env_keys           = var.enable_rr_git_blob ? ["RR_GIT_AZURE_CONTAINER", "RR_GIT_AZURE_CONNECTION_STRING"] : []
     secret_store_name                = "azure-keyvault"
     backend_type                     = "azureKeyVault"
   }
@@ -51,6 +54,21 @@ output "extra_env_vars_secret_path" {
 output "license_key_secret_name" {
   description = "Name of the Kubernetes Secret containing the Retool license key, or null."
   value       = local.outputs.license_key_secret_name
+}
+
+output "agent_sandbox_secret_name" {
+  description = "Name of the Kubernetes Secret containing agent sandbox credentials, or null when agent sandbox is disabled."
+  value       = local.outputs.agent_sandbox_secret_name
+}
+
+output "rr_git_bucket_k8s_secret_name" {
+  description = "Name of the K8s Secret for Remote Repository Git bucket credentials. Null when enable_rr_git_blob is false."
+  value       = local.outputs.rr_git_bucket_k8s_secret_name
+}
+
+output "rr_git_bucket_env_keys" {
+  description = "Env var keys stored in the RR Git bucket K8s Secret. Empty when enable_rr_git_blob is false."
+  value       = local.outputs.rr_git_bucket_env_keys
 }
 
 output "secret_store_name" {
