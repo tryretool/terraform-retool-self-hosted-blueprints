@@ -97,20 +97,30 @@ module "retool" {
       repository = "753800337063.dkr.ecr.us-west-2.amazonaws.com/onprem"
       tag        = "dev-3.380.0-940f7d8"
     }
-    ingress = {
-      enabled          = true
-      ingressClassName = "azure-application-gateway"
-      annotations = {
-        "appgw.ingress.kubernetes.io/health-probe-path" = "/api/checkHealth"
-      }
-      hosts = [{
-        host = local.domain_name
-        paths = [{
-          path     = "/"
-          pathType = "Prefix"
+    ingress = merge(
+      {
+        enabled          = true
+        ingressClassName = "azure-application-gateway"
+        annotations = {
+          "appgw.ingress.kubernetes.io/health-probe-path"     = "/api/checkHealth"
+          "appgw.ingress.kubernetes.io/health-probe-timeout"  = "10"
+          "appgw.ingress.kubernetes.io/health-probe-interval" = "15"
+        }
+        hosts = [for h in [local.domain_name, "*.${local.domain_name}"] : {
+          host = h
+          paths = [{
+            path     = "/"
+            pathType = "Prefix"
+          }]
         }]
-      }]
-    }
+      },
+      local.enable_https ? {
+        tls = [{
+          secretName = "${local.prefix}-tls"
+          hosts      = [local.domain_name, "*.${local.domain_name}"]
+        }]
+      } : {},
+    )
     config = {
       useInsecureCookies = !local.enable_https
     }
@@ -173,6 +183,22 @@ module "retool" {
       frontendWsProxyDomain = "${local.enable_https ? "https" : "http"}://agent-proxy.${local.domain_name}"
       proxy = {
         backendDomainSuffixes = local.domain_name
+        ingress = {
+          enabled          = true
+          host             = "agent-proxy.${local.domain_name}"
+          ingressClassName = "azure-application-gateway"
+          annotations = {
+            "cert-manager.io/cluster-issuer"                    = "letsencrypt-prod" # TODO link this to an user-ingress output
+            "appgw.ingress.kubernetes.io/health-probe-path"     = "/health"
+            "appgw.ingress.kubernetes.io/health-probe-timeout"  = "10"
+            "appgw.ingress.kubernetes.io/health-probe-interval" = "15"
+            "appgw.ingress.kubernetes.io/request-timeout"       = "40"
+          }
+          tls = [{
+            secretName = "${local.prefix}-agent-proxy-tls"
+            hosts      = ["agent-proxy.${local.domain_name}"]
+          }]
+        }
       }
     }
   })]

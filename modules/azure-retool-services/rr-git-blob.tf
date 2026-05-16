@@ -30,6 +30,7 @@ resource "azurerm_key_vault_secret" "rr_git_blob" {
   name         = "retool-${var.prefix}-rr-git-blob"
   key_vault_id = var.vnet.key_vault_id
   value = jsonencode({
+    "RR_BLOB_STORAGE_PROVIDER"       = "azure"
     "RR_GIT_AZURE_CONTAINER"         = azurerm_storage_container.rr_git[0].name
     "RR_GIT_AZURE_CONNECTION_STRING" = azurerm_storage_account.rr_git[0].primary_connection_string
   })

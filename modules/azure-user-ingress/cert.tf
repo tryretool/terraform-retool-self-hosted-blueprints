@@ -115,7 +115,10 @@ resource "kubectl_manifest" "certificate" {
         name = "letsencrypt-prod"
         kind = "ClusterIssuer"
       }
-      dnsNames = [var.domain_name]
+      dnsNames = [
+        var.domain_name,
+        "*.${var.domain_name}",
+      ]
     }
   })
 
