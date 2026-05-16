@@ -5,7 +5,7 @@ resource "google_certificate_manager_dns_authorization" "main" {
   depends_on = [google_project_service.certificatemanager]
 
   name        = "${var.prefix}-cert-auth"
-  description = "DNS authorization for Retool managed certificate"
+  description = "DNS authorization for Retool managed certificate (also covers wildcard)"
   domain      = var.domain_name
   project     = var.project_id
   labels      = local.all_labels
@@ -21,8 +21,9 @@ resource "google_dns_record_set" "cert_validation" {
   rrdatas      = [google_certificate_manager_dns_authorization.main.dns_resource_record[0].data]
 }
 
-# Google-managed certificate, DNS-validated via the authorization above.
+# Google-managed certificate, DNS-validated via the authorizations above.
 # Equivalent to aws_acm_certificate; GCP provisions and renews it automatically.
+# Covers both the base domain and the wildcard (*.domain_name).
 resource "google_certificate_manager_certificate" "main" {
   name        = "${var.prefix}-cert"
   description = "Google-managed certificate for Retool"
@@ -30,8 +31,10 @@ resource "google_certificate_manager_certificate" "main" {
   labels      = local.all_labels
 
   managed {
-    domains            = [var.domain_name]
-    dns_authorizations = [google_certificate_manager_dns_authorization.main.id]
+    domains = [var.domain_name, "*.${var.domain_name}"]
+    dns_authorizations = [
+      google_certificate_manager_dns_authorization.main.id,
+    ]
   }
 }
 
@@ -49,4 +52,19 @@ resource "google_certificate_manager_certificate_map_entry" "main" {
   hostname     = var.domain_name
   project      = var.project_id
   labels       = local.all_labels
+  lifecycle {
+    replace_triggered_by = [ google_certificate_manager_certificate.main ]    
+  }
+}
+
+resource "google_certificate_manager_certificate_map_entry" "wildcard" {
+  name         = "${var.prefix}-cert-map-entry-wildcard"
+  map          = google_certificate_manager_certificate_map.main.name
+  certificates = [google_certificate_manager_certificate.main.id]
+  hostname     = "*.${var.domain_name}"
+  project      = var.project_id
+  labels       = local.all_labels
+  lifecycle {
+    replace_triggered_by = [ google_certificate_manager_certificate.main ]    
+  }
 }

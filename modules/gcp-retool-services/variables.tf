@@ -25,8 +25,14 @@ variable "gke" {
 }
 
 variable "db" {
-  type        = object({ master_user_secret_name = string })
-  description = "Database outputs (e.g. module.db-main.outputs). Only master_user_secret_name is used."
+  type = object({
+    address                 = string
+    port                    = number
+    name                    = string
+    username                = string
+    master_user_secret_name = string
+  })
+  description = "Database outputs (e.g. module.db-main.outputs). Connection info is used to build the agent sandbox Postgres URL when enable_agent_sandbox is true."
 }
 
 variable "default_tags" {
@@ -45,4 +51,23 @@ variable "encryption_key_secret_name" {
   type        = string
   default     = null
   description = "Name of an existing Secret Manager secret to use as the Retool encryption key. If null, a random key is generated at retool-{prefix}-encryption-key. Provide a value to support data migration from an existing deployment."
+}
+
+variable "license_key" {
+  type        = string
+  default     = null
+  sensitive   = true
+  description = "Retool license key. When set, stored in Secret Manager and synced to a K8s Secret via ESO. Leave null for free-tier mode."
+}
+
+variable "enable_agent_sandbox" {
+  type        = bool
+  default     = false
+  description = "When true, generates agent sandbox secrets (JWT keypair, encryption key, API secret, Postgres URL) synced to K8s via ESO."
+}
+
+variable "enable_rr_git_gcs" {
+  type        = bool
+  default     = false
+  description = "Whether to create a GCS bucket and HMAC keys for Retool Remote Repository Git storage. Uses GCS S3-compatible API."
 }

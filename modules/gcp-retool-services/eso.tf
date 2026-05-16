@@ -76,6 +76,14 @@ resource "google_secret_manager_secret_iam_member" "eso_db_credentials" {
   member    = "serviceAccount:${google_service_account.eso.email}"
 }
 
+resource "google_secret_manager_secret_iam_member" "eso_license_key" {
+  count     = nonsensitive(var.license_key != null) ? 1 : 0
+  project   = var.project_id
+  secret_id = google_secret_manager_secret.license_key[0].secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.eso.email}"
+}
+
 resource "helm_release" "external_secrets" {
   namespace        = local.eso.namespace
   create_namespace = true
@@ -129,32 +137,44 @@ resource "kubectl_manifest" "secret_store" {
 locals {
   retool_namespace = "default"
 
-  external_secrets = [
-    {
-      name = "encryption-key"
-      data = [{
-        secretKey = "encryption-key"
-        remoteRef = { key = local.encryption_key_secret_ref }
-      }]
-      target_deletion_policy = "Retain"
-    },
-    {
-      name = "jwt-secret"
-      data = [{
-        secretKey = "jwt-secret"
-        remoteRef = { key = "retool-${var.prefix}-jwt-secret" }
-      }]
-      target_deletion_policy = "Retain"
-    },
-    {
-      name = "db-credentials"
-      data = [{
-        secretKey = "password"
-        remoteRef = { key = var.db.master_user_secret_name }
-      }]
-      target_deletion_policy = "Retain"
-    },
-  ]
+  external_secrets = concat(
+    [
+      {
+        name = "encryption-key"
+        data = [{
+          secretKey = "encryption-key"
+          remoteRef = { key = local.encryption_key_secret_ref }
+        }]
+        target_deletion_policy = "Retain"
+      },
+      {
+        name = "jwt-secret"
+        data = [{
+          secretKey = "jwt-secret"
+          remoteRef = { key = "retool-${var.prefix}-jwt-secret" }
+        }]
+        target_deletion_policy = "Retain"
+      },
+      {
+        name = "db-credentials"
+        data = [{
+          secretKey = "password"
+          remoteRef = { key = var.db.master_user_secret_name }
+        }]
+        target_deletion_policy = "Retain"
+      },
+    ],
+    nonsensitive(var.license_key != null) ? [
+      {
+        name = "license-key"
+        data = [{
+          secretKey = "license-key"
+          remoteRef = { key = "retool-${var.prefix}-license-key" }
+        }]
+        target_deletion_policy = "Retain"
+      },
+    ] : [],
+  )
 }
 
 resource "kubectl_manifest" "external_secret" {
@@ -207,6 +227,70 @@ resource "kubectl_manifest" "external_secret_extra_env_vars" {
       dataFrom = [{
         extract = {
           key = "retool-${var.prefix}-extra-env-vars"
+        }
+      }]
+    }
+  })
+
+  depends_on = [kubectl_manifest.secret_store]
+}
+
+resource "kubectl_manifest" "external_secret_agent_sandbox" {
+  count = var.enable_agent_sandbox ? 1 : 0
+
+  yaml_body = yamlencode({
+    apiVersion = "external-secrets.io/v1beta1"
+    kind       = "ExternalSecret"
+    metadata = {
+      name      = "agent-sandbox"
+      namespace = local.retool_namespace
+    }
+    spec = {
+      refreshInterval = "1m"
+      secretStoreRef = {
+        kind = "ClusterSecretStore"
+        name = "gcp-secretsmanager"
+      }
+      target = {
+        name           = "agent-sandbox"
+        creationPolicy = "Owner"
+        deletionPolicy = "Retain"
+      }
+      dataFrom = [{
+        extract = {
+          key = "retool-${var.prefix}-agent-sandbox"
+        }
+      }]
+    }
+  })
+
+  depends_on = [kubectl_manifest.secret_store]
+}
+
+resource "kubectl_manifest" "external_secret_rr_git_gcs" {
+  count = var.enable_rr_git_gcs ? 1 : 0
+
+  yaml_body = yamlencode({
+    apiVersion = "external-secrets.io/v1beta1"
+    kind       = "ExternalSecret"
+    metadata = {
+      name      = "rr-git-gcs-credentials"
+      namespace = local.retool_namespace
+    }
+    spec = {
+      refreshInterval = "1m"
+      secretStoreRef = {
+        kind = "ClusterSecretStore"
+        name = "gcp-secretsmanager"
+      }
+      target = {
+        name           = "rr-git-gcs-credentials"
+        creationPolicy = "Owner"
+        deletionPolicy = "Retain"
+      }
+      dataFrom = [{
+        extract = {
+          key = "retool-${var.prefix}-rr-git-gcs"
         }
       }]
     }

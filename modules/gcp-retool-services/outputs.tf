@@ -7,7 +7,10 @@ locals {
     db_credentials_secret_store_path = var.db.master_user_secret_name
     extra_env_vars_secret_name       = "extra-env-vars"
     extra_env_vars_secret_path       = "retool-${var.prefix}-extra-env-vars"
-    license_key_secret_name          = null
+    license_key_secret_name          = nonsensitive(var.license_key != null) ? "license-key" : null
+    agent_sandbox_secret_name        = var.enable_agent_sandbox ? "agent-sandbox" : null
+    rr_git_bucket_k8s_secret_name    = var.enable_rr_git_gcs ? "rr-git-gcs-credentials" : null
+    rr_git_bucket_env_keys           = ["RR_GIT_GCS_BUCKET", "RR_GIT_GCS_CREDENTIALS", "RR_BLOB_STORAGE_PROVIDER"]
     secret_store_name                = "gcp-secretsmanager"
     backend_type                     = "gcpSecretsManager"
   }
@@ -49,8 +52,18 @@ output "extra_env_vars_secret_path" {
 }
 
 output "license_key_secret_name" {
-  description = "Name of the Kubernetes Secret containing the Retool license key, or null if not configured."
+  description = "Name of the Kubernetes Secret containing the Retool license key, or null if no key was provided."
   value       = local.outputs.license_key_secret_name
+}
+
+output "agent_sandbox_secret_name" {
+  description = "Name of the Kubernetes Secret containing agent sandbox credentials, or null when agent sandbox is disabled."
+  value       = local.outputs.agent_sandbox_secret_name
+}
+
+output "rr_git_bucket_k8s_secret_name" {
+  description = "Name of the K8s Secret for Remote Repository Git GCS credentials. Null when enable_rr_git_gcs is false."
+  value       = local.outputs.rr_git_bucket_k8s_secret_name
 }
 
 output "secret_store_name" {
