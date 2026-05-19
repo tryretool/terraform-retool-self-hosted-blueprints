@@ -97,7 +97,7 @@ module "retool" {
         }]
       }
       env = {
-        BASE_DOMAIN = local.domain_name
+        BASE_DOMAIN = "https://${local.domain_name}"
       }
     }),
   ]
