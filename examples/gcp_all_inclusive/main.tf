@@ -1,5 +1,5 @@
 locals {
-  prefix      = "blessed-02"
+  prefix      = "my-retool"
   project_id  = "my-gcp-project" # replace with your GCP project ID
   region      = "us-central1"
   domain_name = "retool.example.com" # replace with your domain
@@ -74,8 +74,9 @@ module "retool" {
 
   retool_helm_name          = "retool"
   retool_helm_chart_version = "6.10.0"
-  db                        = module.db-main.outputs
-  retool_services           = module.retool-services.outputs
+
+  db              = module.db-main.outputs
+  retool_services = module.retool-services.outputs
 
   retool_helm_extra_values = [
     yamlencode({

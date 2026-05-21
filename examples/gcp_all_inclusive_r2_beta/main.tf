@@ -21,21 +21,22 @@ module "gke" {
   prefix     = local.prefix
   project_id = local.project_id
   region     = local.region
-  vpc        = module.vpc.outputs
 
+  vpc        = module.vpc.outputs
   depends_on = [module.vpc]
 }
 
 module "db-main" {
-  source  = "tryretool/self-hosted-blueprints/retool//modules/gcp-database"
-  version = "~> 0.0.1"
+  source = "../../.wt/gcp-init/modules/gcp-database"
 
   prefix     = local.prefix
   project_id = local.project_id
   region     = local.region
-  vpc        = module.vpc.outputs
-  db_purpose = "main"
-  tier       = "db-g1-small"
+
+  vpc             = module.vpc.outputs
+  db_purpose      = "main"
+  tier            = "db-g1-small"
+  max_connections = 200
 
   # Cloud SQL requires the VPC peering connection (google_service_networking_connection)
   # created by the vpc module's private_service_access submodule to exist before the
@@ -50,8 +51,6 @@ module "retool-services" {
   prefix     = local.prefix
   project_id = local.project_id
   region     = local.region
-  gke        = module.gke.outputs
-  db         = module.db-main.outputs
 
   enable_agent_sandbox = true
   enable_rr_git_gcs    = true
@@ -61,8 +60,7 @@ module "retool-services" {
 }
 
 module "user-ingress" {
-  source  = "tryretool/self-hosted-blueprints/retool//modules/gcp-user-ingress"
-  version = "~> 0.0.1"
+  source = "../../.wt/gcp-init/modules/gcp-user-ingress"
 
   prefix      = local.prefix
   project_id  = local.project_id
@@ -80,106 +78,81 @@ module "retool" {
 
   retool_helm_name                         = "retool"
   retool_helm_chart_version                = "6.11.0"
-  retool_helm_chart_use_unpublished_branch = "lfoster/agent-sandbox-support"
+  retool_helm_chart_use_unpublished_branch = "r2"
 
   db              = module.db-main.outputs
   retool_services = module.retool-services.outputs
 
-  retool_helm_extra_values = [yamlencode({
-    image = {
-      repository = "753800337063.dkr.ecr.us-west-2.amazonaws.com/onprem"
-      tag        = "dev-3.380.0-940f7d8"
-    }
-    # Disable the traditional Ingress — the Gateway HTTPRoute handles routing.
-    ingress = { enabled = false }
-    httpRoute = {
-      enabled   = true
-      hostnames = [local.domain_name, "*.${local.domain_name}"]
-      parentRefs = [{
-        name        = module.user-ingress.gateway_name
-        namespace   = "default"
-        sectionName = "https"
-      }]
-    }
-    env = {
-      BASE_DOMAIN = "https://${local.domain_name}"
-    }
-    replicaCount = 2
-    podDisruptionBudget = {
-      maxUnavailable = 1
-    }
-    dbconnector = {
-      enabled  = true
-      replicas = 2
-    }
-    r2Agent = {
-      enabled = true
-    }
-    telemetry = {
-      enabled = true
+  retool_helm_extra_values = [
+    yamlencode({
       image = {
-        tag = "3.334.0-stable"
+        tag = "3.391.0-edge"
       }
-    }
-    workflows = {
-      enabled = true
-      worker = {
-        replicaCount = 2
+      # Disable the traditional Ingress — the Gateway HTTPRoute handles routing.
+      ingress = { enabled = false }
+      httpRoute = {
+        enabled   = true
+        hostnames = [local.domain_name, "*.${local.domain_name}"]
+        parentRefs = [{
+          name        = module.user-ingress.gateway_name
+          namespace   = "default"
+          sectionName = "https"
+        }]
       }
-      backend = {
-        replicaCount = 2
+      env = {
+        BASE_DOMAIN = "https://${local.domain_name}"
       }
-    }
-    codeExecutor = {
-      enabled      = true
-      replicaCount = 2
-      image = {
-        repository = "753800337063.dkr.ecr.us-west-2.amazonaws.com/code-executor-service"
-        tag        = "dev-3.380.0-940f7d8"
+      replicaCount = 1
+      podDisruptionBudget = {
+        maxUnavailable = 1
       }
-    }
-    jsExecutor = {
-      replicaCount = 2
-      image = {
-        repository = "753800337063.dkr.ecr.us-west-2.amazonaws.com/js-executor-service"
-        tag        = "dev-3.380.0-940f7d8"
+      dbconnector = {
+        enabled  = true
+        replicas = 1
       }
-    }
-    agentSandbox = {
-      enabled = true
-      image = {
-        repository = "753800337063.dkr.ecr.us-west-2.amazonaws.com/agent-executor-service"
-        tag        = "dev-3.380.0-940f7d8"
+      r2Agent = {
+        enabled = true
       }
-      devicePlugin = {
-        # GKE requires a custom ResourceQuota to use the default
-        # `system-node-critical` PriorityClass, so disable PriorityClass usage
-        # for this daemonset.
-        priorityClassName = null
+      workflows = {
+        enabled = true
+        worker = {
+          replicaCount = 1
+        }
+        backend = {
+          replicaCount = 1
+        }
       }
-      postgres = {
-        schema = "agent_executor"
+      codeExecutor = {
+        enabled      = true
+        replicaCount = 1
       }
-      externalSecret = {
-        name = module.retool-services.outputs.agent_sandbox_secret_name
+      jsExecutor = {
+        enabled      = true
+        replicaCount = 1
       }
-      frontendWsProxyDomain = "https://agent-proxy.${local.domain_name}"
-      proxy = {
-        backendDomainSuffixes = local.domain_name
-        # httpRoute = {
-        #   enabled   = true
-        #   hostnames = ["agent-proxy.${local.domain_name}"]
-        #   parentRefs = [{
-        #     name        = module.user-ingress.gateway_name
-        #     namespace   = "default"
-        #     sectionName = "https"
-        #   }]
-        # }
+      agentSandbox = {
+        enabled = true
+        devicePlugin = {
+          # GKE requires a custom ResourceQuota to use the default
+          # `system-node-critical` PriorityClass, so disable PriorityClass usage
+          # for this daemonset.
+          priorityClassName = null
+        }
+        postgres = {
+          schema = "agent_executor"
+        }
+        externalSecret = {
+          name = module.retool-services.outputs.agent_sandbox_secret_name
+        }
+        frontendWsProxyDomain = "https://agent-proxy.${local.domain_name}"
+        proxy = {
+          backendDomainSuffixes = local.domain_name
+        }
       }
-    }
-  })]
+    })
+  ]
 
-  depends_on = [module.retool-services, module.user-ingress]
+  depends_on = [module.gke, module.retool-services, module.user-ingress]
 }
 
 output "modules" {
