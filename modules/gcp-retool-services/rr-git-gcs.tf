@@ -22,11 +22,19 @@ resource "google_service_account" "rr_git" {
   project      = var.project_id
 }
 
-resource "google_storage_bucket_iam_member" "rr_git" {
+resource "google_storage_bucket_iam_member" "rr_git_object_admin" {
   count = var.enable_rr_git_gcs ? 1 : 0
 
   bucket = google_storage_bucket.rr_git[0].name
   role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.rr_git[0].email}"
+}
+
+resource "google_storage_bucket_iam_member" "rr_git_bucket_viewer" {
+  count = var.enable_rr_git_gcs ? 1 : 0
+
+  bucket = google_storage_bucket.rr_git[0].name
+  role   = "roles/storage.bucketViewer"
   member = "serviceAccount:${google_service_account.rr_git[0].email}"
 }
 
@@ -56,8 +64,8 @@ resource "google_secret_manager_secret_version" "rr_git_gcs" {
   secret = google_secret_manager_secret.rr_git_gcs[0].id
   secret_data = jsonencode({
     RR_BLOB_STORAGE_PROVIDER = "gcs"
-    RR_GIT_GCS_BUCKET        = google_storage_bucket.rr_git[0].name
-    RR_GIT_GCS_CREDENTIALS   = base64decode(google_service_account_key.rr_git[0].private_key)
+    RR_DEFAULT_GCS_BUCKET        = google_storage_bucket.rr_git[0].name
+    RR_DEFAULT_GCS_CREDENTIALS   = base64decode(google_service_account_key.rr_git[0].private_key)
   })
 }
 
