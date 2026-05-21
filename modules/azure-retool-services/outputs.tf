@@ -10,7 +10,7 @@ locals {
     license_key_secret_name          = nonsensitive(var.license_key != null) ? "license-key" : null
     agent_sandbox_secret_name        = var.enable_agent_sandbox ? "agent-sandbox" : null
     rr_git_bucket_k8s_secret_name    = var.enable_rr_git_blob ? "rr-git-blob-credentials" : null
-    rr_git_bucket_env_keys           = var.enable_rr_git_blob ? ["RR_GIT_AZURE_CONTAINER", "RR_GIT_AZURE_CONNECTION_STRING", "RR_BLOB_STORAGE_PROVIDER"] : []
+    rr_git_bucket_env_keys           = var.enable_rr_git_blob ? ["RR_DEFAULT_AZURE_CONTAINER", "RR_DEFAULT_AZURE_CONNECTION_STRING", "RR_BLOB_STORAGE_PROVIDER"] : []
     secret_store_name                = "azure-keyvault"
     backend_type                     = "azureKeyVault"
   }
