@@ -44,7 +44,7 @@ variable "retool_services" {
     extra_env_vars_secret_path       = string
     license_key_secret_name          = optional(string)
     rr_git_bucket_k8s_secret_name    = optional(string)
-    rr_git_bucket_env_keys           = optional(list(string), ["RR_GIT_S3_BUCKET", "RR_GIT_S3_REGION", "RR_GIT_S3_ACCESS_KEY_ID", "RR_GIT_S3_SECRET_ACCESS_KEY"])
+    rr_git_bucket_env_keys           = optional(list(string), [])
     secret_store_name                = optional(string, "aws-secretsmanager")
     backend_type                     = optional(string, "secretsManager")
   })
