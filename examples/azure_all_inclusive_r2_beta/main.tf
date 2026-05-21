@@ -9,11 +9,6 @@ locals {
   enable_https = false
 }
 
-# Azure requires a resource group as the container for all resources.
-resource "azurerm_resource_group" "main" {
-  name     = "${local.prefix}-rg"
-  location = local.location
-}
 
 module "vnet" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/azure-vnet"
@@ -56,9 +51,10 @@ module "retool-services" {
   prefix              = local.prefix
   resource_group_name = local.resource_group_name
   location            = local.location
-  vnet                = module.vnet.outputs
-  aks                 = module.aks.outputs
-  db                  = module.db-main.outputs
+
+  vnet = module.vnet.outputs
+  aks  = module.aks.outputs
+  db   = module.db-main.outputs
 
   enable_agent_sandbox = true
   enable_rr_git_blob   = true
@@ -88,92 +84,76 @@ module "retool" {
 
   retool_helm_name                         = "retool"
   retool_helm_chart_version                = "6.11.0"
-  retool_helm_chart_use_unpublished_branch = "lfoster/agent-sandbox-support"
-  db                                       = module.db-main.outputs
-  retool_services                          = module.retool-services.outputs
+  retool_helm_chart_use_unpublished_branch = "r2"
 
+  db              = module.db-main.outputs
+  retool_services = module.retool-services.outputs
+
+  # r2 enabled
   retool_helm_extra_values = [yamlencode({
     image = {
-      repository = "753800337063.dkr.ecr.us-west-2.amazonaws.com/onprem"
-      tag        = "dev-3.380.0-940f7d8"
+      tag = "3.391.0-edge"
     }
-    ingress = merge(
-      {
-        enabled          = true
-        ingressClassName = "azure-application-gateway"
-        annotations = {
-          "appgw.ingress.kubernetes.io/health-probe-path"     = "/api/checkHealth"
-          "appgw.ingress.kubernetes.io/health-probe-timeout"  = "10"
-          "appgw.ingress.kubernetes.io/health-probe-interval" = "15"
-        }
-        hosts = [for h in [local.domain_name, "*.${local.domain_name}"] : {
-          host = h
-          paths = [{
-            path     = "/"
-            pathType = "Prefix"
-          }]
+    ingress = {
+      enabled          = true
+      ingressClassName = "azure-application-gateway"
+      annotations = {
+        "cert-manager.io/issuer"                            = "letsencrypt-prod" # TODO link this to an user-ingress output
+        "appgw.ingress.kubernetes.io/health-probe-path"     = "/api/checkHealth"
+        "appgw.ingress.kubernetes.io/health-probe-timeout"  = "10"
+        "appgw.ingress.kubernetes.io/health-probe-interval" = "15"
+      }
+      hosts = [for h in [local.domain_name, "*.${local.domain_name}"] : {
+        host = h
+        paths = [{
+          path     = "/"
+          pathType = "Prefix"
         }]
-      },
-      local.enable_https ? {
-        tls = [{
-          secretName = "${local.prefix}-tls"
-          hosts      = [local.domain_name, "*.${local.domain_name}"]
-        }]
-      } : {},
-    )
+      }]
+      tls = [{
+        secretName = "${local.prefix}-tls"
+        hosts = [
+          local.domain_name,
+          "*.${local.domain_name}",
+        ]
+      }]
+    }
     config = {
       useInsecureCookies = !local.enable_https
     }
     env = {
       BASE_DOMAIN = "${local.enable_https ? "https" : "http"}://${local.domain_name}"
     }
-    replicaCount = 2
+    replicaCount = 1
     podDisruptionBudget = {
       maxUnavailable = 1
     }
     dbconnector = {
-      enabled  = true
-      replicas = 2
+      enabled  = false
+      replicas = 1
     }
     r2Agent = {
       enabled = true
     }
-    telemetry = {
-      enabled = true
-      image = {
-        tag = "3.334.0-stable"
-      }
-    }
     workflows = {
       enabled = true
       worker = {
-        replicaCount = 2
+        replicaCount = 1
       }
       backend = {
-        replicaCount = 2
+        replicaCount = 1
       }
     }
     codeExecutor = {
       enabled      = true
-      replicaCount = 2
-      image = {
-        repository = "753800337063.dkr.ecr.us-west-2.amazonaws.com/code-executor-service"
-        tag        = "dev-3.380.0-940f7d8"
-      }
+      replicaCount = 1
     }
     jsExecutor = {
-      replicaCount = 2
-      image = {
-        repository = "753800337063.dkr.ecr.us-west-2.amazonaws.com/js-executor-service"
-        tag        = "dev-3.380.0-940f7d8"
-      }
+      enabled      = true
+      replicaCount = 1
     }
     agentSandbox = {
       enabled = true
-      image = {
-        repository = "753800337063.dkr.ecr.us-west-2.amazonaws.com/agent-executor-service"
-        tag        = "dev-3.380.0-940f7d8"
-      }
       postgres = {
         schema = "agent_executor"
       }

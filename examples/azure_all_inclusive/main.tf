@@ -9,12 +9,6 @@ locals {
   enable_https = false
 }
 
-# Azure requires a resource group as the container for all resources.
-resource "azurerm_resource_group" "main" {
-  name     = "${local.prefix}-rg"
-  location = local.location
-}
-
 module "vnet" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/azure-vnet"
   version = "~> 0.0.1"
