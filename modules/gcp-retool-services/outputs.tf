@@ -4,15 +4,15 @@ locals {
     jwt_secret_name                  = "jwt-secret"
     db_credentials_secret_name       = "db-credentials"
     db_credentials_secret_key        = "password"
-    db_credentials_secret_store_path = var.db.master_user_secret_arn
+    db_credentials_secret_store_path = var.db.master_user_secret_name
     extra_env_vars_secret_name       = "extra-env-vars"
-    extra_env_vars_secret_path       = "retool/${var.prefix}/extra-env-vars"
+    extra_env_vars_secret_path       = "retool-${var.prefix}-extra-env-vars"
     license_key_secret_name          = nonsensitive(var.license_key != null) ? "license-key" : null
     agent_sandbox_secret_name        = var.enable_agent_sandbox ? "agent-sandbox" : null
-    rr_git_bucket_k8s_secret_name    = var.enable_rr_git_s3 ? "rr-git-s3-credentials" : null
-    rr_git_bucket_env_keys           = ["RR_GIT_S3_BUCKET", "RR_GIT_S3_REGION", "RR_GIT_S3_ACCESS_KEY_ID", "RR_GIT_S3_SECRET_ACCESS_KEY"]
-    alb_controller_irsa_role_arn     = module.alb_controller_irsa_role.iam_role_arn
-    alb_controller_irsa_role_name    = module.alb_controller_irsa_role.iam_role_name
+    rr_git_bucket_k8s_secret_name    = var.enable_rr_git_gcs ? "rr-git-gcs-credentials" : null
+    rr_git_bucket_env_keys           = ["RR_DEFAULT_GCS_BUCKET", "RR_DEFAULT_GCS_CREDENTIALS", "RR_BLOB_STORAGE_PROVIDER"]
+    secret_store_name                = "gcp-secretsmanager"
+    backend_type                     = "gcpSecretsManager"
   }
 }
 
@@ -37,7 +37,7 @@ output "db_credentials_secret_key" {
 }
 
 output "db_credentials_secret_store_path" {
-  description = "ARN/path of the secret store entry holding the database credentials."
+  description = "GCP Secret Manager secret name for the database credentials."
   value       = local.outputs.db_credentials_secret_store_path
 }
 
@@ -47,7 +47,7 @@ output "extra_env_vars_secret_name" {
 }
 
 output "extra_env_vars_secret_path" {
-  description = "Secrets Manager secret path for extra environment variable secrets."
+  description = "GCP Secret Manager secret name for extra environment variable secrets."
   value       = local.outputs.extra_env_vars_secret_path
 }
 
@@ -62,18 +62,18 @@ output "agent_sandbox_secret_name" {
 }
 
 output "rr_git_bucket_k8s_secret_name" {
-  description = "Name of the K8s Secret for Remote Repository Git S3 credentials. Null when enable_rr_git_s3 is false."
+  description = "Name of the K8s Secret for Remote Repository Git GCS credentials. Null when enable_rr_git_gcs is false."
   value       = local.outputs.rr_git_bucket_k8s_secret_name
 }
 
-output "alb_controller_irsa_role_arn" {
-  description = "ARN of the IAM role used by the ALB controller (IRSA)."
-  value       = local.outputs.alb_controller_irsa_role_arn
+output "secret_store_name" {
+  description = "Name of the ESO ClusterSecretStore configured for GCP Secret Manager."
+  value       = local.outputs.secret_store_name
 }
 
-output "alb_controller_irsa_role_name" {
-  description = "Name of the IAM role used by the ALB controller (IRSA)."
-  value       = local.outputs.alb_controller_irsa_role_name
+output "backend_type" {
+  description = "ESO backend type identifier for use in Retool Helm values."
+  value       = local.outputs.backend_type
 }
 
 output "outputs" {

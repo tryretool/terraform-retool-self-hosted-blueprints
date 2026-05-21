@@ -43,14 +43,12 @@ locals {
     : "git+https://github.com/tryretool/retool-helm@charts/retool?ref=${var.retool_helm_chart_use_unpublished_branch}&sparse=1"
   )
 
-  rr_git_s3_env_keys = ["RR_GIT_S3_BUCKET", "RR_GIT_S3_REGION", "RR_GIT_S3_ACCESS_KEY_ID", "RR_GIT_S3_SECRET_ACCESS_KEY"]
-
-  rr_git_s3_values = (var.retool_services != null && var.retool_services.rr_git_s3_k8s_secret_name != null) ? [yamlencode({
+  rr_git_bucket_values = (var.retool_services != null && var.retool_services.rr_git_bucket_k8s_secret_name != null) ? [yamlencode({
     environmentSecrets = [
-      for key in local.rr_git_s3_env_keys : {
+      for key in var.retool_services.rr_git_bucket_env_keys : {
         name = key
         secretKeyRef = {
-          name = var.retool_services.rr_git_s3_k8s_secret_name
+          name = var.retool_services.rr_git_bucket_k8s_secret_name
           key  = key
         }
       }
@@ -69,7 +67,7 @@ resource "helm_release" "retool" {
   # even when the release eventually succeeds.
   timeout = 20 * 60
 
-  values = concat(local.defaults_values, local.secrets_values, local.license_values, local.rr_git_s3_values, var.retool_helm_extra_values)
+  values = concat(local.defaults_values, local.secrets_values, local.license_values, local.rr_git_bucket_values, var.retool_helm_extra_values)
 
   lifecycle {
     # The Helm provider treats `timeout` as a replace-triggering attribute; bumping it
