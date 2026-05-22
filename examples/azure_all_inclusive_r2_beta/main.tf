@@ -86,8 +86,10 @@ module "retool" {
   retool_helm_chart_version                = "6.11.0"
   retool_helm_chart_use_unpublished_branch = "r2"
 
-  db              = module.db-main.outputs
-  retool_services = module.retool-services.outputs
+  db                  = module.db-main.outputs
+  retool_services     = module.retool-services.outputs
+  domain_name         = local.domain_name
+  https_enabled       = local.enable_https
 
   # r2 enabled
   retool_helm_extra_values = [yamlencode({
@@ -118,51 +120,11 @@ module "retool" {
         ]
       }]
     }
-    config = {
-      useInsecureCookies = !local.enable_https
-    }
-    env = {
-      BASE_DOMAIN = "${local.enable_https ? "https" : "http"}://${local.domain_name}"
-    }
-    replicaCount = 1
     podDisruptionBudget = {
       maxUnavailable = 1
     }
-    dbconnector = {
-      enabled  = false
-      replicas = 1
-    }
-    r2Agent = {
-      enabled = true
-    }
-    workflows = {
-      enabled = true
-      worker = {
-        replicaCount = 1
-      }
-      backend = {
-        replicaCount = 1
-      }
-    }
-    codeExecutor = {
-      enabled      = true
-      replicaCount = 1
-    }
-    jsExecutor = {
-      enabled      = true
-      replicaCount = 1
-    }
     agentSandbox = {
-      enabled = true
-      postgres = {
-        schema = "agent_executor"
-      }
-      externalSecret = {
-        name = module.retool-services.outputs.agent_sandbox_secret_name
-      }
-      frontendWsProxyDomain = "${local.enable_https ? "https" : "http"}://agent-proxy.${local.domain_name}"
       proxy = {
-        backendDomainSuffixes = local.domain_name
         ingress = {
           enabled          = true
           host             = "agent-proxy.${local.domain_name}"

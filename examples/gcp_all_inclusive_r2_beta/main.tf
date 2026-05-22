@@ -1,5 +1,5 @@
 locals {
-  prefix      = "blessed-02"
+  prefix      = "my-retool"
   project_id  = "my-gcp-project" # replace with your GCP project ID
   region      = "us-central1"
   domain_name = "retool.example.com" # replace with your domain
@@ -82,6 +82,7 @@ module "retool" {
 
   db              = module.db-main.outputs
   retool_services = module.retool-services.outputs
+  domain_name     = local.domain_name
 
   retool_helm_extra_values = [
     yamlencode({
@@ -99,55 +100,8 @@ module "retool" {
           sectionName = "https"
         }]
       }
-      env = {
-        BASE_DOMAIN = "https://${local.domain_name}"
-      }
-      replicaCount = 1
       podDisruptionBudget = {
         maxUnavailable = 1
-      }
-      dbconnector = {
-        enabled  = true
-        replicas = 1
-      }
-      r2Agent = {
-        enabled = true
-      }
-      workflows = {
-        enabled = true
-        worker = {
-          replicaCount = 1
-        }
-        backend = {
-          replicaCount = 1
-        }
-      }
-      codeExecutor = {
-        enabled      = true
-        replicaCount = 1
-      }
-      jsExecutor = {
-        enabled      = true
-        replicaCount = 1
-      }
-      agentSandbox = {
-        enabled = true
-        devicePlugin = {
-          # GKE requires a custom ResourceQuota to use the default
-          # `system-node-critical` PriorityClass, so disable PriorityClass usage
-          # for this daemonset.
-          priorityClassName = null
-        }
-        postgres = {
-          schema = "agent_executor"
-        }
-        externalSecret = {
-          name = module.retool-services.outputs.agent_sandbox_secret_name
-        }
-        frontendWsProxyDomain = "https://agent-proxy.${local.domain_name}"
-        proxy = {
-          backendDomainSuffixes = local.domain_name
-        }
       }
     })
   ]

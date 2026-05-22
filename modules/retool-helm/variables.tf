@@ -43,11 +43,37 @@ variable "retool_services" {
     extra_env_vars_secret_name       = string
     extra_env_vars_secret_path       = string
     license_key_secret_name          = optional(string)
+    agent_sandbox_enabled            = optional(bool, false)
+    agent_sandbox_secret_name        = optional(string)
     rr_bucket_k8s_secret_name        = optional(string)
     rr_bucket_env_keys               = optional(list(string), [])
     secret_store_name                = optional(string, "aws-secretsmanager")
     backend_type                     = optional(string, "secretsManager")
   })
   default     = null
-  description = "K8s Secret names and cloud secret store paths from the retool-services module (e.g. module.retool-services.outputs). When set alongside db, configures Retool helm config.encryptionKeySecretName, jwtSecretSecretName, config.postgresql.passwordSecretRef, and externalSecrets."
+  description = "K8s Secret names and cloud secret store paths from the retool-services module (e.g. module.retool-services.outputs). When set alongside db, configures Retool helm config.encryptionKeySecretName, jwtSecretSecretName, config.postgresql.passwordSecretRef, and externalSecrets. When agent_sandbox_enabled is true, agentSandbox.enabled, agentSandbox.postgres.schema, and jsExecutor.enabled are configured automatically."
+}
+
+variable "domain_name" {
+  type        = string
+  default     = null
+  description = "External domain that serves Retool to end users (e.g. \"retool.example.com\"). When set, configures env.BASE_DOMAIN, agentSandbox.frontendWsProxyDomain, agentSandbox.proxy.backendDomainSuffixes, and config.useInsecureCookies. The URL scheme is selected by https_enabled."
+}
+
+variable "https_enabled" {
+  type        = bool
+  default     = true
+  description = "Whether the user-facing ingress terminates HTTPS. Drives the scheme used in BASE_DOMAIN / frontendWsProxyDomain and inverts config.useInsecureCookies (cookies are only marked Secure when HTTPS is in use)."
+}
+
+variable "workflows_enabled" {
+  type        = bool
+  default     = true
+  description = "Whether to enable the Workflows service in the Retool deployment."
+}
+
+variable "dbconnector_enabled" {
+  type        = bool
+  default     = true
+  description = "Whether to enable the dbconnector service in the Retool deployment."
 }
