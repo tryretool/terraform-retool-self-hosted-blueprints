@@ -63,10 +63,10 @@ variable "enable_agent_sandbox" {
   description = "When true, generates agent sandbox secrets (JWT keypair, encryption key, API secret, Postgres URL) synced to K8s via ESO."
 }
 
-variable "enable_rr_git_blob" {
+variable "enable_rr_blob" {
   type        = bool
   default     = false
-  description = "Whether to create an Azure Storage Account and Blob container for Retool Remote Repository Git storage."
+  description = "Whether to create an Azure Storage Account and Blob container for Retool Remote Repository storage."
 }
 
 variable "tags" {

@@ -57,7 +57,7 @@ module "retool-services" {
   db   = module.db-main.outputs
 
   enable_agent_sandbox = true
-  enable_rr_git_blob   = true
+  enable_rr_blob       = true
   license_key          = "SECRET"
 }
 

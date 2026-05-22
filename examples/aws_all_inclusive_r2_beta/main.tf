@@ -53,7 +53,7 @@ module "retool-services" {
   db     = module.db-main.outputs
 
   enable_agent_sandbox = true
-  enable_rr_git_s3     = true
+  enable_rr_s3         = true
   license_key          = "SECRET"
 
   depends_on = [module.eks]

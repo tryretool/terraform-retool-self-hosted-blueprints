@@ -250,15 +250,15 @@ resource "kubectl_manifest" "external_secret_agent_sandbox" {
   ]
 }
 
-# RR Git Blob ExternalSecret (conditional)
-resource "kubectl_manifest" "external_secret_rr_git_blob" {
-  count = var.enable_rr_git_blob ? 1 : 0
+# RR Blob ExternalSecret (conditional)
+resource "kubectl_manifest" "external_secret_rr_blob" {
+  count = var.enable_rr_blob ? 1 : 0
 
   yaml_body = yamlencode({
     apiVersion = "external-secrets.io/v1beta1"
     kind       = "ExternalSecret"
     metadata = {
-      name      = "rr-git-blob-credentials"
+      name      = "rr-blob-credentials"
       namespace = local.retool_namespace
     }
     spec = {
@@ -268,13 +268,13 @@ resource "kubectl_manifest" "external_secret_rr_git_blob" {
         name = "azure-keyvault"
       }
       target = {
-        name           = "rr-git-blob-credentials"
+        name           = "rr-blob-credentials"
         creationPolicy = "Owner"
         deletionPolicy = "Retain"
       }
       dataFrom = [{
         extract = {
-          key = "retool-${var.prefix}-rr-git-blob"
+          key = "retool-${var.prefix}-rr-blob"
         }
       }]
     }
@@ -282,6 +282,6 @@ resource "kubectl_manifest" "external_secret_rr_git_blob" {
 
   depends_on = [
     kubectl_manifest.secret_store,
-    azurerm_key_vault_secret.rr_git_blob,
+    azurerm_key_vault_secret.rr_blob,
   ]
 }

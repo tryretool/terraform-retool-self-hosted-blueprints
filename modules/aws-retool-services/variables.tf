@@ -73,8 +73,8 @@ variable "db" {
   description = "Database outputs (e.g. module.db-main.outputs). Includes connection info and the Secrets Manager ARN for the master user credentials."
 }
 
-variable "enable_rr_git_s3" {
+variable "enable_rr_s3" {
   type        = bool
   default     = false
-  description = "Whether to create an S3 bucket and IAM service account for Retool Remote Repository Git storage."
+  description = "Whether to create an S3 bucket and IAM service account for Retool Remote Repository storage."
 }

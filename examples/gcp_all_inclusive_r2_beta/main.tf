@@ -53,7 +53,7 @@ module "retool-services" {
   region     = local.region
 
   enable_agent_sandbox = true
-  enable_rr_git_gcs    = true
+  enable_rr_gcs        = true
   license_key          = "SECRET"
 
   depends_on = [module.gke]

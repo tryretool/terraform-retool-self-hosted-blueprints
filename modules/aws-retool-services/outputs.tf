@@ -9,10 +9,15 @@ locals {
     extra_env_vars_secret_path       = "retool/${var.prefix}/extra-env-vars"
     license_key_secret_name          = nonsensitive(var.license_key != null) ? "license-key" : null
     agent_sandbox_secret_name        = var.enable_agent_sandbox ? "agent-sandbox" : null
-    rr_git_bucket_k8s_secret_name    = var.enable_rr_git_s3 ? "rr-git-s3-credentials" : null
-    rr_git_bucket_env_keys           = ["RR_GIT_S3_BUCKET", "RR_GIT_S3_REGION", "RR_GIT_S3_ACCESS_KEY_ID", "RR_GIT_S3_SECRET_ACCESS_KEY"]
-    alb_controller_irsa_role_arn     = module.alb_controller_irsa_role.iam_role_arn
-    alb_controller_irsa_role_name    = module.alb_controller_irsa_role.iam_role_name
+    rr_bucket_k8s_secret_name = var.enable_rr_s3 ? "rr-s3-credentials" : null
+    rr_bucket_env_keys = [
+      "RR_DEFAULT_S3_BUCKET",
+      "RR_DEFAULT_S3_REGION",
+      "RR_DEFAULT_S3_ACCESS_KEY_ID",
+      "RR_DEFAULT_S3_SECRET_ACCESS_KEY",
+    ]
+    alb_controller_irsa_role_arn  = module.alb_controller_irsa_role.iam_role_arn
+    alb_controller_irsa_role_name = module.alb_controller_irsa_role.iam_role_name
   }
 }
 
@@ -61,9 +66,9 @@ output "agent_sandbox_secret_name" {
   value       = local.outputs.agent_sandbox_secret_name
 }
 
-output "rr_git_bucket_k8s_secret_name" {
-  description = "Name of the K8s Secret for Remote Repository Git S3 credentials. Null when enable_rr_git_s3 is false."
-  value       = local.outputs.rr_git_bucket_k8s_secret_name
+output "rr_bucket_k8s_secret_name" {
+  description = "Name of the K8s Secret for Remote Repository S3 credentials. Null when enable_rr_s3 is false."
+  value       = local.outputs.rr_bucket_k8s_secret_name
 }
 
 output "alb_controller_irsa_role_arn" {
