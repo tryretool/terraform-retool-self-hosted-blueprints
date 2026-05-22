@@ -10,7 +10,15 @@ locals {
     discovery_value       = local.cluster_name
     instance_profile_name = "KarpenterNodeInstanceProfile-${local.cluster_name}"
   }
+
+  # Karpenter provisions EC2 instances via the AWS API at runtime, so the
+  # provider's default_tags never reach them — we have to fold those into the
+  # EC2NodeClass spec.tags explicitly. Module-level tags take precedence over
+  # provider-level tags on collision.
+  karpenter_node_tags = merge(data.aws_default_tags.current.tags, local.all_tags)
 }
+
+data "aws_default_tags" "current" {}
 
 # NOTE: we use an instance_profile because the role changes between provisions
 #       but the role is immutable on the ec2nodeclass
@@ -193,7 +201,7 @@ resource "kubectl_manifest" "karpenter_ec2nodeclass_default" {
           }
         }
       ]
-      tags = local.all_tags
+      tags = local.karpenter_node_tags
     }
   })
 
