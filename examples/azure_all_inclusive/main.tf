@@ -79,47 +79,15 @@ module "retool" {
 
   db              = module.db-main.outputs
   retool_services = module.retool-services.outputs
+  user_ingress    = module.user-ingress.outputs
+  domain_name     = local.domain_name
+  https_enabled   = local.enable_https
 
-  retool_helm_extra_values = [
-    yamlencode({
-      image = {
-        tag = "3.334.0-stable"
-      }
-    }),
-    yamlencode({
-      ingress = merge(
-        {
-          enabled          = true
-          ingressClassName = "azure-application-gateway"
-          annotations = {
-            "cert-manager.io/issuer"                            = "letsencrypt-prod" # TODO link this to an user-ingress output
-            "appgw.ingress.kubernetes.io/health-probe-path"     = "/api/checkHealth"
-            "appgw.ingress.kubernetes.io/health-probe-timeout"  = "10"
-            "appgw.ingress.kubernetes.io/health-probe-interval" = "15"
-          }
-          hosts = [for h in [local.domain_name, "*.${local.domain_name}"] : {
-            host = h
-            paths = [{
-              path     = "/"
-              pathType = "Prefix"
-            }]
-          }]
-        },
-        local.enable_https ? {
-          tls = [{
-            secretName = "${local.prefix}-tls"
-            hosts      = [local.domain_name, "*.${local.domain_name}"]
-          }]
-        } : {},
-      )
-      config = {
-        useInsecureCookies = !local.enable_https
-      }
-      env = {
-        BASE_DOMAIN = "${local.enable_https ? "https" : "http"}://${local.domain_name}"
-      }
-    }),
-  ]
+  retool_helm_extra_values = [yamlencode({
+    image = {
+      tag = "3.334.0-stable"
+    }
+  })]
 
   depends_on = [module.aks, module.retool-services, module.user-ingress]
 }

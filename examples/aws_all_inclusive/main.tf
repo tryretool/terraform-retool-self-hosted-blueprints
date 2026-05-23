@@ -63,40 +63,15 @@ module "retool" {
   retool_helm_chart_version = "6.8.1"
   db                        = module.db-main.outputs
   retool_services           = module.retool-services.outputs
+  domain_name               = local.domain_name
+  https_enabled             = local.enable_user_ingress_https
 
   retool_helm_extra_values = [yamlencode({
     image = {
       tag = "3.334.0-stable"
     }
-    config = {
-      useInsecureCookies = !local.enable_user_ingress_https
-    }
-    ingress = {
-      enabled = false
-    }
-    env = {
-      BASE_DOMAIN = local.enable_user_ingress_https ? "https://${local.domain_name}" : "http://${local.domain_name}"
-    }
-    replicaCount = 2
     podDisruptionBudget = {
       maxUnavailable = 1
-    }
-    dbconnector = {
-      enabled  = true
-      replicas = 2
-    }
-    workflows = {
-      enabled = true
-      worker = {
-        replicaCount = 2
-      }
-      backend = {
-        replicaCount = 2
-      }
-    }
-    codeExecutor = {
-      enabled      = true
-      replicaCount = 2
     }
   })]
 

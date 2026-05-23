@@ -82,23 +82,13 @@ module "retool" {
 
   db              = module.db-main.outputs
   retool_services = module.retool-services.outputs
+  user_ingress    = module.user-ingress.outputs
   domain_name     = local.domain_name
 
   retool_helm_extra_values = [
     yamlencode({
       image = {
         tag = "3.391.0-edge"
-      }
-      # Disable the traditional Ingress — the Gateway HTTPRoute handles routing.
-      ingress = { enabled = false }
-      httpRoute = {
-        enabled   = true
-        hostnames = [local.domain_name, "*.${local.domain_name}"]
-        parentRefs = [{
-          name        = module.user-ingress.gateway_name
-          namespace   = "default"
-          sectionName = "https"
-        }]
       }
       podDisruptionBudget = {
         maxUnavailable = 1

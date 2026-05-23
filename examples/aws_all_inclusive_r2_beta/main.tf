@@ -75,9 +75,6 @@ module "retool" {
     image = {
       tag = "3.391.0-edge"
     }
-    ingress = {
-      enabled = false
-    }
     podDisruptionBudget = {
       maxUnavailable = 1
     }

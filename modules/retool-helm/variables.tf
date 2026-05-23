@@ -54,6 +54,21 @@ variable "retool_services" {
   description = "K8s Secret names and cloud secret store paths from the retool-services module (e.g. module.retool-services.outputs). When set alongside db, configures Retool helm config.encryptionKeySecretName, jwtSecretSecretName, config.postgresql.passwordSecretRef, and externalSecrets. When agent_sandbox_enabled is true, agentSandbox.enabled, agentSandbox.postgres.schema, and jsExecutor.enabled are configured automatically."
 }
 
+variable "user_ingress" {
+  type = object({
+    ingress_mode                = optional(string)
+    agent_sandbox_proxy_enabled = optional(bool, false)
+    gateway_name                = optional(string)
+    gateway_section_name        = optional(string)
+    ingress_class_name          = optional(string)
+    cluster_issuer_name         = optional(string)
+    tls_secret_name             = optional(string)
+    agent_proxy_tls_secret_name = optional(string)
+  })
+  default     = null
+  description = "User-ingress outputs (e.g. module.user-ingress.outputs) describing how end-user traffic reaches the cluster. ingress_mode (\"targetGroupBinding\", \"httpRoute\", or \"ingress\") selects which Helm values block (ingress.* / httpRoute.* / agentSandbox.proxy.ingress.*) to render."
+}
+
 variable "domain_name" {
   type        = string
   default     = null

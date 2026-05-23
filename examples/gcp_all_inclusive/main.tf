@@ -77,31 +77,14 @@ module "retool" {
 
   db              = module.db-main.outputs
   retool_services = module.retool-services.outputs
+  user_ingress    = module.user-ingress.outputs
+  domain_name     = local.domain_name
 
-  retool_helm_extra_values = [
-    yamlencode({
-      image = {
-        tag = "3.334.0-stable"
-      }
-    }),
-    yamlencode({
-      # Disable the traditional Ingress — the Gateway HTTPRoute below handles routing.
-      # Without this, the chart renders an Ingress with a null spec which fails validation.
-      ingress = { enabled = false }
-      httpRoute = {
-        enabled   = true
-        hostnames = [local.domain_name]
-        parentRefs = [{
-          name        = module.user-ingress.gateway_name
-          namespace   = "default"
-          sectionName = "https"
-        }]
-      }
-      env = {
-        BASE_DOMAIN = "https://${local.domain_name}"
-      }
-    }),
-  ]
+  retool_helm_extra_values = [yamlencode({
+    image = {
+      tag = "3.334.0-stable"
+    }
+  })]
 
   depends_on = [module.gke, module.retool-services, module.user-ingress]
 }

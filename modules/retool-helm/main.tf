@@ -136,6 +136,7 @@ resource "helm_release" "retool" {
     local.agent_sandbox_values,
     local.workflows_values,
     local.dbconnector_values,
+    local.user_ingress_values,
     var.retool_helm_extra_values,
   )
 
