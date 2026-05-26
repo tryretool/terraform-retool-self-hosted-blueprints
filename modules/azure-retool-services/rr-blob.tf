@@ -20,7 +20,7 @@ resource "azurerm_storage_account" "rr" {
 resource "azurerm_storage_container" "rr" {
   count = var.enable_rr_blob ? 1 : 0
 
-  name                  = "rr"
+  name                  = "rr-blob"
   storage_account_id    = azurerm_storage_account.rr[0].id
   container_access_type = "private"
 }
