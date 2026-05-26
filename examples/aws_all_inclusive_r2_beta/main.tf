@@ -78,9 +78,6 @@ module "retool" {
     podDisruptionBudget = {
       maxUnavailable = 1
     }
-    telemetry = {
-      enabled = true
-    }
   })]
 
   depends_on = [module.retool-services]
