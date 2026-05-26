@@ -1,4 +1,5 @@
 locals {
+  subscription_id     = "00000000-0000-0000-0000-000000000000" # replace with your Azure subscription ID
   prefix              = "retool-prod"
   location            = "eastus2"
   resource_group_name = "retool-prod"
@@ -79,7 +80,7 @@ module "user-ingress" {
 }
 
 module "retool" {
-  source  = "tryretool/self-hosted-blueprints/retool//modules/common/retool-helm"
+  source  = "tryretool/self-hosted-blueprints/retool//modules/retool-helm"
   version = "~> 0.2"
 
   retool_helm_name                         = "retool"
