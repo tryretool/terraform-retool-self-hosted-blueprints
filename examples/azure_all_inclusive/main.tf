@@ -5,9 +5,11 @@ locals {
   resource_group_name = "retool-prod"
   domain_name         = "retool.example.com" # replace with your domain
 
-  # user-ingress defaults to HTTP-only until you delegate DNS and flip this on.
-  # Retool must use matching cookie settings: secure cookies require HTTPS to the browser.
-  enable_https = false
+  # Note: with https required, user-ingress won't work for a new deployment
+  # until you delegate DNS (i.e. install NS records) as the certificate cannot
+  # validate until that point. Disable to allow insecure HTTP traffic if
+  # desired.
+  enable_https = true
 }
 
 module "vnet" {
