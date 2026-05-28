@@ -1,18 +1,21 @@
 locals {
+  subscription_id     = "00000000-0000-0000-0000-000000000000" # replace with your Azure subscription ID
   prefix              = "retool-prod"
   location            = "eastus2"
   resource_group_name = "retool-prod"
   domain_name         = "retool.example.com" # replace with your domain
 
-  # user-ingress defaults to HTTP-only until you delegate DNS and flip this on.
-  # Retool must use matching cookie settings: secure cookies require HTTPS to the browser.
-  enable_https = false
+  # Note: with https required, user-ingress won't work for a new deployment
+  # until you delegate DNS (i.e. install NS records) as the certificate cannot
+  # validate until that point. Disable to allow insecure HTTP traffic if
+  # desired.
+  enable_https = true
 }
 
 
 module "vnet" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/azure-vnet"
-  version = "~> 0.0.1"
+  version = "~> 0.2"
 
   prefix              = local.prefix
   resource_group_name = local.resource_group_name
@@ -21,7 +24,7 @@ module "vnet" {
 
 module "aks" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/azure-aks"
-  version = "~> 0.0.1"
+  version = "~> 0.2"
 
   prefix              = local.prefix
   resource_group_name = local.resource_group_name
@@ -33,7 +36,7 @@ module "aks" {
 
 module "db-main" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/azure-database"
-  version = "~> 0.0.1"
+  version = "~> 0.2"
 
   prefix              = local.prefix
   resource_group_name = local.resource_group_name
@@ -46,7 +49,7 @@ module "db-main" {
 
 module "retool-services" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/azure-retool-services"
-  version = "~> 0.0.1"
+  version = "~> 0.2"
 
   prefix              = local.prefix
   resource_group_name = local.resource_group_name
@@ -57,13 +60,13 @@ module "retool-services" {
   db   = module.db-main.outputs
 
   enable_agent_sandbox = true
-  enable_rr_git_blob   = true
+  enable_rr_blob       = true
   license_key          = "SECRET"
 }
 
 module "user-ingress" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/azure-user-ingress"
-  version = "~> 0.0.1"
+  version = "~> 0.2"
 
   prefix              = local.prefix
   resource_group_name = local.resource_group_name
@@ -79,8 +82,8 @@ module "user-ingress" {
 }
 
 module "retool" {
-  source  = "tryretool/self-hosted-blueprints/retool//modules/common/retool-helm"
-  version = "~> 0.0.1"
+  source  = "tryretool/self-hosted-blueprints/retool//modules/retool-helm"
+  version = "~> 0.2"
 
   retool_helm_name                         = "retool"
   retool_helm_chart_version                = "6.11.0"
@@ -88,98 +91,16 @@ module "retool" {
 
   db              = module.db-main.outputs
   retool_services = module.retool-services.outputs
+  user_ingress    = module.user-ingress.outputs
+  domain_name     = local.domain_name
+  https_enabled   = local.enable_https
 
-  # r2 enabled
   retool_helm_extra_values = [yamlencode({
     image = {
       tag = "3.391.0-edge"
     }
-    ingress = {
-      enabled          = true
-      ingressClassName = "azure-application-gateway"
-      annotations = {
-        "cert-manager.io/issuer"                            = "letsencrypt-prod" # TODO link this to an user-ingress output
-        "appgw.ingress.kubernetes.io/health-probe-path"     = "/api/checkHealth"
-        "appgw.ingress.kubernetes.io/health-probe-timeout"  = "10"
-        "appgw.ingress.kubernetes.io/health-probe-interval" = "15"
-      }
-      hosts = [for h in [local.domain_name, "*.${local.domain_name}"] : {
-        host = h
-        paths = [{
-          path     = "/"
-          pathType = "Prefix"
-        }]
-      }]
-      tls = [{
-        secretName = "${local.prefix}-tls"
-        hosts = [
-          local.domain_name,
-          "*.${local.domain_name}",
-        ]
-      }]
-    }
-    config = {
-      useInsecureCookies = !local.enable_https
-    }
-    env = {
-      BASE_DOMAIN = "${local.enable_https ? "https" : "http"}://${local.domain_name}"
-    }
-    replicaCount = 1
     podDisruptionBudget = {
       maxUnavailable = 1
-    }
-    dbconnector = {
-      enabled  = false
-      replicas = 1
-    }
-    r2Agent = {
-      enabled = true
-    }
-    workflows = {
-      enabled = true
-      worker = {
-        replicaCount = 1
-      }
-      backend = {
-        replicaCount = 1
-      }
-    }
-    codeExecutor = {
-      enabled      = true
-      replicaCount = 1
-    }
-    jsExecutor = {
-      enabled      = true
-      replicaCount = 1
-    }
-    agentSandbox = {
-      enabled = true
-      postgres = {
-        schema = "agent_executor"
-      }
-      externalSecret = {
-        name = module.retool-services.outputs.agent_sandbox_secret_name
-      }
-      frontendWsProxyDomain = "${local.enable_https ? "https" : "http"}://agent-proxy.${local.domain_name}"
-      proxy = {
-        backendDomainSuffixes = local.domain_name
-        ingress = {
-          enabled          = true
-          host             = "agent-proxy.${local.domain_name}"
-          ingressClassName = "azure-application-gateway"
-          annotations = {
-            "cert-manager.io/cluster-issuer"                    = "letsencrypt-prod" # TODO link this to an user-ingress output
-            "appgw.ingress.kubernetes.io/health-probe-path"     = "/health"
-            "appgw.ingress.kubernetes.io/health-probe-timeout"  = "10"
-            "appgw.ingress.kubernetes.io/health-probe-interval" = "15"
-            "appgw.ingress.kubernetes.io/request-timeout"       = "40"
-          }
-          tls = [{
-            secretName = "${local.prefix}-agent-proxy-tls"
-            hosts      = ["agent-proxy.${local.domain_name}"]
-          }]
-        }
-      }
     }
   })]
 

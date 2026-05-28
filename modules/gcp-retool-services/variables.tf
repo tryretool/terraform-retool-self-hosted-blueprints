@@ -66,8 +66,8 @@ variable "enable_agent_sandbox" {
   description = "When true, generates agent sandbox secrets (JWT keypair, encryption key, API secret, Postgres URL) synced to K8s via ESO."
 }
 
-variable "enable_rr_git_gcs" {
+variable "enable_rr_gcs" {
   type        = bool
   default     = false
-  description = "Whether to create a GCS bucket and HMAC keys for Retool Remote Repository Git storage. Uses GCS S3-compatible API."
+  description = "Whether to create a GCS bucket and HMAC keys for Retool Remote Repository storage. Uses GCS S3-compatible API."
 }

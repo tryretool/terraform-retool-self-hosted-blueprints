@@ -12,14 +12,14 @@ locals {
 
 module "vpc" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/aws-vpc"
-  version = "~> 0.0.1"
+  version = "~> 0.2"
 
   prefix = local.prefix
 }
 
 module "eks" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/aws-eks"
-  version = "~> 0.0.1"
+  version = "~> 0.2"
 
   prefix = local.prefix
   region = local.region
@@ -28,7 +28,7 @@ module "eks" {
 
 module "db-main" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/aws-database"
-  version = "~> 0.0.1"
+  version = "~> 0.2"
 
   prefix     = local.prefix
   db_purpose = "main"
@@ -44,7 +44,7 @@ module "db-main" {
 
 module "retool-services" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/aws-retool-services"
-  version = "~> 0.0.1"
+  version = "~> 0.2"
 
   prefix = local.prefix
   region = local.region
@@ -53,7 +53,7 @@ module "retool-services" {
   db     = module.db-main.outputs
 
   enable_agent_sandbox = true
-  enable_rr_git_s3     = true
+  enable_rr_s3         = true
   license_key          = "SECRET"
 
   depends_on = [module.eks]
@@ -61,85 +61,22 @@ module "retool-services" {
 
 module "retool" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/common/retool-helm"
-  version = "~> 0.0.1"
+  version = "~> 0.2"
 
   retool_helm_name                         = "retool"
   retool_helm_chart_version                = "6.11.0"
-  retool_helm_chart_use_unpublished_branch = "lfoster/agent-sandbox-support"
+  retool_helm_chart_use_unpublished_branch = "r2"
   db                                       = module.db-main.outputs
   retool_services                          = module.retool-services.outputs
+  domain_name                              = local.domain_name
+  https_enabled                            = local.enable_user_ingress_https
 
   retool_helm_extra_values = [yamlencode({
     image = {
-      repository = "753800337063.dkr.ecr.us-west-2.amazonaws.com/onprem"
-      tag        = "dev-3.380.0-940f7d8"
+      tag = "3.391.0-edge"
     }
-    config = {
-      useInsecureCookies = !local.enable_user_ingress_https
-    }
-    ingress = {
-      enabled = false
-    }
-    env = {
-      BASE_DOMAIN = local.enable_user_ingress_https ? "https://${local.domain_name}" : "http://${local.domain_name}"
-    }
-    replicaCount = 2
     podDisruptionBudget = {
       maxUnavailable = 1
-    }
-    dbconnector = {
-      enabled  = true
-      replicas = 2
-    }
-    r2Agent = {
-      enabled = true
-    }
-    telemetry = {
-      enabled = true
-      image = {
-        tag = "3.334.0-stable"
-      }
-    }
-    workflows = {
-      enabled = true
-      worker = {
-        replicaCount = 2
-      }
-      backend = {
-        replicaCount = 2
-      }
-    }
-    codeExecutor = {
-      enabled      = true
-      replicaCount = 2
-      image = {
-        repository = "753800337063.dkr.ecr.us-west-2.amazonaws.com/code-executor-service"
-        tag        = "dev-3.380.0-940f7d8"
-      }
-    }
-    jsExecutor = {
-      replicaCount = 2
-      image = {
-        repository = "753800337063.dkr.ecr.us-west-2.amazonaws.com/js-executor-service"
-        tag        = "dev-3.380.0-940f7d8"
-      }
-    }
-    agentSandbox = {
-      enabled = true
-      image = {
-        repository = "753800337063.dkr.ecr.us-west-2.amazonaws.com/agent-executor-service"
-        tag        = "dev-3.380.0-940f7d8"
-      }
-      postgres = {
-        schema = "agent_executor"
-      }
-      externalSecret = {
-        name = module.retool-services.outputs.agent_sandbox_secret_name
-      }
-      frontendWsProxyDomain = "${local.enable_user_ingress_https ? "https" : "http"}://agent-proxy.${local.domain_name}"
-      proxy = {
-        backendDomainSuffixes = local.domain_name
-      }
     }
   })]
 
@@ -148,7 +85,7 @@ module "retool" {
 
 module "user-ingress" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/aws-user-ingress"
-  version = "~> 0.0.1"
+  version = "~> 0.2"
 
   domain_name                = local.domain_name
   enable_https_listener      = local.enable_user_ingress_https
@@ -161,6 +98,7 @@ module "user-ingress" {
 }
 
 output "modules" {
+  sensitive = true # just to quiet the apply output
   value = {
     vpc             = module.vpc
     eks             = module.eks

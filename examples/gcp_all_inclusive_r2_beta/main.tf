@@ -1,5 +1,5 @@
 locals {
-  prefix      = "blessed-02"
+  prefix      = "my-retool"
   project_id  = "my-gcp-project" # replace with your GCP project ID
   region      = "us-central1"
   domain_name = "retool.example.com" # replace with your domain
@@ -7,7 +7,7 @@ locals {
 
 module "vpc" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/gcp-vpc"
-  version = "~> 0.0.1"
+  version = "~> 0.2"
 
   prefix     = local.prefix
   project_id = local.project_id
@@ -16,7 +16,7 @@ module "vpc" {
 
 module "gke" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/gcp-gke"
-  version = "~> 0.0.1"
+  version = "~> 0.2"
 
   prefix     = local.prefix
   project_id = local.project_id
@@ -27,7 +27,8 @@ module "gke" {
 }
 
 module "db-main" {
-  source = "../../.wt/gcp-init/modules/gcp-database"
+  source  = "tryretool/self-hosted-blueprints/retool//modules/common/gcp-database"
+  version = "~> 0.2"
 
   prefix     = local.prefix
   project_id = local.project_id
@@ -46,21 +47,24 @@ module "db-main" {
 
 module "retool-services" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/gcp-retool-services"
-  version = "~> 0.0.1"
+  version = "~> 0.2"
 
   prefix     = local.prefix
   project_id = local.project_id
   region     = local.region
+  gke        = module.gke.outputs
+  db         = module.db-main.outputs
 
   enable_agent_sandbox = true
-  enable_rr_git_gcs    = true
+  enable_rr_gcs        = true
   license_key          = "SECRET"
 
   depends_on = [module.gke]
 }
 
 module "user-ingress" {
-  source = "../../.wt/gcp-init/modules/gcp-user-ingress"
+  source  = "tryretool/self-hosted-blueprints/retool//modules/common/gcp-user-ingress"
+  version = "~> 0.2"
 
   prefix      = local.prefix
   project_id  = local.project_id
@@ -74,7 +78,7 @@ module "user-ingress" {
 
 module "retool" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/common/retool-helm"
-  version = "~> 0.0.1"
+  version = "~> 0.2"
 
   retool_helm_name                         = "retool"
   retool_helm_chart_version                = "6.11.0"
@@ -82,72 +86,16 @@ module "retool" {
 
   db              = module.db-main.outputs
   retool_services = module.retool-services.outputs
+  user_ingress    = module.user-ingress.outputs
+  domain_name     = local.domain_name
 
   retool_helm_extra_values = [
     yamlencode({
       image = {
         tag = "3.391.0-edge"
       }
-      # Disable the traditional Ingress — the Gateway HTTPRoute handles routing.
-      ingress = { enabled = false }
-      httpRoute = {
-        enabled   = true
-        hostnames = [local.domain_name, "*.${local.domain_name}"]
-        parentRefs = [{
-          name        = module.user-ingress.gateway_name
-          namespace   = "default"
-          sectionName = "https"
-        }]
-      }
-      env = {
-        BASE_DOMAIN = "https://${local.domain_name}"
-      }
-      replicaCount = 1
       podDisruptionBudget = {
         maxUnavailable = 1
-      }
-      dbconnector = {
-        enabled  = true
-        replicas = 1
-      }
-      r2Agent = {
-        enabled = true
-      }
-      workflows = {
-        enabled = true
-        worker = {
-          replicaCount = 1
-        }
-        backend = {
-          replicaCount = 1
-        }
-      }
-      codeExecutor = {
-        enabled      = true
-        replicaCount = 1
-      }
-      jsExecutor = {
-        enabled      = true
-        replicaCount = 1
-      }
-      agentSandbox = {
-        enabled = true
-        devicePlugin = {
-          # GKE requires a custom ResourceQuota to use the default
-          # `system-node-critical` PriorityClass, so disable PriorityClass usage
-          # for this daemonset.
-          priorityClassName = null
-        }
-        postgres = {
-          schema = "agent_executor"
-        }
-        externalSecret = {
-          name = module.retool-services.outputs.agent_sandbox_secret_name
-        }
-        frontendWsProxyDomain = "https://agent-proxy.${local.domain_name}"
-        proxy = {
-          backendDomainSuffixes = local.domain_name
-        }
       }
     })
   ]

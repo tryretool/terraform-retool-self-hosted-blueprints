@@ -8,9 +8,10 @@ locals {
     extra_env_vars_secret_name       = "extra-env-vars"
     extra_env_vars_secret_path       = "retool-${var.prefix}-extra-env-vars"
     license_key_secret_name          = nonsensitive(var.license_key != null) ? "license-key" : null
+    agent_sandbox_enabled            = var.enable_agent_sandbox
     agent_sandbox_secret_name        = var.enable_agent_sandbox ? "agent-sandbox" : null
-    rr_git_bucket_k8s_secret_name    = var.enable_rr_git_blob ? "rr-git-blob-credentials" : null
-    rr_git_bucket_env_keys           = var.enable_rr_git_blob ? ["RR_DEFAULT_AZURE_CONTAINER", "RR_DEFAULT_AZURE_CONNECTION_STRING", "RR_BLOB_STORAGE_PROVIDER"] : []
+    rr_bucket_k8s_secret_name        = var.enable_rr_blob ? "rr-blob-credentials" : null
+    rr_bucket_env_keys               = var.enable_rr_blob ? ["RR_DEFAULT_AZURE_CONTAINER", "RR_DEFAULT_AZURE_CONNECTION_STRING", "RR_BLOB_STORAGE_PROVIDER"] : []
     secret_store_name                = "azure-keyvault"
     backend_type                     = "azureKeyVault"
   }
@@ -56,19 +57,24 @@ output "license_key_secret_name" {
   value       = local.outputs.license_key_secret_name
 }
 
+output "agent_sandbox_enabled" {
+  description = "Whether agent sandbox was enabled in this retool-services deployment."
+  value       = local.outputs.agent_sandbox_enabled
+}
+
 output "agent_sandbox_secret_name" {
   description = "Name of the Kubernetes Secret containing agent sandbox credentials, or null when agent sandbox is disabled."
   value       = local.outputs.agent_sandbox_secret_name
 }
 
-output "rr_git_bucket_k8s_secret_name" {
-  description = "Name of the K8s Secret for Remote Repository Git bucket credentials. Null when enable_rr_git_blob is false."
-  value       = local.outputs.rr_git_bucket_k8s_secret_name
+output "rr_bucket_k8s_secret_name" {
+  description = "Name of the K8s Secret for Remote Repository bucket credentials. Null when enable_rr_blob is false."
+  value       = local.outputs.rr_bucket_k8s_secret_name
 }
 
-output "rr_git_bucket_env_keys" {
-  description = "Env var keys stored in the RR Git bucket K8s Secret. Empty when enable_rr_git_blob is false."
-  value       = local.outputs.rr_git_bucket_env_keys
+output "rr_bucket_env_keys" {
+  description = "Env var keys stored in the RR bucket K8s Secret. Empty when enable_rr_blob is false."
+  value       = local.outputs.rr_bucket_env_keys
 }
 
 output "secret_store_name" {

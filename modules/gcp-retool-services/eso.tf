@@ -267,14 +267,14 @@ resource "kubectl_manifest" "external_secret_agent_sandbox" {
   depends_on = [kubectl_manifest.secret_store]
 }
 
-resource "kubectl_manifest" "external_secret_rr_git_gcs" {
-  count = var.enable_rr_git_gcs ? 1 : 0
+resource "kubectl_manifest" "external_secret_rr_gcs" {
+  count = var.enable_rr_gcs ? 1 : 0
 
   yaml_body = yamlencode({
     apiVersion = "external-secrets.io/v1beta1"
     kind       = "ExternalSecret"
     metadata = {
-      name      = "rr-git-gcs-credentials"
+      name      = "rr-gcs-credentials"
       namespace = local.retool_namespace
     }
     spec = {
@@ -284,13 +284,13 @@ resource "kubectl_manifest" "external_secret_rr_git_gcs" {
         name = "gcp-secretsmanager"
       }
       target = {
-        name           = "rr-git-gcs-credentials"
+        name           = "rr-gcs-credentials"
         creationPolicy = "Owner"
         deletionPolicy = "Retain"
       }
       dataFrom = [{
         extract = {
-          key = "retool-${var.prefix}-rr-git-gcs"
+          key = "retool-${var.prefix}-rr-gcs"
         }
       }]
     }

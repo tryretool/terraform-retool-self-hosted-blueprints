@@ -1,6 +1,6 @@
 provider "azurerm" {
   features {}
-  subscription_id = "00000000-0000-0000-0000-000000000000" # replace with your subscription ID
+  subscription_id = local.subscription_id
 }
 
 # AKS kube_config provides host + client cert/key for Kubernetes provider auth.

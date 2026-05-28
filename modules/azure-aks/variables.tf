@@ -31,8 +31,8 @@ variable "kubernetes_version" {
 
 variable "node_vm_size" {
   type        = string
-  description = "VM size for the default node pool"
-  default     = "Standard_D4_v4"
+  description = "VM size for the default node pool. See [Azure VM size documentation](https://learn.microsoft.com/en-us/azure/virtual-machines/sizes/general-purpose/d-family) or use `az vm list-skus` to find available sizes in your region. Recommended minimum is Standard_D4as_v4 or equivalent (4 cpu, 16Gi memory) for production Retool deployments."
+  default     = "Standard_D4as_v6"
 }
 
 variable "node_os_disk_size_gb" {

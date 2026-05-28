@@ -46,6 +46,14 @@ resource "azurerm_kubernetes_cluster" "main" {
     }
   }
 
+  auto_scaler_profile {
+    scan_interval                    = "10s"
+    scale_down_delay_after_add       = "5m"
+    scale_down_unneeded              = "5m"
+    scale_down_utilization_threshold = 0.5
+    expander                         = "least-waste"
+  }
+
   # System-assigned identity — AKS auto-manages the necessary role assignments
   # (e.g. Network Contributor) without requiring the deploying user to have
   # Microsoft.Authorization/roleAssignments/* permissions.

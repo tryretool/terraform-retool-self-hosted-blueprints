@@ -43,17 +43,77 @@ locals {
     : "git+https://github.com/tryretool/retool-helm@charts/retool?ref=${var.retool_helm_chart_use_unpublished_branch}&sparse=1"
   )
 
-  rr_git_bucket_values = (var.retool_services != null && var.retool_services.rr_git_bucket_k8s_secret_name != null) ? [yamlencode({
+  rr_bucket_values = (var.retool_services != null && var.retool_services.rr_bucket_k8s_secret_name != null) ? [yamlencode({
     environmentSecrets = [
-      for key in var.retool_services.rr_git_bucket_env_keys : {
+      for key in var.retool_services.rr_bucket_env_keys : {
         name = key
         secretKeyRef = {
-          name = var.retool_services.rr_git_bucket_k8s_secret_name
+          name = var.retool_services.rr_bucket_k8s_secret_name
           key  = key
         }
       }
     ]
   })] : []
+
+  url_scheme = var.https_enabled ? "https" : "http"
+
+  domain_values = var.domain_name != null ? [yamlencode({
+    config = {
+      useInsecureCookies = !var.https_enabled
+    }
+    env = {
+      BASE_DOMAIN = "${local.url_scheme}://${var.domain_name}"
+    }
+    agentSandbox = {
+      frontendWsProxyDomain = "${local.url_scheme}://agent-proxy.${var.domain_name}"
+      proxy = {
+        backendDomainSuffixes = var.domain_name
+      }
+    }
+  })] : []
+
+  agent_sandbox_enabled = var.retool_services != null && var.retool_services.agent_sandbox_enabled
+
+  agent_sandbox_values = local.agent_sandbox_enabled ? [yamlencode({
+    agentSandbox = merge(
+      {
+        enabled = true
+        postgres = {
+          schema = "agent_executor"
+        }
+        externalSecret = {
+          name = var.retool_services.agent_sandbox_secret_name
+        }
+      },
+      # GKE's default ResourceQuota rejects pods that use the
+      # `system-node-critical` PriorityClass without an explicit quota
+      # carve-out, so for the agent sandbox device plugin DaemonSet on GKE we
+      # unset priorityClassName.
+      var.retool_services.backend_type == "gcpSecretsManager" ? {
+        devicePlugin = {
+          priorityClassName = null
+        }
+      } : {},
+    )
+    jsExecutor = {
+      enabled = true
+    }
+    r2Agent = {
+      enabled = true
+    }
+  })] : []
+
+  workflows_values = [yamlencode({
+    workflows = {
+      enabled = var.workflows_enabled
+    }
+  })]
+
+  dbconnector_values = [yamlencode({
+    dbconnector = {
+      enabled = var.dbconnector_enabled
+    }
+  })]
 }
 
 resource "helm_release" "retool" {
@@ -67,7 +127,18 @@ resource "helm_release" "retool" {
   # even when the release eventually succeeds.
   timeout = 20 * 60
 
-  values = concat(local.defaults_values, local.secrets_values, local.license_values, local.rr_git_bucket_values, var.retool_helm_extra_values)
+  values = concat(
+    local.defaults_values,
+    local.secrets_values,
+    local.license_values,
+    local.rr_bucket_values,
+    local.domain_values,
+    local.agent_sandbox_values,
+    local.workflows_values,
+    local.dbconnector_values,
+    local.user_ingress_values,
+    var.retool_helm_extra_values,
+  )
 
   lifecycle {
     # The Helm provider treats `timeout` as a replace-triggering attribute; bumping it

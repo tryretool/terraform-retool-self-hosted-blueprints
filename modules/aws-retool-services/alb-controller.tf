@@ -5,7 +5,16 @@ locals {
     namespace            = "alb-controller"
     service_account_name = "alb-controller"
   }
+
+  # The ALB controller provisions AWS resources (load balancers, target groups,
+  # listeners, security groups) via the AWS API at runtime, so the provider's
+  # default_tags never reach them — we have to feed them to the controller
+  # explicitly via its --default-tags flag. Module-level tags take precedence
+  # over provider-level tags on collision.
+  alb_controller_default_tags = merge(data.aws_default_tags.current.tags, local.all_tags)
 }
+
+data "aws_default_tags" "current" {}
 
 module "alb_controller_irsa_role" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
@@ -159,6 +168,10 @@ resource "helm_release" "alb_controller" {
     ingressClassConfig = {
       default = true
     }
+    # propagated to every AWS resource the controller creates (ALBs, target
+    # groups, listeners, controller-managed security groups). becomes the
+    # --default-tags CLI flag on the controller.
+    defaultTags = local.alb_controller_default_tags
   })]
 
   depends_on = [
