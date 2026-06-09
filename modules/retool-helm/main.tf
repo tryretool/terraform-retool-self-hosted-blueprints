@@ -44,15 +44,16 @@ locals {
   )
 
   rr_bucket_values = (var.retool_services != null && var.retool_services.rr_bucket_k8s_secret_name != null) ? [yamlencode({
-    environmentSecrets = [
-      for key in var.retool_services.rr_bucket_env_keys : {
-        name = key
-        secretKeyRef = {
-          name = var.retool_services.rr_bucket_k8s_secret_name
-          key  = key
+    env = {
+      for key in var.retool_services.rr_bucket_env_keys : key => {
+        valueFrom = {
+          secretKeyRef = {
+            name = var.retool_services.rr_bucket_k8s_secret_name
+            key  = key
+          }
         }
       }
-    ]
+    }
   })] : []
 
   url_scheme = var.https_enabled ? "https" : "http"

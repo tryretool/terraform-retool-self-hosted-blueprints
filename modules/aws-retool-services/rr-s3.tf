@@ -67,6 +67,7 @@ resource "kubernetes_secret_v1" "rr_s3" {
   }
 
   data = {
+    RR_BLOB_STORAGE_PROVIDER        = "s3"
     RR_DEFAULT_S3_BUCKET            = aws_s3_bucket.rr[0].id
     RR_DEFAULT_S3_REGION            = var.region
     RR_DEFAULT_S3_ACCESS_KEY_ID     = aws_iam_access_key.rr[0].id
