@@ -43,33 +43,14 @@ resource "aws_secretsmanager_secret_version" "extra_env_vars" {
 
 # --- Agent Sandbox secrets (gated on enable_agent_sandbox) ---
 
-data "aws_secretsmanager_secret_version" "db_credentials" {
-  count     = var.enable_agent_sandbox ? 1 : 0
-  secret_id = var.db.master_user_secret_arn
-}
-
 locals {
-  ae_db_creds = var.enable_agent_sandbox ? jsondecode(
-    data.aws_secretsmanager_secret_version.db_credentials[0].secret_string
-  ) : null
-  ae_postgres_url = var.enable_agent_sandbox ? "postgresql://${local.ae_db_creds.username}:${urlencode(local.ae_db_creds.password)}@${var.db.address}:${var.db.port}/${var.db.name}?sslmode=no-verify" : null
+  as_postgres_url = var.enable_agent_sandbox ? "postgresql://${var.db.username}@${var.db.address}:${var.db.port}/${var.db.name}?sslmode=no-verify" : null
 }
 
 resource "tls_private_key" "agent_sandbox_jwt" {
   count       = var.enable_agent_sandbox ? 1 : 0
   algorithm   = "ECDSA"
   ecdsa_curve = "P256"
-}
-
-resource "random_bytes" "agent_sandbox_encryption_key" {
-  count  = var.enable_agent_sandbox ? 1 : 0
-  length = 32
-}
-
-resource "random_password" "agent_sandbox_api_secret" {
-  count   = var.enable_agent_sandbox ? 1 : 0
-  length  = 48
-  special = false
 }
 
 resource "aws_secretsmanager_secret" "agent_sandbox" {
@@ -84,9 +65,7 @@ resource "aws_secretsmanager_secret_version" "agent_sandbox" {
   secret_string = jsonencode({
     "jwt-public-key"  = tls_private_key.agent_sandbox_jwt[0].public_key_pem
     "jwt-private-key" = tls_private_key.agent_sandbox_jwt[0].private_key_pem
-    "encryption-key"  = random_bytes.agent_sandbox_encryption_key[0].hex
-    "api-secret"      = random_password.agent_sandbox_api_secret[0].result
-    "postgres-url"    = local.ae_postgres_url
+    "postgres-url"    = local.as_postgres_url
   })
 }
 

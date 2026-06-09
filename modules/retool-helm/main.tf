@@ -27,6 +27,18 @@ locals {
       includeConfigSecrets = true
       name                 = var.retool_services.extra_env_vars_secret_name
     }
+    # Agent sandbox gets enabled elsewhere, but we preconfigure it here to use
+    # the same DB password secret when enabled. This is key for AWS where RDS
+    # automatically rotates the password in the master credentials secret, so
+    # referencing it this way ensures the agent sandbox credentials stay in
+    # sync.
+    agentSandbox = {
+      postgres = {
+        schema             = "agent_executor"
+        passwordSecretName = var.retool_services.db_credentials_secret_name
+        passwordSecretKey  = var.retool_services.db_credentials_secret_key
+      }
+    }
   })] : []
 
   license_values = (
@@ -81,9 +93,6 @@ locals {
     agentSandbox = merge(
       {
         enabled = true
-        postgres = {
-          schema = "agent_executor"
-        }
         externalSecret = {
           name = var.retool_services.agent_sandbox_secret_name
         }
@@ -103,6 +112,9 @@ locals {
     }
     r2Agent = {
       enabled = true
+    }
+    rrGitServer = {
+      enabled = var.retool_services.rr_bucket_k8s_secret_name != null
     }
   })] : []
 
