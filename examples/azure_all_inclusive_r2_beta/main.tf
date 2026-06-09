@@ -76,8 +76,6 @@ module "user-ingress" {
   aks                 = module.aks.outputs
   enable_https        = local.enable_https
 
-  enable_agent_sandbox_proxy = true
-
   depends_on = [module.aks, module.retool-services]
 }
 

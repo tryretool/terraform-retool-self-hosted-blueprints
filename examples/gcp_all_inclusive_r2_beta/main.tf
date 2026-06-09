@@ -71,8 +71,6 @@ module "user-ingress" {
   region      = local.region
   domain_name = local.domain_name
 
-  enable_agent_sandbox_proxy = true
-
   depends_on = [module.gke, module.retool-services]
 }
 

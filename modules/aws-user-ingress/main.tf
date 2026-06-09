@@ -6,8 +6,6 @@ locals {
 
   # Target group name: max 32 characters; alphanumeric and hyphens only.
   tg_name = length(local.name_slug) <= 27 ? "${local.name_slug}-tg" : "${substr(local.name_slug, 0, 27)}-tg"
-
-  ae_proxy_tg_name = length(local.name_slug) <= 24 ? "${local.name_slug}-ae-tg" : "${substr(local.name_slug, 0, 24)}-ae-tg"
 }
 
 resource "aws_route53_zone" "hosted_zone" {
@@ -221,105 +219,5 @@ resource "aws_route53_record" "alb_alias_wildcard" {
     name                   = aws_lb.alb.dns_name
     zone_id                = aws_lb.alb.zone_id
     evaluate_target_health = true
-  }
-}
-
-# --- Agent Sandbox Proxy (gated on enable_agent_sandbox_proxy) ---
-
-resource "aws_vpc_security_group_ingress_rule" "ae_proxy_from_alb" {
-  count = var.enable_agent_sandbox_proxy ? 1 : 0
-
-  security_group_id            = var.eks.node_security_group_id
-  description                  = "Agent sandbox proxy from user-managed ALB"
-  referenced_security_group_id = aws_security_group.alb.id
-  ip_protocol                  = "tcp"
-  from_port                    = var.agent_sandbox_proxy_port
-  to_port                      = var.agent_sandbox_proxy_port
-}
-
-resource "aws_lb_target_group" "agent_sandbox_proxy" {
-  count = var.enable_agent_sandbox_proxy ? 1 : 0
-
-  name        = local.ae_proxy_tg_name
-  port        = var.agent_sandbox_proxy_port
-  protocol    = "HTTP"
-  target_type = "ip"
-  vpc_id      = var.vpc.vpc_id
-
-  health_check {
-    enabled             = true
-    path                = "/"
-    port                = "traffic-port"
-    protocol            = "HTTP"
-    healthy_threshold   = 2
-    unhealthy_threshold = 3
-    timeout             = 5
-    interval            = 30
-    matcher             = "200-404"
-  }
-
-  lifecycle {
-    create_before_destroy = true
-  }
-}
-
-resource "aws_lb_listener_rule" "agent_sandbox_proxy_https" {
-  count = var.enable_agent_sandbox_proxy && var.enable_https_listener ? 1 : 0
-
-  listener_arn = aws_lb_listener.https[0].arn
-
-  action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.agent_sandbox_proxy[0].arn
-  }
-
-  condition {
-    host_header {
-      values = ["agent-proxy.${var.domain_name}"]
-    }
-  }
-}
-
-resource "aws_lb_listener_rule" "agent_sandbox_proxy_http" {
-  count = var.enable_agent_sandbox_proxy && !var.enable_https_listener ? 1 : 0
-
-  listener_arn = aws_lb_listener.http_forward[0].arn
-
-  action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.agent_sandbox_proxy[0].arn
-  }
-
-  condition {
-    host_header {
-      values = ["agent-proxy.${var.domain_name}"]
-    }
-  }
-}
-
-resource "kubectl_manifest" "agent_sandbox_proxy_tgb" {
-  count = var.enable_agent_sandbox_proxy ? 1 : 0
-
-  yaml_body = yamlencode({
-    apiVersion = "elbv2.k8s.aws/v1beta1"
-    kind       = "TargetGroupBinding"
-    metadata = {
-      name      = local.ae_proxy_tg_name
-      namespace = var.retool_service_namespace
-    }
-    spec = {
-      targetGroupARN = aws_lb_target_group.agent_sandbox_proxy[0].arn
-      targetType     = "ip"
-      serviceRef = {
-        name = var.agent_sandbox_proxy_service_name
-        port = var.agent_sandbox_proxy_port
-      }
-    }
-  })
-
-  lifecycle {
-    replace_triggered_by = [
-      aws_lb_target_group.agent_sandbox_proxy,
-    ]
   }
 }

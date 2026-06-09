@@ -53,24 +53,6 @@ variable "enable_https" {
   default     = false
 }
 
-variable "enable_agent_sandbox_proxy" {
-  type        = bool
-  default     = false
-  description = "When true, outputs the agent sandbox proxy URL at agent-proxy.<domain_name>. Routing is handled by the retool-helm chart Ingress, not Terraform."
-}
-
-variable "agent_sandbox_proxy_port" {
-  type        = number
-  default     = 3019
-  description = "Port on the agent sandbox proxy Kubernetes Service."
-}
-
-variable "agent_sandbox_proxy_service_name" {
-  type        = string
-  default     = "retool-agent-sandbox-proxy"
-  description = "Name of the Kubernetes Service fronting the agent sandbox proxy pods."
-}
-
 variable "tags" {
   type        = map(string)
   default     = {}
