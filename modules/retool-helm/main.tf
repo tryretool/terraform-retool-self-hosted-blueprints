@@ -65,7 +65,6 @@ locals {
       BASE_DOMAIN = "${local.url_scheme}://${var.domain_name}"
     }
     agentSandbox = {
-      frontendWsProxyDomain = "${local.url_scheme}://agent-proxy.${var.domain_name}"
       proxy = {
         backendDomainSuffixes = var.domain_name
       }
@@ -75,6 +74,9 @@ locals {
   agent_sandbox_enabled = var.retool_services != null && var.retool_services.agent_sandbox_enabled
 
   agent_sandbox_values = local.agent_sandbox_enabled ? [yamlencode({
+    r2 = {
+      enabled = true
+    }
     agentSandbox = merge(
       {
         enabled = true
