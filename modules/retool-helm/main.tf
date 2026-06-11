@@ -32,11 +32,13 @@ locals {
     # automatically rotates the password in the master credentials secret, so
     # referencing it this way ensures the agent sandbox credentials stay in
     # sync.
-    agentSandbox = {
-      postgres = {
-        schema             = "agent_executor"
-        passwordSecretName = var.retool_services.db_credentials_secret_name
-        passwordSecretKey  = var.retool_services.db_credentials_secret_key
+    rr = {
+      agentSandbox = {
+        postgres = {
+          schema             = "agent_executor"
+          passwordSecretName = var.retool_services.db_credentials_secret_name
+          passwordSecretKey  = var.retool_services.db_credentials_secret_key
+        }
       }
     }
   })] : []
@@ -77,9 +79,11 @@ locals {
     env = {
       BASE_DOMAIN = "${local.url_scheme}://${var.domain_name}"
     }
-    agentSandbox = {
-      proxy = {
-        backendDomainSuffixes = var.domain_name
+    rr = {
+      agentSandbox = {
+        proxy = {
+          backendDomainSuffixes = var.domain_name
+        }
       }
     }
   })] : []
@@ -87,34 +91,34 @@ locals {
   agent_sandbox_enabled = var.retool_services != null && var.retool_services.agent_sandbox_enabled
 
   agent_sandbox_values = local.agent_sandbox_enabled ? [yamlencode({
-    r2 = {
+    rr = {
       enabled = true
-    }
-    agentSandbox = merge(
-      {
+      agentSandbox = merge(
+        {
+          enabled = true
+          externalSecret = {
+            name = var.retool_services.agent_sandbox_secret_name
+          }
+        },
+        # GKE's default ResourceQuota rejects pods that use the
+        # `system-node-critical` PriorityClass without an explicit quota
+        # carve-out, so for the agent sandbox device plugin DaemonSet on GKE we
+        # unset priorityClassName.
+        var.retool_services.backend_type == "gcpSecretsManager" ? {
+          devicePlugin = {
+            priorityClassName = null
+          }
+        } : {},
+      )
+      jsExecutor = {
         enabled = true
-        externalSecret = {
-          name = var.retool_services.agent_sandbox_secret_name
-        }
-      },
-      # GKE's default ResourceQuota rejects pods that use the
-      # `system-node-critical` PriorityClass without an explicit quota
-      # carve-out, so for the agent sandbox device plugin DaemonSet on GKE we
-      # unset priorityClassName.
-      var.retool_services.backend_type == "gcpSecretsManager" ? {
-        devicePlugin = {
-          priorityClassName = null
-        }
-      } : {},
-    )
-    jsExecutor = {
-      enabled = true
-    }
-    r2Agent = {
-      enabled = true
-    }
-    rrGitServer = {
-      enabled = var.retool_services.rr_bucket_k8s_secret_name != null
+      }
+      agent = {
+        enabled = true
+      }
+      gitServer = {
+        enabled = var.retool_services.rr_bucket_k8s_secret_name != null
+      }
     }
   })] : []
 
