@@ -8,6 +8,15 @@ locals {
   retool_namespace       = "default"
   encryption_key_sm_path = "retool/${var.prefix}/encryption-key"
 
+  # Secrets Manager path/ARN for the license key, sourced from either the managed
+  # secret (var.license_key) or an existing one (var.license_key_secret_path).
+  # null when neither is set (free-tier mode).
+  license_key_remote_ref = (
+    nonsensitive(var.license_key != null)
+    ? "retool/${var.prefix}/license-key"
+    : var.license_key_secret_path
+  )
+
   external_secrets = concat(
     [
       {
@@ -40,12 +49,12 @@ locals {
         target_deletion_policy = "Retain"
       },
     ],
-    nonsensitive(var.license_key != null) ? [
+    local.license_key_remote_ref != null ? [
       {
         name = "license-key"
         data = [{
           secretKey = "license-key"
-          remoteRef = { key = "retool/${var.prefix}/license-key" }
+          remoteRef = { key = local.license_key_remote_ref }
         }]
         target_deletion_policy = "Retain"
       },
@@ -114,6 +123,17 @@ resource "aws_iam_policy" "eso" {
           "secretsmanager:BatchGetSecretValue",
         ]
         Resource = var.encryption_key_secret_name
+      }] : [],
+      var.license_key_secret_path != null ? [{
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue",
+          "secretsmanager:DescribeSecret",
+          "secretsmanager:ListSecretVersionIds",
+          "secretsmanager:GetResourcePolicy",
+          "secretsmanager:BatchGetSecretValue",
+        ]
+        Resource = var.license_key_secret_path
       }] : []
     )
   })

@@ -85,8 +85,8 @@ resource "google_project_service" "secretmanager" {
 # reference it by name rather than passing the plaintext value as a variable.
 resource "google_secret_manager_secret" "db_password" {
   depends_on = [google_project_service.secretmanager]
-  secret_id = "${var.prefix}-${var.db_purpose}-db-password"
-  project   = var.project_id
+  secret_id  = "${var.prefix}-${var.db_purpose}-db-password"
+  project    = var.project_id
 
   replication {
     auto {}
@@ -96,6 +96,9 @@ resource "google_secret_manager_secret" "db_password" {
 }
 
 resource "google_secret_manager_secret_version" "db_password" {
-  secret      = google_secret_manager_secret.db_password.id
-  secret_data = random_password.pg_password.result
+  secret = google_secret_manager_secret.db_password.id
+  # Write-only: not persisted in state, only (re)written when the version
+  # counter changes. Bump db_password_wo_version to reapply from state.
+  secret_data_wo         = random_password.pg_password.result
+  secret_data_wo_version = var.db_password_wo_version
 }

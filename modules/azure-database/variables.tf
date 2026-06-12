@@ -19,6 +19,12 @@ variable "db_purpose" {
   default     = "main"
 }
 
+variable "db_password_wo_version" {
+  type        = number
+  default     = 1
+  description = "Version counter for the generated database password secret value (write-only). Increment to force Terraform to rewrite it."
+}
+
 variable "vnet" {
   type = object({
     vnet_id            = string

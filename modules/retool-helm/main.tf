@@ -48,6 +48,7 @@ locals {
     ) ? [yamlencode({
       config = {
         licenseKeySecretName = var.retool_services.license_key_secret_name
+        licenseKeySecretKey  = var.retool_services.license_key_secret_key
       }
   })] : []
 

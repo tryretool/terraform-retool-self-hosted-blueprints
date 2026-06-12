@@ -56,7 +56,7 @@ module "retool-services" {
 }
 
 module "retool" {
-  source  = "tryretool/self-hosted-blueprints/retool//modules/common/retool-helm"
+  source  = "tryretool/self-hosted-blueprints/retool//modules/retool-helm"
   version = "~> 0.2"
 
   retool_helm_name          = "retool"

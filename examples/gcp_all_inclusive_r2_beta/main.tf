@@ -27,7 +27,7 @@ module "gke" {
 }
 
 module "db-main" {
-  source  = "tryretool/self-hosted-blueprints/retool//modules/common/gcp-database"
+  source  = "tryretool/self-hosted-blueprints/retool//modules/gcp-database"
   version = "~> 0.2"
 
   prefix     = local.prefix
@@ -37,7 +37,7 @@ module "db-main" {
   vpc             = module.vpc.outputs
   db_purpose      = "main"
   tier            = "db-g1-small"
-  max_connections = 200
+  max_connections = 300
 
   # Cloud SQL requires the VPC peering connection (google_service_networking_connection)
   # created by the vpc module's private_service_access submodule to exist before the
@@ -63,7 +63,7 @@ module "retool-services" {
 }
 
 module "user-ingress" {
-  source  = "tryretool/self-hosted-blueprints/retool//modules/common/gcp-user-ingress"
+  source  = "tryretool/self-hosted-blueprints/retool//modules/gcp-user-ingress"
   version = "~> 0.2"
 
   prefix      = local.prefix
@@ -75,7 +75,7 @@ module "user-ingress" {
 }
 
 module "retool" {
-  source  = "tryretool/self-hosted-blueprints/retool//modules/common/retool-helm"
+  source  = "tryretool/self-hosted-blueprints/retool//modules/retool-helm"
   version = "~> 0.2"
 
   retool_helm_name                         = "retool"

@@ -43,6 +43,7 @@ variable "retool_services" {
     extra_env_vars_secret_name       = string
     extra_env_vars_secret_path       = string
     license_key_secret_name          = optional(string)
+    license_key_secret_key           = optional(string)
     agent_sandbox_enabled            = optional(bool, false)
     agent_sandbox_secret_name        = optional(string)
     rr_bucket_k8s_secret_name        = optional(string)

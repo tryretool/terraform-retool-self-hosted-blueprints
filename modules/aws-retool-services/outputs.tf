@@ -7,7 +7,8 @@ locals {
     db_credentials_secret_store_path = var.db.master_user_secret_arn
     extra_env_vars_secret_name       = "extra-env-vars"
     extra_env_vars_secret_path       = "retool/${var.prefix}/extra-env-vars"
-    license_key_secret_name          = nonsensitive(var.license_key != null) ? "license-key" : null
+    license_key_secret_name          = (nonsensitive(var.license_key != null) || var.license_key_secret_path != null) ? "license-key" : null
+    license_key_secret_key           = (nonsensitive(var.license_key != null) || var.license_key_secret_path != null) ? "license-key" : null
     agent_sandbox_enabled            = var.enable_agent_sandbox
     agent_sandbox_secret_name        = var.enable_agent_sandbox ? "agent-sandbox" : null
     rr_bucket_k8s_secret_name        = var.enable_rr_s3 ? "rr-s3-credentials" : null
@@ -61,6 +62,11 @@ output "extra_env_vars_secret_path" {
 output "license_key_secret_name" {
   description = "Name of the Kubernetes Secret containing the Retool license key, or null if no key was provided."
   value       = local.outputs.license_key_secret_name
+}
+
+output "license_key_secret_key" {
+  description = "Key within the license-key Kubernetes Secret holding the license key, or null if no key was provided."
+  value       = local.outputs.license_key_secret_key
 }
 
 output "agent_sandbox_enabled" {

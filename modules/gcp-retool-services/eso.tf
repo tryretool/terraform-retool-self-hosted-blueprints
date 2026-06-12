@@ -11,6 +11,15 @@ locals {
     ? var.encryption_key_secret_name
     : "retool-${var.prefix}-encryption-key"
   )
+
+  # Secret Manager key for the license key, sourced from either the managed
+  # secret (var.license_key) or an existing one (var.license_key_secret_path).
+  # null when neither is set (free-tier mode).
+  license_key_remote_ref = (
+    nonsensitive(var.license_key != null)
+    ? "retool-${var.prefix}-license-key"
+    : var.license_key_secret_path
+  )
 }
 
 resource "google_service_account" "eso" {
@@ -80,6 +89,16 @@ resource "google_secret_manager_secret_iam_member" "eso_license_key" {
   count     = nonsensitive(var.license_key != null) ? 1 : 0
   project   = var.project_id
   secret_id = google_secret_manager_secret.license_key[0].secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.eso.email}"
+}
+
+# When the license key lives in a pre-existing secret, grant ESO read access to
+# that secret instead of a managed one.
+resource "google_secret_manager_secret_iam_member" "eso_license_key_external" {
+  count     = var.license_key_secret_path != null ? 1 : 0
+  project   = var.project_id
+  secret_id = var.license_key_secret_path
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.eso.email}"
 }
@@ -164,12 +183,12 @@ locals {
         target_deletion_policy = "Retain"
       },
     ],
-    nonsensitive(var.license_key != null) ? [
+    local.license_key_remote_ref != null ? [
       {
         name = "license-key"
         data = [{
           secretKey = "license-key"
-          remoteRef = { key = "retool-${var.prefix}-license-key" }
+          remoteRef = { key = local.license_key_remote_ref }
         }]
         target_deletion_policy = "Retain"
       },
