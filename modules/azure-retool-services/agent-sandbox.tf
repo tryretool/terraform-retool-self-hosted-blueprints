@@ -10,6 +10,17 @@ resource "tls_private_key" "agent_sandbox_jwt" {
   ecdsa_curve = "P256"
 }
 
+resource "random_bytes" "agent_sandbox_encryption_key" {
+  count  = var.enable_agent_sandbox ? 1 : 0
+  length = 32
+}
+
+resource "random_password" "agent_sandbox_api_secret" {
+  count   = var.enable_agent_sandbox ? 1 : 0
+  length  = 48
+  special = false
+}
+
 resource "azurerm_key_vault_secret" "agent_sandbox" {
   count        = var.enable_agent_sandbox ? 1 : 0
   name         = "retool-${var.prefix}-agent-sandbox"
@@ -17,6 +28,7 @@ resource "azurerm_key_vault_secret" "agent_sandbox" {
   value = jsonencode({
     "jwt-public-key"  = tls_private_key.agent_sandbox_jwt[0].public_key_pem
     "jwt-private-key" = tls_private_key.agent_sandbox_jwt[0].private_key_pem
+    "encryption-key"  = random_bytes.agent_sandbox_encryption_key[0].hex
     "postgres-url"    = local.as_postgres_url
   })
 }
