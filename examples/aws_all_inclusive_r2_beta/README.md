@@ -34,16 +34,21 @@ Once DNS is delegated, enable HTTPS as described in the
 
 ## Setting the license key
 
-Recommended (state-free) path — add the key to the extra-env-vars secret after
-the first apply (write-only, not reverted on later applies):
+Recommended (state-free) path — store the key in a Secrets Manager secret you
+own and point `license_key_secret_path` at it (name or ARN):
 
 ```sh
-aws secretsmanager put-secret-value \
-  --secret-id retool/<prefix>/extra-env-vars \
-  --secret-string '{"LICENSE_KEY":"<your-license-key>"}'
+aws secretsmanager create-secret \
+  --name retool/<prefix>/license-key \
+  --secret-string '<your-license-key>'
 ```
 
-Or point `license_key_secret_path` at an existing Secrets Manager secret.
+```hcl
+module "retool-services" {
+  # ...
+  license_key_secret_path = "retool/<prefix>/license-key"
+}
+```
 
 ## Scaling
 

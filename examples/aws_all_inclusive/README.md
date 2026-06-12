@@ -26,20 +26,27 @@ HTTPS).
 
 ## Setting the license key
 
-The recommended path keeps the key out of Terraform state. After the first
-apply, add it to the deployment's extra-env-vars secret (write-only in
-Terraform, so it is **not** reverted on later applies):
+The recommended path keeps the key out of Terraform state: store it in a Secrets
+Manager secret you own and point the `license_key_secret_path` input at it.
+Create the secret:
 
 ```sh
-aws secretsmanager put-secret-value \
-  --secret-id retool/<prefix>/extra-env-vars \
-  --secret-string '{"LICENSE_KEY":"<your-license-key>"}'
+aws secretsmanager create-secret \
+  --name retool/<prefix>/license-key \
+  --secret-string '<your-license-key>'
 ```
 
-Alternatively, point the `license_key_secret_path` input on the
-`aws-retool-services` module at an existing Secrets Manager secret (name or
-ARN), or — simplest but least secure — set `license_key = "..."` directly on
-that module.
+Then set it on the `aws-retool-services` module (name or ARN) and apply:
+
+```hcl
+module "retool-services" {
+  # ...
+  license_key_secret_path = "retool/<prefix>/license-key"
+}
+```
+
+(Or — simplest but least secure — set `license_key = "..."` directly on that
+module to have Terraform create and manage the secret for you.)
 
 ## Scaling
 

@@ -54,17 +54,20 @@ gcloud services enable \
 ## Setting the license key
 
 This example sets `license_key` inline for convenience. The recommended,
-state-free path is to leave it unset and add the key to the extra-env-vars
-secret after the first apply (write-only, so it is not reverted on later
-applies):
+state-free path is to leave it unset, store the key in a Secret Manager secret
+you own, and point `license_key_secret_path` at it:
 
 ```sh
-printf '{"LICENSE_KEY":"<your-license-key>"}' | \
-  gcloud secrets versions add retool-<prefix>-extra-env-vars --data-file=-
+printf '<your-license-key>' | \
+  gcloud secrets create retool-<prefix>-license-key --data-file=- --replication-policy=automatic
 ```
 
-Or point `license_key_secret_path` at an existing Secret Manager secret you
-manage yourself.
+```hcl
+module "retool-services" {
+  # ...
+  license_key_secret_path = "retool-<prefix>-license-key"
+}
+```
 
 ## Troubleshooting
 

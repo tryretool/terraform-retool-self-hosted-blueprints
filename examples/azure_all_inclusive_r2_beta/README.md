@@ -38,18 +38,22 @@ A new deployment's certificate can't validate until DNS is delegated; see the
 ## Setting the license key
 
 This example sets `license_key` inline for convenience. The recommended,
-state-free path is to leave it unset and add the key to the extra-env-vars Key
-Vault secret after the first apply (write-only, not reverted on later applies):
+state-free path is to leave it unset, store the key in a Key Vault secret you
+own (same shared vault), and point `license_key_secret_path` at its name:
 
 ```sh
 az keyvault secret set \
   --vault-name <your-key-vault-name> \
-  --name retool-<prefix>-extra-env-vars \
-  --value '{"LICENSE_KEY":"<your-license-key>"}'
+  --name retool-<prefix>-license-key \
+  --value '<your-license-key>'
 ```
 
-Or point `license_key_secret_path` at the name of an existing secret in the same
-Key Vault.
+```hcl
+module "retool-services" {
+  # ...
+  license_key_secret_path = "retool-<prefix>-license-key"
+}
+```
 
 ## Scaling
 

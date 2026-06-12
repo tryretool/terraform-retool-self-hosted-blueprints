@@ -26,21 +26,25 @@ you want to bring it up before DNS is ready.
 
 ## Setting the license key
 
-The recommended path keeps the key out of Terraform state. After the first
-apply, add it to the deployment's extra-env-vars Key Vault secret (write-only in
-Terraform, so it is **not** reverted on later applies):
+The recommended path keeps the key out of Terraform state: store it in a Key
+Vault secret you own (in the same shared vault) and point the
+`license_key_secret_path` input at its name. Create the secret:
 
 ```sh
 az keyvault secret set \
   --vault-name <your-key-vault-name> \
-  --name retool-<prefix>-extra-env-vars \
-  --value '{"LICENSE_KEY":"<your-license-key>"}'
+  --name retool-<prefix>-license-key \
+  --value '<your-license-key>'
 ```
 
-Alternatively, point the `license_key_secret_path` input on the
-`azure-retool-services` module at the name of an existing secret in the same Key
-Vault, or — simplest but least secure — set `license_key = "..."` directly on
-that module.
+Then set it on the `azure-retool-services` module and apply:
+
+```hcl
+module "retool-services" {
+  # ...
+  license_key_secret_path = "retool-<prefix>-license-key"
+}
+```
 
 ## Scaling
 

@@ -76,12 +76,10 @@ Without a license key the deployment runs in free-tier mode. There are two ways
 to supply one — the **Secret Manager path is recommended** because the key never
 lives in Terraform state or your `.tf` files:
 
-1. **Recommended — out-of-band secret.** Leave `license_key` unset and add the
-   key to the deployment's cloud secret store after the first apply, or point
-   the new `license_key_secret_path` variable at a secret you manage yourself.
-   The secret-store values use write-only attributes, so Terraform will **not**
-   revert your manual edits on the next apply. Each example README has a
-   copy-paste one-liner for its cloud.
+1. **Recommended — dedicated secret.** Leave `license_key` unset, store the key
+   in a cloud secret you manage yourself, and point the `license_key_secret_path`
+   variable on the `*-retool-services` module at it. The key never enters
+   Terraform state. Each example README has a copy-paste one-liner for its cloud.
 
 2. **Quick — plaintext variable.** Set `license_key = "..."` on the
    `*-retool-services` module. Simplest, but the key is stored in Terraform
