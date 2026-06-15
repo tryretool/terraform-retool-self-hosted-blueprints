@@ -28,8 +28,6 @@ provider "kubernetes" {
 }
 
 provider "helm" {
-  helm_driver = "configmap"
-
   kubernetes {
     host                   = module.eks.cluster.endpoint
     cluster_ca_certificate = base64decode(module.eks.cluster.certificate_authority_data)

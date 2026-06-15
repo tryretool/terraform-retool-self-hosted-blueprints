@@ -7,6 +7,15 @@ locals {
 
   retool_namespace = "default"
 
+  # Key Vault secret name for the license key, sourced from either the managed
+  # secret (var.license_key) or an existing one (var.license_key_secret_path).
+  # null when neither is set (free-tier mode).
+  license_key_remote_ref = (
+    nonsensitive(var.license_key != null)
+    ? "retool-${var.prefix}-license-key"
+    : var.license_key_secret_path
+  )
+
   external_secrets = [
     {
       name = "encryption-key"
@@ -181,7 +190,7 @@ resource "kubectl_manifest" "external_secret_extra_env_vars" {
 
 # License key ExternalSecret (conditional)
 resource "kubectl_manifest" "external_secret_license_key" {
-  count = var.license_key != null ? 1 : 0
+  count = local.license_key_remote_ref != null ? 1 : 0
 
   yaml_body = yamlencode({
     apiVersion = "external-secrets.io/v1beta1"
@@ -203,7 +212,7 @@ resource "kubectl_manifest" "external_secret_license_key" {
       }
       data = [{
         secretKey = "license-key"
-        remoteRef = { key = "retool-${var.prefix}-license-key" }
+        remoteRef = { key = local.license_key_remote_ref }
       }]
     }
   })

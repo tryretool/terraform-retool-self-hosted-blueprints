@@ -43,24 +43,6 @@ variable "retool_service_port" {
   default     = 3000
 }
 
-variable "enable_agent_sandbox_proxy" {
-  type        = bool
-  default     = false
-  description = "When true, adds a host-based listener rule and target group for the agent sandbox proxy on agent-proxy.<domain_name>."
-}
-
-variable "agent_sandbox_proxy_port" {
-  type        = number
-  default     = 3019
-  description = "Port on the agent sandbox proxy Kubernetes Service."
-}
-
-variable "agent_sandbox_proxy_service_name" {
-  type        = string
-  default     = "retool-agent-sandbox-proxy"
-  description = "Name of the Kubernetes Service fronting the agent sandbox proxy pods."
-}
-
 variable "enable_https_listener" {
   type        = bool
   description = <<-EOT

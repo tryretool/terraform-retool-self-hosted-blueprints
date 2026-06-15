@@ -27,6 +27,20 @@ locals {
       includeConfigSecrets = true
       name                 = var.retool_services.extra_env_vars_secret_name
     }
+    # Agent sandbox gets enabled elsewhere, but we preconfigure it here to use
+    # the same DB password secret when enabled. This is key for AWS where RDS
+    # automatically rotates the password in the master credentials secret, so
+    # referencing it this way ensures the agent sandbox credentials stay in
+    # sync.
+    rr = {
+      agentSandbox = {
+        postgres = {
+          schema             = "agent_executor"
+          passwordSecretName = var.retool_services.db_credentials_secret_name
+          passwordSecretKey  = var.retool_services.db_credentials_secret_key
+        }
+      }
+    }
   })] : []
 
   license_values = (
@@ -34,6 +48,7 @@ locals {
     ) ? [yamlencode({
       config = {
         licenseKeySecretName = var.retool_services.license_key_secret_name
+        licenseKeySecretKey  = var.retool_services.license_key_secret_key
       }
   })] : []
 
@@ -44,15 +59,16 @@ locals {
   )
 
   rr_bucket_values = (var.retool_services != null && var.retool_services.rr_bucket_k8s_secret_name != null) ? [yamlencode({
-    environmentSecrets = [
-      for key in var.retool_services.rr_bucket_env_keys : {
-        name = key
-        secretKeyRef = {
-          name = var.retool_services.rr_bucket_k8s_secret_name
-          key  = key
+    env = {
+      for key in var.retool_services.rr_bucket_env_keys : key => {
+        valueFrom = {
+          secretKeyRef = {
+            name = var.retool_services.rr_bucket_k8s_secret_name
+            key  = key
+          }
         }
       }
-    ]
+    }
   })] : []
 
   url_scheme = var.https_enabled ? "https" : "http"
@@ -64,10 +80,11 @@ locals {
     env = {
       BASE_DOMAIN = "${local.url_scheme}://${var.domain_name}"
     }
-    agentSandbox = {
-      frontendWsProxyDomain = "${local.url_scheme}://agent-proxy.${var.domain_name}"
-      proxy = {
-        backendDomainSuffixes = var.domain_name
+    rr = {
+      agentSandbox = {
+        proxy = {
+          backendDomainSuffixes = var.domain_name
+        }
       }
     }
   })] : []
@@ -75,31 +92,34 @@ locals {
   agent_sandbox_enabled = var.retool_services != null && var.retool_services.agent_sandbox_enabled
 
   agent_sandbox_values = local.agent_sandbox_enabled ? [yamlencode({
-    agentSandbox = merge(
-      {
+    rr = {
+      enabled = true
+      agentSandbox = merge(
+        {
+          enabled = true
+          externalSecret = {
+            name = var.retool_services.agent_sandbox_secret_name
+          }
+        },
+        # GKE's default ResourceQuota rejects pods that use the
+        # `system-node-critical` PriorityClass without an explicit quota
+        # carve-out, so for the agent sandbox device plugin DaemonSet on GKE we
+        # unset priorityClassName.
+        var.retool_services.backend_type == "gcpSecretsManager" ? {
+          devicePlugin = {
+            priorityClassName = null
+          }
+        } : {},
+      )
+      jsExecutor = {
         enabled = true
-        postgres = {
-          schema = "agent_executor"
-        }
-        externalSecret = {
-          name = var.retool_services.agent_sandbox_secret_name
-        }
-      },
-      # GKE's default ResourceQuota rejects pods that use the
-      # `system-node-critical` PriorityClass without an explicit quota
-      # carve-out, so for the agent sandbox device plugin DaemonSet on GKE we
-      # unset priorityClassName.
-      var.retool_services.backend_type == "gcpSecretsManager" ? {
-        devicePlugin = {
-          priorityClassName = null
-        }
-      } : {},
-    )
-    jsExecutor = {
-      enabled = true
-    }
-    r2Agent = {
-      enabled = true
+      }
+      agent = {
+        enabled = true
+      }
+      gitServer = {
+        enabled = var.retool_services.rr_bucket_k8s_secret_name != null
+      }
     }
   })] : []
 

@@ -60,12 +60,12 @@ module "retool-services" {
 }
 
 module "retool" {
-  source  = "tryretool/self-hosted-blueprints/retool//modules/common/retool-helm"
+  source  = "tryretool/self-hosted-blueprints/retool//modules/retool-helm"
   version = "~> 0.2"
 
   retool_helm_name                         = "retool"
-  retool_helm_chart_version                = "6.11.0"
-  retool_helm_chart_use_unpublished_branch = "r2"
+  retool_helm_chart_version                = "6.11.1"
+
   db                                       = module.db-main.outputs
   retool_services                          = module.retool-services.outputs
   domain_name                              = local.domain_name
@@ -87,9 +87,8 @@ module "user-ingress" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/aws-user-ingress"
   version = "~> 0.2"
 
-  domain_name                = local.domain_name
-  enable_https_listener      = local.enable_user_ingress_https
-  enable_agent_sandbox_proxy = true
+  domain_name           = local.domain_name
+  enable_https_listener = local.enable_user_ingress_https
 
   vpc = module.vpc.outputs
   eks = module.eks.outputs

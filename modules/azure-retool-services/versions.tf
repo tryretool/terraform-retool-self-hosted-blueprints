@@ -1,10 +1,12 @@
 terraform {
-  required_version = ">= 1.0"
+  # >= 1.11 for write-only (value_wo) arguments.
+  required_version = ">= 1.11"
 
   required_providers {
     azurerm = {
-      source  = "hashicorp/azurerm"
-      version = ">= 4.0"
+      source = "hashicorp/azurerm"
+      # >= 4.21 for value_wo / value_wo_version on azurerm_key_vault_secret.
+      version = ">= 4.21"
     }
     helm = {
       source  = "hashicorp/helm"

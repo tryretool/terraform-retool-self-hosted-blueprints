@@ -54,7 +54,43 @@ variable "license_key" {
   type        = string
   default     = null
   sensitive   = true
-  description = "Retool license key. If provided, stored in Key Vault and synced to K8s."
+  description = "Retool license key. If provided, stored in Key Vault and synced to K8s. Mutually exclusive with license_key_secret_path."
+}
+
+variable "license_key_secret_path" {
+  type        = string
+  default     = null
+  description = "Name of an existing Key Vault secret (in the shared vault) holding the Retool license key. When set, ESO syncs it to the license-key K8s Secret, which retool-helm wires to config.licenseKeySecretName/licenseKeySecretKey. Mutually exclusive with license_key (which creates a managed secret instead)."
+}
+
+# --- Write-only secret version control ---
+# These Key Vault secrets use write-only (value_wo) values so the contents are
+# never stored in Terraform state and out-of-band edits are not reverted as
+# drift. Bump the corresponding *_wo_version to force Terraform to (re)write the
+# managed value.
+
+variable "encryption_key_wo_version" {
+  type        = number
+  default     = 1
+  description = "Version counter for the generated encryption-key secret value. Increment to force Terraform to rewrite it."
+}
+
+variable "jwt_secret_wo_version" {
+  type        = number
+  default     = 1
+  description = "Version counter for the generated jwt-secret secret value. Increment to force Terraform to rewrite it."
+}
+
+variable "extra_env_vars_wo_version" {
+  type        = number
+  default     = 1
+  description = "Version counter for the extra-env-vars secret seed value. Increment to force Terraform to overwrite out-of-band edits back to the empty object."
+}
+
+variable "license_key_wo_version" {
+  type        = number
+  default     = 1
+  description = "Version counter for the license-key secret value (only used when license_key is set). Increment to force Terraform to rewrite it."
 }
 
 variable "enable_agent_sandbox" {

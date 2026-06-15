@@ -34,8 +34,11 @@ module "db-main" {
   project_id = local.project_id
   region     = local.region
   vpc        = module.vpc.outputs
+
   db_purpose = "main"
   tier       = "db-g1-small"
+  # db-g1-small's default max_connections is too low for the full Retool stack.
+  max_connections = 300
 
   # Cloud SQL requires the VPC peering connection (google_service_networking_connection)
   # created by the vpc module's private_service_access submodule to exist before the
@@ -69,11 +72,11 @@ module "user-ingress" {
 }
 
 module "retool" {
-  source  = "tryretool/self-hosted-blueprints/retool//modules/common/retool-helm"
+  source  = "tryretool/self-hosted-blueprints/retool//modules/retool-helm"
   version = "~> 0.2"
 
   retool_helm_name          = "retool"
-  retool_helm_chart_version = "6.10.0"
+  retool_helm_chart_version = "6.11.1"
 
   db              = module.db-main.outputs
   retool_services = module.retool-services.outputs

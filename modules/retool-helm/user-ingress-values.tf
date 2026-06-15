@@ -53,8 +53,8 @@ locals {
             "appgw.ingress.kubernetes.io/hostname-extension" = "*.${var.domain_name}"
             # AGIC is dumb and needs to be explicitly told what order in which
             # to evaluate rules/listeners. Set this to arbitrary value of 1000
-            # so that, if agent-sandbox.{domain} is enabled, it can use a lower
-            # value of 900 so it gets evaluated before the wildcard here.
+            # so that, if any other ingress is enabled, it can use a lower
+            # value like 900 so it gets evaluated before the wildcard here.
             "appgw.ingress.kubernetes.io/rule-priority" = "1000"
           },
           var.user_ingress.cluster_issuer_name != null ? {
@@ -72,38 +72,6 @@ locals {
           secretName = var.user_ingress.tls_secret_name
           hosts      = local.ingress_hosts
         }] : []
-      }
-    })] : [],
-
-    # Agent sandbox proxy gets its own Ingress only under AGIC; on the other
-    # modes the proxy hostname is served by the same ALB/Gateway as Retool.
-    var.user_ingress.ingress_mode == "azure-agic" && var.user_ingress.agent_sandbox_proxy_enabled && var.domain_name != null ? [yamlencode({
-      agentSandbox = {
-        proxy = {
-          ingress = {
-            enabled          = true
-            host             = "agent-proxy.${var.domain_name}"
-            ingressClassName = var.user_ingress.ingress_class_name
-            annotations = merge(
-              {
-                "appgw.ingress.kubernetes.io/health-probe-path"     = "/health"
-                "appgw.ingress.kubernetes.io/health-probe-timeout"  = "10"
-                "appgw.ingress.kubernetes.io/health-probe-interval" = "15"
-                "appgw.ingress.kubernetes.io/request-timeout"       = "40"
-                # Arbitrary, just needs to be lower than the 1000 value for the
-                # main Retool Ingress above so it gets evaluated first by AGIC
-                "appgw.ingress.kubernetes.io/rule-priority"         = "900"
-              },
-              var.user_ingress.cluster_issuer_name != null ? {
-                "cert-manager.io/cluster-issuer" = var.user_ingress.cluster_issuer_name
-              } : {},
-            )
-            tls = var.user_ingress.agent_proxy_tls_secret_name != null ? [{
-              secretName = var.user_ingress.agent_proxy_tls_secret_name
-              hosts      = ["agent-proxy.${var.domain_name}"]
-            }] : []
-          }
-        }
       }
     })] : [],
   )

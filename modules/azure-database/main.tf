@@ -25,9 +25,12 @@ resource "random_password" "pg_password" {
 }
 
 resource "azurerm_key_vault_secret" "pg_password" {
-  name         = "retool-${var.prefix}-${var.db_purpose}-db-password"
-  value        = random_password.pg_password.result
-  key_vault_id = var.vnet.key_vault_id
+  name = "retool-${var.prefix}-${var.db_purpose}-db-password"
+  # Write-only: not persisted in state, only (re)written when the version
+  # counter changes. Bump db_password_wo_version to rotate.
+  value_wo         = random_password.pg_password.result
+  value_wo_version = var.db_password_wo_version
+  key_vault_id     = var.vnet.key_vault_id
 }
 
 # ---------- PostgreSQL Flexible Server ----------
