@@ -29,8 +29,30 @@ terraform plan
 terraform apply
 ```
 
-Once DNS is delegated, enable HTTPS as described in the
-[base example](../aws_all_inclusive/README.md#quick-start).
+## Configure DNS
+
+Same as the [base example](../aws_all_inclusive/README.md#configure-dns). The
+`aws-user-ingress` module manages the alias `A` record (→ load balancer) and the
+ACM validation records inside a Route 53 hosted zone; you only need to
+**delegate your domain** to it.
+
+1. Get the hosted zone's name servers:
+
+   ```sh
+   terraform output -json modules | jq -r '.["user-ingress"].zone_name_servers[]'
+   ```
+
+2. At your registrar (or parent-domain DNS provider), point the **`NS` record**
+   for `domain_name` at those name servers.
+
+3. Wait for DNS to propagate — `dig +short NS <domain_name>` should print the
+   zone's name servers from step 1 once the change has propagated.
+
+4. Enable HTTPS. This example starts with `enable_user_ingress_https = false`
+   (HTTP only). Now that DNS is delegated, flip it to `true` and run
+   `terraform apply` again — ACM can then validate the certificate via the
+   delegated hosted zone and serve HTTPS. Retool's cookie settings follow the
+   same flag (secure cookies require HTTPS).
 
 ## Setting the license key
 

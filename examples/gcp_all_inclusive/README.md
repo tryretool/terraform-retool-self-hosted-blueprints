@@ -18,9 +18,35 @@ terraform plan
 terraform apply
 ```
 
-After apply, delegate your domain to the managed DNS zone that was created (add
-its name servers as NS records at your registrar) so `domain_name` resolves to
-the deployment, then open `https://<domain_name>`.
+## Configure DNS
+
+The `gcp-user-ingress` module created a Cloud DNS managed zone for your
+`domain_name` and reserved a static IP for the Gateway. Inside that zone the
+deployment manages everything automatically — `external-dns` creates the `A`
+record pointing at the static IP once the Gateway is programmed, and Certificate
+Manager creates the DNS authorization record that validates your TLS
+certificate. The only manual step is **delegating your domain to that zone**.
+
+1. Get the managed zone's name servers:
+
+   ```sh
+   terraform output -json modules | jq -r '.["user-ingress"].zone_name_servers[]'
+   ```
+
+2. At your domain registrar (or the DNS provider for the parent domain), create
+   or update the **`NS` record** for `domain_name` to point at those name
+   servers.
+
+3. Wait for DNS to propagate — `dig +short NS <domain_name>` should print the
+   zone's name servers from step 1 once the change has propagated. After that,
+   the managed certificate validates automatically and you can open
+   `https://<domain_name>`.
+
+   The static IP the domain should resolve to, for reference:
+
+   ```sh
+   terraform output -json modules | jq -r '.["user-ingress"].static_ip_address'
+   ```
 
 ## Required GCP APIs
 

@@ -31,8 +31,25 @@ terraform plan
 terraform apply
 ```
 
-After apply, delegate your domain to the created managed DNS zone, then open
-`https://<domain_name>`.
+## Configure DNS
+
+Same as the [base example](../gcp_all_inclusive/README.md#configure-dns). The
+`gcp-user-ingress` module manages the `A` record (via `external-dns`) and the
+Certificate Manager DNS authorization inside a Cloud DNS managed zone; you only
+need to **delegate your domain** to it.
+
+1. Get the managed zone's name servers:
+
+   ```sh
+   terraform output -json modules | jq -r '.["user-ingress"].zone_name_servers[]'
+   ```
+
+2. At your registrar (or parent-domain DNS provider), point the **`NS` record**
+   for `domain_name` at those name servers.
+
+3. Wait for DNS to propagate — `dig +short NS <domain_name>` should print the
+   zone's name servers from step 1 once the change has propagated. The managed
+   certificate then validates automatically and `https://<domain_name>` comes up.
 
 ## Required GCP APIs
 

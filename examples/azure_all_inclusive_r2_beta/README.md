@@ -31,9 +31,30 @@ terraform plan
 terraform apply
 ```
 
-A new deployment's certificate can't validate until DNS is delegated; see the
-[base example](../azure_all_inclusive/README.md#quick-start) for the
-`enable_https` note.
+## Configure DNS
+
+Same as the [base example](../azure_all_inclusive/README.md#configure-dns). The
+`azure-user-ingress` module manages the `A` record (→ Application Gateway public
+IP) inside an Azure DNS zone; you only need to **delegate your domain** to it.
+
+1. Get the DNS zone's name servers:
+
+   ```sh
+   terraform output -json modules | jq -r '.["user-ingress"].zone_name_servers[]'
+   ```
+
+2. At your registrar (or parent-domain DNS provider), point the **`NS` record**
+   for `domain_name` at those name servers.
+
+3. Wait for DNS to propagate — `dig +short NS <domain_name>` should print the
+   zone's name servers from step 1 once the change has propagated. After that,
+   `domain_name` reaches the Application Gateway.
+
+4. Enable HTTPS. This example defaults to `enable_https = true`, so once DNS
+   resolves (step 3) cert-manager's Let's Encrypt issuer mints the TLS
+   certificate automatically and `https://<domain_name>` works — no extra apply
+   needed. Set `enable_https = false` to bring the deployment up over HTTP before
+   DNS is ready.
 
 ## Setting the license key
 
