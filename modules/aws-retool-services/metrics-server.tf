@@ -4,7 +4,7 @@
 resource "helm_release" "metrics_server" {
   count = var.enable_metrics_server ? 1 : 0
 
-  namespace        = "kube-system"
+  namespace        = local.services_namespace
   create_namespace = false
 
   name       = "metrics-server"
@@ -14,6 +14,6 @@ resource "helm_release" "metrics_server" {
   timeout    = 300
 
   depends_on = [
-    helm_release.cert_manager,
+    kubernetes_namespace_v1.services,
   ]
 }

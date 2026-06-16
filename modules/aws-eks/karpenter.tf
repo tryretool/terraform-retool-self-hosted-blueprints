@@ -23,12 +23,16 @@ data "aws_default_tags" "current" {}
 # NOTE: we use an instance_profile because the role changes between provisions
 #       but the role is immutable on the ec2nodeclass
 resource "aws_iam_instance_profile" "karpenter" {
+  count = var.enable_karpenter ? 1 : 0
+
   name = local.karpenter.instance_profile_name
   role = module.eks.eks_managed_node_groups["karpenter"].iam_role_name
   tags = local.all_tags
 }
 
 module "karpenter" {
+  count = var.enable_karpenter ? 1 : 0
+
   source  = "terraform-aws-modules/eks/aws//modules/karpenter"
   version = "21.19.0"
 
@@ -54,6 +58,8 @@ module "karpenter" {
 }
 
 resource "helm_release" "karpenter_crd" {
+  count = var.enable_karpenter ? 1 : 0
+
   namespace        = local.karpenter.namespace
   create_namespace = false
 
@@ -81,6 +87,8 @@ resource "helm_release" "karpenter_crd" {
 }
 
 resource "helm_release" "karpenter" {
+  count = var.enable_karpenter ? 1 : 0
+
   namespace        = local.karpenter.namespace
   create_namespace = false
 
@@ -97,7 +105,7 @@ resource "helm_release" "karpenter" {
       settings : {
         clusterEndpoint : module.eks.cluster_endpoint
         clusterName : local.karpenter.cluster_name
-        interruptionQueue : module.karpenter.queue_name
+        interruptionQueue : module.karpenter[0].queue_name
         batchMaxDuration : "15s" # a little longer than the default
         featureGates : {
           # NodeOverlay is alpha + off-by-default through at least 1.12. Required
@@ -121,7 +129,7 @@ resource "helm_release" "karpenter" {
       }
       serviceAccount : {
         annotations : {
-          "eks.amazonaws.com/role-arn" : module.karpenter.iam_role_arn
+          "eks.amazonaws.com/role-arn" : module.karpenter[0].iam_role_arn
         }
       }
       tolerations : [
@@ -171,6 +179,8 @@ locals {
 }
 
 resource "kubectl_manifest" "karpenter_ec2nodeclass_default" {
+  count = var.enable_karpenter ? 1 : 0
+
   # reference: https://karpenter.sh/docs/concepts/nodeclasses/
   yaml_body = yamlencode({
     apiVersion = "karpenter.k8s.aws/v1"
@@ -302,6 +312,8 @@ locals {
 }
 
 resource "kubectl_manifest" "karpenter_nodepool_default" {
+  count = var.enable_karpenter ? 1 : 0
+
   yaml_body = yamlencode({
     apiVersion = "karpenter.sh/v1" # we are on v1 now
     kind       = "NodePool"
@@ -328,7 +340,7 @@ resource "kubectl_manifest" "karpenter_nodepool_default" {
 # the capacity exists ahead of time so it will scale up for executor pods.
 #
 resource "kubectl_manifest" "karpenter_nodeoverlay_smarter_devices_net_tun" {
-  count = var.enable_smarter_devices_net_tun_node_overlay ? 1 : 0
+  count = var.enable_karpenter && var.enable_smarter_devices_net_tun_node_overlay ? 1 : 0
 
   yaml_body = yamlencode({
     apiVersion = "karpenter.sh/v1alpha1"

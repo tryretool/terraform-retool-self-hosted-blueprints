@@ -31,11 +31,11 @@ output "outputs" {
 
 output "karpenter" {
   value = {
-    instance_profile = {
-      id   = resource.aws_iam_instance_profile.karpenter.id
-      arn  = resource.aws_iam_instance_profile.karpenter.arn
+    instance_profile = var.enable_karpenter ? {
+      id   = aws_iam_instance_profile.karpenter[0].id
+      arn  = aws_iam_instance_profile.karpenter[0].arn
       name = local.karpenter.instance_profile_name
-    }
+    } : null
     discovery_key   = local.karpenter.discovery_key
     discovery_value = local.karpenter.discovery_value
   }

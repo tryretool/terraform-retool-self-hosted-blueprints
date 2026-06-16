@@ -39,8 +39,15 @@ variable "db" {
   description = "Database connection details (e.g. from module.db-main outputs). When set alongside retool_services, configures Retool helm config.postgresql.*."
 }
 
+variable "namespace" {
+  type        = string
+  default     = null
+  description = "Namespace to deploy the Retool Helm release into. When null, falls back to retool_services.retool_namespace, then to \"default\". In the standard composition this is supplied automatically via retool_services (module.retool-services.outputs)."
+}
+
 variable "retool_services" {
   type = object({
+    retool_namespace                 = optional(string)
     encryption_key_secret_name       = string
     jwt_secret_name                  = string
     db_credentials_secret_name       = string

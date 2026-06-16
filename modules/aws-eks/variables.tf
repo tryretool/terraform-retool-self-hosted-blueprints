@@ -77,6 +77,18 @@ variable "controller_desired_size" {
 # Karpenter workload node configuration
 # ---------------------------------------------------------------------------
 
+variable "enable_karpenter" {
+  type        = bool
+  default     = true
+  description = <<-EOT
+    Whether to install Karpenter (CRDs, controller, IAM, and the default
+    NodePool/EC2NodeClass) in kube-system. Karpenter is a cluster-wide singleton;
+    disable it when bringing your own node autoscaling. When disabled, the
+    controller node group is left untainted so it can run general workloads
+    instead of being reserved for the (absent) Karpenter controller.
+  EOT
+}
+
 variable "default_allowed_instance_types" {
   type        = list(string)
   default     = null

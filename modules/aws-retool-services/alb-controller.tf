@@ -2,8 +2,11 @@ locals {
   all_tags = merge(var.default_tags, var.tags)
   alb_controller = {
     name                 = "alb-controller"
-    namespace            = "alb-controller"
+    namespace            = local.services_namespace
     service_account_name = "alb-controller"
+    # Prefixed IngressClass name so it never collides with an "alb" IngressClass
+    # an existing ALB controller may already own in a shared cluster.
+    ingress_class_name = "${var.prefix}-alb"
   }
 
   # The ALB controller provisions AWS resources (load balancers, target groups,
@@ -17,6 +20,8 @@ locals {
 data "aws_default_tags" "current" {}
 
 module "alb_controller_irsa_role" {
+  count = var.enable_alb_controller ? 1 : 0
+
   source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
   version = "5.60.0"
 
@@ -33,6 +38,8 @@ module "alb_controller_irsa_role" {
 }
 
 resource "aws_iam_policy" "alb_controller_policy" {
+  count = var.enable_alb_controller ? 1 : 0
+
   name        = "${var.prefix}-alb-controller"
   description = "IAM policy for the ALB controller (aws-load-balancer-controller chart)"
   path        = "/"
@@ -130,13 +137,17 @@ resource "aws_iam_policy" "alb_controller_policy" {
 }
 
 resource "aws_iam_role_policy_attachment" "alb_controller_policy_attachment" {
-  role       = module.alb_controller_irsa_role.iam_role_name
-  policy_arn = aws_iam_policy.alb_controller_policy.arn
+  count = var.enable_alb_controller ? 1 : 0
+
+  role       = module.alb_controller_irsa_role[0].iam_role_name
+  policy_arn = aws_iam_policy.alb_controller_policy[0].arn
 }
 
 resource "helm_release" "alb_controller" {
+  count = var.enable_alb_controller ? 1 : 0
+
   namespace        = local.alb_controller.namespace
-  create_namespace = true
+  create_namespace = false
 
   name       = local.alb_controller.name
   repository = "https://aws.github.io/eks-charts"
@@ -161,12 +172,14 @@ resource "helm_release" "alb_controller" {
       create = true
       name   = local.alb_controller.service_account_name
       annotations = {
-        "eks.amazonaws.com/role-arn" = module.alb_controller_irsa_role.iam_role_arn
+        "eks.amazonaws.com/role-arn" = module.alb_controller_irsa_role[0].iam_role_arn
       }
     }
-    # make the created IngressClass the cluster default
+    # Prefixed IngressClass, default-class controlled by make_default_ingress_class
+    # (off by default so a shared cluster's existing default class is untouched).
+    ingressClass = local.alb_controller.ingress_class_name
     ingressClassConfig = {
-      default = true
+      default = var.make_default_ingress_class
     }
     # propagated to every AWS resource the controller creates (ALBs, target
     # groups, listeners, controller-managed security groups). becomes the
@@ -176,5 +189,6 @@ resource "helm_release" "alb_controller" {
 
   depends_on = [
     helm_release.cert_manager,
+    kubernetes_namespace_v1.services,
   ]
 }

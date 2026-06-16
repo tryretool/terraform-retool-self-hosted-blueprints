@@ -125,6 +125,10 @@ locals {
     }
   })] : []
 
+  # Namespace precedence: explicit var.namespace, then the namespace exported by
+  # retool-services (so the app lands beside its ExternalSecrets), then "default".
+  namespace = coalesce(var.namespace, try(var.retool_services.retool_namespace, null), "default")
+
   workflows_values = [yamlencode({
     workflows = {
       enabled = var.workflows_enabled
@@ -143,7 +147,7 @@ resource "helm_release" "retool" {
   repository = local.repository
   chart      = "retool"
   version    = var.retool_helm_chart_version
-  namespace  = "default"
+  namespace  = local.namespace
   # Full-stack deploys (workflows, code executor) can take longer than 5m for
   # all Deployments to become ready; a short timeout causes terraform apply to fail
   # even when the release eventually succeeds.

@@ -1,4 +1,8 @@
 locals {
+  # Namespace of the Retool Service the TargetGroupBinding registers, sourced
+  # from the retool-services outputs (falls back to "default").
+  retool_service_namespace = coalesce(try(var.retool_services.retool_namespace, null), "default")
+
   name_slug = replace(var.domain_name, ".", "-")
 
   # Application load balancer names: max 32 characters; alphanumeric and hyphens only.
@@ -252,7 +256,7 @@ resource "kubectl_manifest" "target_group_binding" {
     kind       = "TargetGroupBinding"
     metadata = {
       name      = local.tg_name
-      namespace = var.retool_service_namespace
+      namespace = local.retool_service_namespace
     }
     spec = {
       targetGroupARN = aws_lb_target_group.alb_target_group.arn

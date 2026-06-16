@@ -16,7 +16,8 @@ a single `terraform apply`.
 - [`examples/`](./examples) — copy-paste starting points that wire the modules
   together. Start here.
 - [`guides/`](./guides) — topic guides that apply across clouds (e.g.
-  [scaling](./guides/scaling.md)).
+  [scaling](./guides/scaling.md), [deploying into a shared/existing
+  cluster](./guides/shared-clusters.md)).
 
 ## Requirements
 
