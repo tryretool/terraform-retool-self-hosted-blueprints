@@ -64,10 +64,10 @@ module "retool" {
   retool_helm_name          = "retool"
   retool_helm_chart_version = "6.11.15"
 
-  db                        = module.db-main.outputs
-  retool_services           = module.retool-services.outputs
-  domain_name               = local.domain_name
-  https_enabled             = local.enable_user_ingress_https
+  db              = module.db-main.outputs
+  retool_services = module.retool-services.outputs
+  domain_name     = local.domain_name
+  https_enabled   = local.enable_user_ingress_https
 
   retool_helm_extra_values = [yamlencode({
     image = {
@@ -87,6 +87,9 @@ module "user-ingress" {
 
   domain_name           = local.domain_name
   enable_https_listener = local.enable_user_ingress_https
+
+  # Place the TargetGroupBinding in the same namespace as the Retool Service.
+  retool_services = module.retool-services.outputs
 
   vpc = module.vpc.outputs
   eks = module.eks.outputs

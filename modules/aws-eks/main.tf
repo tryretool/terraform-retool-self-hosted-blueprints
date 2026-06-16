@@ -113,14 +113,16 @@ module "eks" {
       labels = {
         "karpenter.sh/controller" = "true"
       }
-      # won't schedule on nodes it manages
-      taints = {
+      # Reserve this node group for the Karpenter controller (which won't run on
+      # nodes Karpenter itself manages). When Karpenter is disabled there is no
+      # controller to host, so leave the group untainted for general workloads.
+      taints = var.enable_karpenter ? {
         karpenter = {
           key    = "karpenter.sh/controller"
           value  = "true"
           effect = "NO_SCHEDULE"
         }
-      }
+      } : {}
       tags = {
         "karpenter.sh/discovery" = local.karpenter.discovery_value
       }

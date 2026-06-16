@@ -1,11 +1,16 @@
 locals {
   eso = {
     name                 = "external-secrets"
-    namespace            = "external-secrets"
+    namespace            = local.services_namespace
     service_account_name = "external-secrets"
   }
 
-  retool_namespace       = "default"
+  # Namespaced SecretStore (lives in the retool namespace alongside the
+  # ExternalSecrets that reference it), rather than a cluster-global
+  # ClusterSecretStore whose fixed name would collide in a shared cluster.
+  secret_store_kind = "SecretStore"
+  secret_store_name = "retool-secretstore"
+
   encryption_key_sm_path = "retool/${var.prefix}/encryption-key"
 
   # Secrets Manager path/ARN for the license key, sourced from either the managed
@@ -134,7 +139,12 @@ resource "aws_iam_role_policy_attachment" "eso" {
   policy_arn = aws_iam_policy.eso.arn
 }
 
+# Pod-identity wiring only makes sense for the operator we install ourselves.
+# In a shared cluster (enable_external_secrets = false) the platform's ESO uses
+# its own service account; attach the aws_iam_role.eso policy to it out of band.
 resource "aws_eks_pod_identity_association" "eso" {
+  count = var.enable_external_secrets ? 1 : 0
+
   cluster_name    = var.eks.name
   namespace       = local.eso.namespace
   service_account = local.eso.service_account_name
@@ -142,8 +152,10 @@ resource "aws_eks_pod_identity_association" "eso" {
 }
 
 resource "helm_release" "external_secrets" {
+  count = var.enable_external_secrets ? 1 : 0
+
   namespace        = local.eso.namespace
-  create_namespace = true
+  create_namespace = false
 
   name       = local.eso.name
   repository = "https://charts.external-secrets.io"
@@ -152,16 +164,24 @@ resource "helm_release" "external_secrets" {
   wait       = true
 
   values = [yamlencode({
-    installCRDs = true
+    installCRDs = var.install_crds
   })]
+
+  depends_on = [kubernetes_namespace_v1.services]
 }
 
+# Namespaced SecretStore in the retool namespace. ESO authenticates with the
+# controller's own credentials (the pod-identity association above), so no
+# per-store serviceAccountRef is needed. Always created — even when the operator
+# is provided by the platform — since it is app-specific configuration the
+# (platform or bundled) ESO reconciles.
 resource "kubectl_manifest" "secret_store" {
   yaml_body = yamlencode({
     apiVersion = "external-secrets.io/v1beta1"
-    kind       = "ClusterSecretStore"
+    kind       = local.secret_store_kind
     metadata = {
-      name = "aws-secretsmanager"
+      name      = local.secret_store_name
+      namespace = local.retool_namespace
     }
     spec = {
       provider = {
@@ -173,7 +193,10 @@ resource "kubectl_manifest" "secret_store" {
     }
   })
 
-  depends_on = [helm_release.external_secrets]
+  depends_on = [
+    helm_release.external_secrets,
+    kubernetes_namespace_v1.retool,
+  ]
 }
 
 resource "kubectl_manifest" "external_secret" {
@@ -189,8 +212,8 @@ resource "kubectl_manifest" "external_secret" {
     spec = {
       refreshInterval = "1m"
       secretStoreRef = {
-        kind = "ClusterSecretStore"
-        name = "aws-secretsmanager"
+        kind = local.secret_store_kind
+        name = local.secret_store_name
       }
       target = {
         name           = each.value.name
@@ -217,8 +240,8 @@ resource "kubectl_manifest" "external_secret_agent_sandbox" {
     spec = {
       refreshInterval = "1m"
       secretStoreRef = {
-        kind = "ClusterSecretStore"
-        name = "aws-secretsmanager"
+        kind = local.secret_store_kind
+        name = local.secret_store_name
       }
       target = {
         name           = local.agent_sandbox_external_secret.name
@@ -247,8 +270,8 @@ resource "kubectl_manifest" "external_secret_extra_env_vars" {
     spec = {
       refreshInterval = "1m"
       secretStoreRef = {
-        kind = "ClusterSecretStore"
-        name = "aws-secretsmanager"
+        kind = local.secret_store_kind
+        name = local.secret_store_name
       }
       target = {
         name           = "extra-env-vars"

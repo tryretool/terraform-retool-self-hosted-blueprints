@@ -73,4 +73,6 @@ resource "kubernetes_secret_v1" "rr_s3" {
     RR_DEFAULT_S3_ACCESS_KEY_ID     = aws_iam_access_key.rr[0].id
     RR_DEFAULT_S3_SECRET_ACCESS_KEY = aws_iam_access_key.rr[0].secret
   }
+
+  depends_on = [kubernetes_namespace_v1.retool]
 }
