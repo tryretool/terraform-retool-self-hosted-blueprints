@@ -65,6 +65,12 @@ variable "enable_external_secrets" {
   description = "Whether to install the External Secrets Operator (and its IAM/pod-identity wiring). Disable in shared clusters that already run ESO; the SecretStore and ExternalSecret resources are still created so the platform's ESO reconciles them."
 }
 
+variable "create_external_secrets" {
+  type        = bool
+  default     = true
+  description = "Whether to create the ESO ExternalSecret resources that sync cloud secrets into K8s Secrets in the retool namespace. Disable if you manage the ExternalSecret resources out of band. Independent of enable_external_secrets (which controls the operator itself)."
+}
+
 variable "enable_reloader" {
   type        = bool
   default     = true

@@ -22,7 +22,7 @@ locals {
       "RR_DEFAULT_S3_ACCESS_KEY_ID",
       "RR_DEFAULT_S3_SECRET_ACCESS_KEY",
     ]
-    backend_type                  = "secretsManager"
+    secret_store_backend_type     = "secretsManager"
     alb_controller_irsa_role_arn  = var.enable_alb_controller ? module.alb_controller_irsa_role[0].iam_role_arn : null
     alb_controller_irsa_role_name = var.enable_alb_controller ? module.alb_controller_irsa_role[0].iam_role_name : null
     eso_irsa_role_arn             = aws_iam_role.eso.arn
@@ -114,9 +114,9 @@ output "rr_bucket_k8s_secret_name" {
   value       = local.outputs.rr_bucket_k8s_secret_name
 }
 
-output "backend_type" {
-  description = "ESO backend type identifier for use in Retool Helm values."
-  value       = local.outputs.backend_type
+output "secret_store_backend_type" {
+  description = "ESO secret store backend type identifier for use in Retool Helm values."
+  value       = local.outputs.secret_store_backend_type
 }
 
 output "alb_controller_irsa_role_arn" {

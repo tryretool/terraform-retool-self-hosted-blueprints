@@ -19,7 +19,7 @@ locals {
     rr_bucket_env_keys               = var.enable_rr_blob ? ["RR_DEFAULT_AZURE_CONTAINER", "RR_DEFAULT_AZURE_CONNECTION_STRING", "RR_BLOB_STORAGE_PROVIDER"] : []
     secret_store_name                = local.secret_store_name
     secret_store_kind                = local.secret_store_kind
-    backend_type                     = "azureKeyVault"
+    secret_store_backend_type        = "azureKeyVault"
   }
 }
 
@@ -118,9 +118,9 @@ output "secret_store_name" {
   value       = local.outputs.secret_store_name
 }
 
-output "backend_type" {
-  description = "ESO backend type identifier for use in Retool Helm values."
-  value       = local.outputs.backend_type
+output "secret_store_backend_type" {
+  description = "ESO secret store backend type identifier for use in Retool Helm values."
+  value       = local.outputs.secret_store_backend_type
 }
 
 output "outputs" {

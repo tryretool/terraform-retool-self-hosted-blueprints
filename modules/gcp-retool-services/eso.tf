@@ -132,8 +132,7 @@ resource "helm_release" "external_secrets" {
   wait       = true
 
   values = [yamlencode({
-<<<<<<< HEAD
-    installCRDs = true
+    installCRDs = var.install_crds
 
     # The operator, webhook and cert-controller are three deployments running the
     # same image, each reading its own values block. Setting only the top one
@@ -152,9 +151,6 @@ resource "helm_release" "external_secrets" {
       failurePolicy = "Ignore"
     }
 
-=======
-    installCRDs = var.install_crds
->>>>>>> acd793b (k8s namespace scoping for gcp & azure)
     serviceAccount = {
       annotations = {
         "iam.gke.io/gcp-service-account" = google_service_account.eso.email
@@ -162,7 +158,7 @@ resource "helm_release" "external_secrets" {
     }
   })]
 
-  depends_on = [kubectl_manifest.services_namespace]
+  depends_on = [kubernetes_namespace_v1.services]
 }
 
 # The External Secrets CRs are applied through Helm because GCP Marketplace
@@ -176,7 +172,6 @@ resource "helm_release" "secret_store" {
   namespace = local.retool_namespace
   chart     = "${path.module}/chart"
 
-<<<<<<< HEAD
   values = [yamlencode({
     manifests = [{
       apiVersion = "external-secrets.io/v1"
@@ -200,50 +195,15 @@ resource "helm_release" "secret_store" {
               }
             }
           }
-=======
-  yaml_body = yamlencode({
-    apiVersion = "admissionregistration.k8s.io/v1"
-    kind       = "ValidatingWebhookConfiguration"
-    metadata = {
-      name = "secretstore-validate"
-      namespace = local.retool_namespace
-    }
-    webhooks = [
-      {
-        name          = "validate.secretstore.external-secrets.io"
-        failurePolicy = "Ignore"
-      },
-      {
-        name          = "validate.clustersecretstore.external-secrets.io"
-        failurePolicy = "Ignore"
-      },
-    ]
-  })
-
-  depends_on = [helm_release.external_secrets]
-}
-
-# Namespaced SecretStore in the retool namespace.
-resource "kubectl_manifest" "secret_store" {
-  yaml_body = yamlencode({
-    apiVersion = "external-secrets.io/v1beta1"
-    kind       = local.secret_store_kind
-    metadata = {
-      name      = local.secret_store_name
-      namespace = local.retool_namespace
-    }
-    spec = {
-      provider = {
-        gcpsm = {
-          projectID = var.project_id
->>>>>>> acd793b (k8s namespace scoping for gcp & azure)
         }
       }
     }]
   })]
 
-<<<<<<< HEAD
-  depends_on = [helm_release.external_secrets]
+  depends_on = [
+    helm_release.external_secrets,
+    kubernetes_namespace_v1.retool,
+  ]
 }
 
 locals {
@@ -255,16 +215,6 @@ locals {
   }
 
   # ExternalSecrets that map named Secret Manager secrets to individual keys.
-=======
-  depends_on = [
-    helm_release.external_secrets,
-    kubectl_manifest.secretstore_webhook_failure_policy,
-    kubectl_manifest.retool_namespace,
-  ]
-}
-
-locals {
->>>>>>> acd793b (k8s namespace scoping for gcp & azure)
   external_secrets = concat(
     [
       {
@@ -330,7 +280,6 @@ locals {
     ] : [],
   )
 
-<<<<<<< HEAD
   external_secret_manifests = concat(
     [for s in local.external_secrets : {
       apiVersion = "external-secrets.io/v1"
@@ -348,78 +297,6 @@ locals {
           deletionPolicy = s.target_deletion_policy
         }
         data = s.data
-=======
-  yaml_body = yamlencode({
-    apiVersion = "external-secrets.io/v1beta1"
-    kind       = "ExternalSecret"
-    metadata = {
-      name      = each.value.name
-      namespace = local.retool_namespace
-    }
-    spec = {
-      refreshInterval = "1m"
-      secretStoreRef = {
-        kind = local.secret_store_kind
-        name = local.secret_store_name
-      }
-      target = {
-        name           = each.value.name
-        creationPolicy = "Owner"
-        deletionPolicy = each.value.target_deletion_policy
-      }
-      data = each.value.data
-    }
-  })
-
-  depends_on = [kubectl_manifest.secret_store]
-}
-
-resource "kubectl_manifest" "external_secret_extra_env_vars" {
-  yaml_body = yamlencode({
-    apiVersion = "external-secrets.io/v1beta1"
-    kind       = "ExternalSecret"
-    metadata = {
-      name      = "extra-env-vars"
-      namespace = local.retool_namespace
-    }
-    spec = {
-      refreshInterval = "1m"
-      secretStoreRef = {
-        kind = local.secret_store_kind
-        name = local.secret_store_name
-      }
-      target = {
-        name           = "extra-env-vars"
-        creationPolicy = "Owner"
-        deletionPolicy = "Merge"
-      }
-      dataFrom = [{
-        extract = {
-          key = "retool-${var.prefix}-extra-env-vars"
-        }
-      }]
-    }
-  })
-
-  depends_on = [kubectl_manifest.secret_store]
-}
-
-resource "kubectl_manifest" "external_secret_agent_sandbox" {
-  count = var.enable_agent_sandbox ? 1 : 0
-
-  yaml_body = yamlencode({
-    apiVersion = "external-secrets.io/v1beta1"
-    kind       = "ExternalSecret"
-    metadata = {
-      name      = "agent-sandbox"
-      namespace = local.retool_namespace
-    }
-    spec = {
-      refreshInterval = "1m"
-      secretStoreRef = {
-        kind = local.secret_store_kind
-        name = local.secret_store_name
->>>>>>> acd793b (k8s namespace scoping for gcp & azure)
       }
     }],
     [for s in local.external_secrets_extract : {
@@ -444,39 +321,12 @@ resource "kubectl_manifest" "external_secret_agent_sandbox" {
 }
 
 resource "helm_release" "external_secret_crs" {
+  count     = var.create_external_secrets ? 1 : 0
   name      = "${var.prefix}-external-secrets"
   namespace = local.retool_namespace
   chart     = "${path.module}/chart"
 
-<<<<<<< HEAD
   values = [yamlencode({ manifests = local.external_secret_manifests })]
-=======
-  yaml_body = yamlencode({
-    apiVersion = "external-secrets.io/v1beta1"
-    kind       = "ExternalSecret"
-    metadata = {
-      name      = "rr-gcs-credentials"
-      namespace = local.retool_namespace
-    }
-    spec = {
-      refreshInterval = "1m"
-      secretStoreRef = {
-        kind = local.secret_store_kind
-        name = local.secret_store_name
-      }
-      target = {
-        name           = "rr-gcs-credentials"
-        creationPolicy = "Owner"
-        deletionPolicy = "Retain"
-      }
-      dataFrom = [{
-        extract = {
-          key = "retool-${var.prefix}-rr-gcs"
-        }
-      }]
-    }
-  })
->>>>>>> acd793b (k8s namespace scoping for gcp & azure)
 
   depends_on = [helm_release.secret_store]
 }

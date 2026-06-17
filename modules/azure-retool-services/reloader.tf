@@ -22,5 +22,5 @@ resource "helm_release" "reloader" {
     }
   })]
 
-  depends_on = [kubectl_manifest.services_namespace]
+  depends_on = [kubernetes_namespace_v1.services]
 }
