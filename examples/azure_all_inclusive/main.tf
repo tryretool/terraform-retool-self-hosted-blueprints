@@ -72,6 +72,8 @@ module "user-ingress" {
   aks                 = module.aks.outputs
   enable_https        = local.enable_https
 
+  retool_services = module.retool-services.outputs
+
   depends_on = [module.aks, module.retool-services]
 }
 

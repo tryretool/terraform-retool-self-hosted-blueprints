@@ -13,6 +13,8 @@ data "azurerm_resource_group" "main" {
 # ---------- Static Public IP ----------
 
 resource "azurerm_public_ip" "appgw" {
+  count = var.enable_agic ? 1 : 0
+
   name                = "${var.prefix}-appgw-ip"
   location            = var.location
   resource_group_name = var.resource_group_name
@@ -33,6 +35,8 @@ locals {
 }
 
 resource "azurerm_application_gateway" "main" {
+  count = var.enable_agic ? 1 : 0
+
   name                = "${var.prefix}-appgw"
   location            = var.location
   resource_group_name = var.resource_group_name
@@ -51,7 +55,7 @@ resource "azurerm_application_gateway" "main" {
 
   frontend_ip_configuration {
     name                 = local.appgw_frontend_ip_name
-    public_ip_address_id = azurerm_public_ip.appgw.id
+    public_ip_address_id = azurerm_public_ip.appgw[0].id
   }
 
   frontend_port {
@@ -108,6 +112,8 @@ resource "azurerm_application_gateway" "main" {
 # ---------- AGIC (Helm) ----------
 
 resource "azurerm_user_assigned_identity" "agic" {
+  count = var.enable_agic ? 1 : 0
+
   name                = "${var.prefix}-agic-identity"
   location            = var.location
   resource_group_name = var.resource_group_name
@@ -115,41 +121,51 @@ resource "azurerm_user_assigned_identity" "agic" {
 }
 
 resource "azurerm_federated_identity_credential" "agic" {
+  count = var.enable_agic ? 1 : 0
+
   name                = "${var.prefix}-agic-federated"
   resource_group_name = var.resource_group_name
-  parent_id           = azurerm_user_assigned_identity.agic.id
+  parent_id           = azurerm_user_assigned_identity.agic[0].id
   audience            = ["api://AzureADTokenExchange"]
   issuer              = var.aks.oidc_issuer_url
-  subject             = "system:serviceaccount:default:ingress-azure"
+  subject             = "system:serviceaccount:${local.services_namespace}:ingress-azure"
 }
 
 # AGIC needs Contributor on the AppGW to manage its configuration.
 resource "azurerm_role_assignment" "agic_appgw_contributor" {
-  scope                = azurerm_application_gateway.main.id
+  count = var.enable_agic ? 1 : 0
+
+  scope                = azurerm_application_gateway.main[0].id
   role_definition_name = "Contributor"
-  principal_id         = azurerm_user_assigned_identity.agic.principal_id
+  principal_id         = azurerm_user_assigned_identity.agic[0].principal_id
 }
 
 # AGIC needs Reader on the RG to discover resources.
 resource "azurerm_role_assignment" "agic_rg_reader" {
+  count = var.enable_agic ? 1 : 0
+
   scope                = data.azurerm_resource_group.main.id
   role_definition_name = "Reader"
-  principal_id         = azurerm_user_assigned_identity.agic.principal_id
+  principal_id         = azurerm_user_assigned_identity.agic[0].principal_id
 }
 
 # AGIC needs Network Contributor on the AppGW subnet to perform subnets/join/action.
 resource "azurerm_role_assignment" "agic_subnet_network_contributor" {
+  count = var.enable_agic ? 1 : 0
+
   scope                = var.vnet.appgw_subnet_id
   role_definition_name = "Network Contributor"
-  principal_id         = azurerm_user_assigned_identity.agic.principal_id
+  principal_id         = azurerm_user_assigned_identity.agic[0].principal_id
 }
 
 resource "helm_release" "agic" {
+  count = var.enable_agic ? 1 : 0
+
   name       = "ingress-azure"
   repository = "oci://mcr.microsoft.com/azure-application-gateway/charts"
   chart      = "ingress-azure"
   version    = "1.9.7"
-  namespace  = "default"
+  namespace  = local.services_namespace
   wait       = true
   timeout    = 600
 
@@ -157,12 +173,12 @@ resource "helm_release" "agic" {
     appgw = {
       subscriptionId = data.azurerm_subscription.current.subscription_id
       resourceGroup  = var.resource_group_name
-      name           = azurerm_application_gateway.main.name
+      name           = azurerm_application_gateway.main[0].name
       usePrivateIP   = false
     }
     armAuth = {
       type             = "workloadIdentity"
-      identityClientID = azurerm_user_assigned_identity.agic.client_id
+      identityClientID = azurerm_user_assigned_identity.agic[0].client_id
     }
     rbac = {
       enabled = true

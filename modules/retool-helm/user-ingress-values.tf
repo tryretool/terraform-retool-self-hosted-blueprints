@@ -29,7 +29,7 @@ locals {
         hostnames = local.ingress_hosts
         parentRefs = [{
           name        = var.user_ingress.gateway_name
-          namespace   = "default"
+          namespace   = local.namespace
           sectionName = var.user_ingress.gateway_section_name
         }]
       }

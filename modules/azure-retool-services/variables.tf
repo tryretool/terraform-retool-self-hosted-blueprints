@@ -44,6 +44,54 @@ variable "db" {
   description = "Database outputs (e.g. module.db-main.outputs). Connection info is used to build the agent sandbox Postgres URL when enable_agent_sandbox is true."
 }
 
+# --- Namespaces ---
+# Both the Retool application namespace and the supporting-services namespace are
+# computed here (single source of truth) and exported via outputs.tf so the
+# retool-helm and azure-user-ingress modules consume the same names. Leave null
+# for the default prefixed names; set explicitly to target pre-existing
+# namespaces in a shared cluster.
+
+variable "retool_namespace" {
+  type        = string
+  default     = null
+  description = "Namespace for the Retool application and the K8s objects that live beside it (ExternalSecrets, the namespaced SecretStore). When null, defaults to \"<prefix>-retool\"."
+}
+
+variable "services_namespace" {
+  type        = string
+  default     = null
+  description = "Namespace for Retool's supporting operators (External Secrets Operator, reloader). When null, defaults to \"<prefix>-retool-services\"."
+}
+
+variable "create_namespaces" {
+  type        = bool
+  default     = true
+  description = "Whether this module creates the retool and services namespaces. Set false in shared clusters where the namespaces are provisioned out of band."
+}
+
+# --- Per-release enable toggles ---
+# All default true to preserve the from-scratch all-inclusive behavior. Flip the
+# cluster-singleton operators off when deploying into a shared cluster that
+# already runs them.
+
+variable "enable_external_secrets" {
+  type        = bool
+  default     = true
+  description = "Whether to install the External Secrets Operator (and its Workload Identity wiring). Disable in shared clusters that already run ESO; the SecretStore and ExternalSecret resources are still created so the platform's ESO reconciles them."
+}
+
+variable "enable_reloader" {
+  type        = bool
+  default     = true
+  description = "Whether to install Stakater reloader. When enabled it is scoped to only watch the retool namespace."
+}
+
+variable "install_crds" {
+  type        = bool
+  default     = true
+  description = "Whether the bundled External Secrets Operator installs its CRDs. Set false in shared clusters where these cluster-scoped CRDs are already managed out of band."
+}
+
 variable "encryption_key_secret_name" {
   type        = string
   default     = null
