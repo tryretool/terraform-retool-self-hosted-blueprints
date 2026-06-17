@@ -107,7 +107,7 @@ locals {
         # `system-node-critical` PriorityClass without an explicit quota
         # carve-out, so for the agent sandbox device plugin DaemonSet on GKE we
         # unset priorityClassName.
-        var.retool_services.backend_type == "gcpSecretsManager" ? {
+        var.retool_services.secret_store_backend_type == "gcpSecretsManager" ? {
           devicePlugin = {
             priorityClassName = null
           }

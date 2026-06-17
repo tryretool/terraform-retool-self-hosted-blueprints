@@ -62,7 +62,7 @@ variable "retool_services" {
     rr_bucket_k8s_secret_name        = optional(string)
     rr_bucket_env_keys               = optional(list(string), [])
     secret_store_name                = optional(string, "aws-secretsmanager")
-    backend_type                     = optional(string, "secretsManager")
+    secret_store_backend_type        = optional(string, "secretsManager")
   })
   default     = null
   description = "K8s Secret names and cloud secret store paths from the retool-services module (e.g. module.retool-services.outputs). When set alongside db, configures Retool helm config.encryptionKeySecretName, jwtSecretSecretName, config.postgresql.passwordSecretRef, and externalSecrets. When agent_sandbox_enabled is true, agentSandbox.enabled, agentSandbox.postgres.schema, and jsExecutor.enabled are configured automatically."

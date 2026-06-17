@@ -200,7 +200,7 @@ resource "kubectl_manifest" "secret_store" {
 }
 
 resource "kubectl_manifest" "external_secret" {
-  for_each = { for s in local.external_secrets : s.name => s }
+  for_each = var.create_external_secrets ? { for s in local.external_secrets : s.name => s } : {}
 
   yaml_body = yamlencode({
     apiVersion = "external-secrets.io/v1beta1"
@@ -228,7 +228,7 @@ resource "kubectl_manifest" "external_secret" {
 }
 
 resource "kubectl_manifest" "external_secret_agent_sandbox" {
-  count = var.enable_agent_sandbox ? 1 : 0
+  count = var.create_external_secrets && var.enable_agent_sandbox ? 1 : 0
 
   yaml_body = yamlencode({
     apiVersion = "external-secrets.io/v1beta1"
@@ -260,6 +260,8 @@ resource "kubectl_manifest" "external_secret_agent_sandbox" {
 }
 
 resource "kubectl_manifest" "external_secret_extra_env_vars" {
+  count = var.create_external_secrets ? 1 : 0
+
   yaml_body = yamlencode({
     apiVersion = "external-secrets.io/v1beta1"
     kind       = "ExternalSecret"

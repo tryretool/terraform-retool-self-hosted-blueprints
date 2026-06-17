@@ -18,7 +18,7 @@ locals {
     rr_bucket_k8s_secret_name        = var.enable_rr_gcs ? "rr-gcs-credentials" : null
     rr_bucket_env_keys               = ["RR_DEFAULT_GCS_BUCKET", "RR_DEFAULT_GCS_CREDENTIALS", "RR_BLOB_STORAGE_PROVIDER"]
     secret_store_name                = local.secret_store_name
-    backend_type                     = "gcpSecretsManager"
+    secret_store_backend_type        = "gcpSecretsManager"
   }
 }
 
@@ -107,9 +107,9 @@ output "secret_store_name" {
   value       = local.outputs.secret_store_name
 }
 
-output "backend_type" {
-  description = "ESO backend type identifier for use in Retool Helm values."
-  value       = local.outputs.backend_type
+output "secret_store_backend_type" {
+  description = "ESO secret store backend type identifier for use in Retool Helm values."
+  value       = local.outputs.secret_store_backend_type
 }
 
 output "outputs" {
