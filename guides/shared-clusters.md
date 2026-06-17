@@ -2,11 +2,16 @@
 
 The `*_all_inclusive` examples stand up a dedicated cluster from scratch. This
 guide covers deploying Retool into a cluster you do **not** exclusively own —
-e.g. an existing EKS cluster shared with other workloads. The AWS modules
-support this today; GCP and Azure parity is planned.
+e.g. an existing EKS/GKE/AKS cluster shared with other workloads. All three
+clouds support this.
 
-See [`examples/aws_shared_cluster`](../examples/aws_shared_cluster) for a
-working starting point.
+Working starting points:
+[`examples/aws_shared_cluster`](../examples/aws_shared_cluster),
+[`examples/gcp_shared_cluster`](../examples/gcp_shared_cluster),
+[`examples/azure_shared_cluster`](../examples/azure_shared_cluster).
+
+The mechanics below use AWS resource names as the running example; the GCP and
+Azure equivalents are noted where they differ.
 
 ## What changes in a shared cluster
 
@@ -56,6 +61,34 @@ left untainted for general workloads).
   marked the cluster-default class. Set `make_default_ingress_class = true` only
   if you want this deployment to own the default IngressClass. (Retool routes via
   a `TargetGroupBinding` and does not need a default class.)
+
+## Per-cloud differences
+
+The namespace model, `create_namespaces`, and the namespaced ESO `SecretStore`
+(named `retool-secretstore`, in the retool namespace) are identical across
+clouds. Cloud-specific points:
+
+- **AWS** — operators (ESO, cert-manager, ALB controller, metrics-server) live in
+  `aws-retool-services`. Toggles: `enable_external_secrets`, `enable_reloader`,
+  `enable_cert_manager`, `enable_alb_controller`, `enable_metrics_server`,
+  `install_crds`, `make_default_ingress_class`. `aws-eks` adds `enable_karpenter`.
+  ESO uses controller-based auth (Pod Identity); in shared mode attach
+  `eso_irsa_role_arn` to the platform ESO.
+- **GCP** — `gcp-retool-services` runs ESO + reloader (`enable_external_secrets`,
+  `enable_reloader`, `install_crds`); `gcp-user-ingress` runs external-dns
+  (`enable_external_dns`), already scoped to the retool namespace and using a
+  per-deployment `txtOwnerId`. The Gateway/HTTPRoute live in the retool
+  namespace. ESO uses the controller's Workload Identity; in shared mode bind the
+  platform ESO to `eso_gcp_service_account_email`.
+- **Azure** — `azure-retool-services` runs ESO + reloader; `azure-user-ingress`
+  runs cert-manager + AGIC. Toggles: `enable_external_secrets`, `enable_reloader`,
+  `enable_cert_manager`, `enable_agic`, `install_crds`, plus `ingress_class_name`
+  and `cluster_issuer_name` to target an existing ingress controller / ClusterIssuer.
+  ESO uses the controller's Workload Identity; in shared mode federate the
+  platform ESO's service account to `eso_identity_client_id`. AGIC's own
+  IngressClass name is fixed by its chart, so conflict avoidance in a shared
+  cluster is via `enable_agic = false` (bring your own ingress) rather than
+  renaming the class.
 
 ## Migrating an existing from-scratch deployment
 

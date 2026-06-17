@@ -1,5 +1,7 @@
 resource "helm_release" "reloader" {
-  namespace        = "default"
+  count = var.enable_reloader ? 1 : 0
+
+  namespace        = local.services_namespace
   create_namespace = false
 
   name       = "reloader"
@@ -13,6 +15,12 @@ resource "helm_release" "reloader" {
       reloadOnDelete   = true
       syncAfterRestart = true
       autoReloadAll    = true
+      # Scope reloader to only watch the retool namespace so it never restarts
+      # other tenants' workloads in a shared cluster. Every namespace carries the
+      # immutable `kubernetes.io/metadata.name` label, so we select by that.
+      namespaceSelector = "kubernetes.io/metadata.name=${local.retool_namespace}"
     }
   })]
+
+  depends_on = [kubectl_manifest.services_namespace]
 }

@@ -28,7 +28,7 @@ resource "helm_release" "gateway" {
       kind       = "Gateway"
       metadata = {
         name      = "retool"
-        namespace = "default"
+        namespace = local.retool_namespace
         annotations = {
           "networking.gke.io/certmap" = google_certificate_manager_certificate_map.main.name
         }
@@ -73,7 +73,7 @@ resource "helm_release" "gateway" {
 # creates afterwards. GKE accepts a policy whose target doesn't exist yet.
 resource "helm_release" "routes" {
   name      = "${var.prefix}-routes"
-  namespace = "default"
+  namespace = local.retool_namespace
   chart     = "${path.module}/chart"
 
   values = [yamlencode({
@@ -83,7 +83,6 @@ resource "helm_release" "routes" {
         kind       = "HTTPRoute"
         metadata = {
           name      = "retool-redirect"
-          namespace = "default"
         }
         spec = {
           parentRefs = [{
@@ -107,7 +106,6 @@ resource "helm_release" "routes" {
         kind       = "HealthCheckPolicy"
         metadata = {
           name      = "retool"
-          namespace = "default"
         }
         spec = {
           default = {

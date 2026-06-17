@@ -4,8 +4,21 @@
 # this gap. The cert is stored as a K8s TLS Secret and referenced by AGIC via
 # Ingress TLS annotations.
 
+locals {
+  # Namespaces sourced from the retool-services outputs (single source of truth),
+  # with prefix-based fallbacks when this module is used standalone.
+  retool_namespace   = coalesce(try(var.retool_services.retool_namespace, null), "${var.prefix}-retool")
+  services_namespace = coalesce(try(var.retool_services.services_namespace, null), "${var.prefix}-retool-services")
+
+  # This module installs cert-manager + its own ClusterIssuer only when HTTPS is
+  # on and the caller hasn't pointed at an existing issuer. Otherwise the TLS
+  # Certificate references whatever cluster_issuer_name resolves to.
+  manage_cert_manager = var.enable_https && var.enable_cert_manager && var.cluster_issuer_name == null
+  cluster_issuer_name = coalesce(var.cluster_issuer_name, "letsencrypt-prod")
+}
+
 resource "azurerm_user_assigned_identity" "cert_manager" {
-  count = var.enable_https ? 1 : 0
+  count = local.manage_cert_manager ? 1 : 0
 
   name                = "${var.prefix}-cert-manager-identity"
   location            = var.location
@@ -14,19 +27,19 @@ resource "azurerm_user_assigned_identity" "cert_manager" {
 }
 
 resource "azurerm_federated_identity_credential" "cert_manager" {
-  count = var.enable_https ? 1 : 0
+  count = local.manage_cert_manager ? 1 : 0
 
   name                = "${var.prefix}-cert-manager-federated"
   resource_group_name = var.resource_group_name
   parent_id           = azurerm_user_assigned_identity.cert_manager[0].id
   audience            = ["api://AzureADTokenExchange"]
   issuer              = var.aks.oidc_issuer_url
-  subject             = "system:serviceaccount:cert-manager:cert-manager"
+  subject             = "system:serviceaccount:${local.services_namespace}:cert-manager"
 }
 
 # cert-manager needs DNS Zone Contributor to create TXT records for DNS-01 challenges.
 resource "azurerm_role_assignment" "cert_manager_dns_contributor" {
-  count = var.enable_https ? 1 : 0
+  count = local.manage_cert_manager ? 1 : 0
 
   scope                = azurerm_dns_zone.main.id
   role_definition_name = "DNS Zone Contributor"
@@ -34,10 +47,10 @@ resource "azurerm_role_assignment" "cert_manager_dns_contributor" {
 }
 
 resource "helm_release" "cert_manager" {
-  count = var.enable_https ? 1 : 0
+  count = local.manage_cert_manager ? 1 : 0
 
-  namespace        = "cert-manager"
-  create_namespace = true
+  namespace        = local.services_namespace
+  create_namespace = false
 
   name       = "cert-manager"
   repository = "https://charts.jetstack.io"
@@ -46,7 +59,7 @@ resource "helm_release" "cert_manager" {
   wait       = true
 
   values = [yamlencode({
-    installCRDs = true
+    installCRDs = var.install_crds
     serviceAccount = {
       labels = {
         "azure.workload.identity/use" = "true"
@@ -65,13 +78,13 @@ data "azurerm_subscription" "current" {}
 
 # ClusterIssuer for Let's Encrypt using Azure DNS solver.
 resource "kubectl_manifest" "cluster_issuer" {
-  count = var.enable_https ? 1 : 0
+  count = local.manage_cert_manager ? 1 : 0
 
   yaml_body = yamlencode({
     apiVersion = "cert-manager.io/v1"
     kind       = "ClusterIssuer"
     metadata = {
-      name = "letsencrypt-prod"
+      name = local.cluster_issuer_name
     }
     spec = {
       acme = {
@@ -98,7 +111,8 @@ resource "kubectl_manifest" "cluster_issuer" {
   depends_on = [helm_release.cert_manager]
 }
 
-# Certificate resource → creates a K8s TLS Secret referenced by the Gateway.
+# Certificate resource → creates a K8s TLS Secret referenced by the Ingress.
+# Lives in the retool namespace beside the Ingress that mounts the TLS secret.
 resource "kubectl_manifest" "certificate" {
   count = var.enable_https ? 1 : 0
 
@@ -107,12 +121,12 @@ resource "kubectl_manifest" "certificate" {
     kind       = "Certificate"
     metadata = {
       name      = "${var.prefix}-tls"
-      namespace = "default"
+      namespace = local.retool_namespace
     }
     spec = {
       secretName = "${var.prefix}-tls"
       issuerRef = {
-        name = "letsencrypt-prod"
+        name = local.cluster_issuer_name
         kind = "ClusterIssuer"
       }
       dnsNames = [

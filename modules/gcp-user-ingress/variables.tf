@@ -18,6 +18,21 @@ variable "domain_name" {
   description = "Domain name for the Retool deployment (e.g. \"retool.example.com\"). Used for the Cloud DNS zone, Certificate Manager certificate, and Gateway routing."
 }
 
+variable "retool_services" {
+  type = object({
+    retool_namespace   = optional(string)
+    services_namespace = optional(string)
+  })
+  default     = null
+  description = "Retool-services outputs (e.g. module.retool-services.outputs). The Gateway/HTTPRoute/HealthCheckPolicy are created in retool_namespace (beside the Retool Service), and external-dns runs in services_namespace. When null, falls back to the \"<prefix>-retool\" / \"<prefix>-retool-services\" defaults."
+}
+
+variable "enable_external_dns" {
+  type        = bool
+  default     = true
+  description = "Whether to install external-dns. Disable in shared clusters that already run it (the Cloud DNS zone and Gateway are still created; you must point your existing external-dns at the zone)."
+}
+
 variable "default_tags" {
   type        = map(string)
   default     = { "service" = "retool" }

@@ -1,11 +1,15 @@
 locals {
   eso = {
     name                 = "external-secrets"
-    namespace            = "external-secrets"
+    namespace            = local.services_namespace
     service_account_name = "external-secrets"
   }
 
-  retool_namespace = "default"
+  # Namespaced SecretStore (lives in the retool namespace alongside the
+  # ExternalSecrets that reference it), rather than a cluster-global
+  # ClusterSecretStore whose fixed name would collide in a shared cluster.
+  secret_store_kind = "SecretStore"
+  secret_store_name = "retool-secretstore"
 
   # Key Vault secret name for the license key, sourced from either the managed
   # secret (var.license_key) or an existing one (var.license_key_secret_path).
@@ -55,7 +59,13 @@ resource "azurerm_user_assigned_identity" "eso" {
   tags                = var.tags
 }
 
+# Federation only makes sense for the operator we install ourselves. In a shared
+# cluster (enable_external_secrets = false) the platform's ESO uses its own
+# identity; grant it the eso managed identity's Key Vault access policy (this
+# module always creates that access policy and exports the identity client id).
 resource "azurerm_federated_identity_credential" "eso" {
+  count = var.enable_external_secrets ? 1 : 0
+
   name                = "${var.prefix}-eso-federated"
   resource_group_name = var.resource_group_name
   parent_id           = azurerm_user_assigned_identity.eso.id
@@ -79,8 +89,10 @@ resource "azurerm_key_vault_access_policy" "eso" {
 # ---------- ESO Helm release ----------
 
 resource "helm_release" "external_secrets" {
+  count = var.enable_external_secrets ? 1 : 0
+
   namespace        = local.eso.namespace
-  create_namespace = true
+  create_namespace = false
 
   name       = local.eso.name
   repository = "https://charts.external-secrets.io"
@@ -89,7 +101,7 @@ resource "helm_release" "external_secrets" {
   wait       = true
 
   values = [yamlencode({
-    installCRDs = true
+    installCRDs = var.install_crds
     serviceAccount = {
       labels = {
         "azure.workload.identity/use" = "true"
@@ -99,16 +111,25 @@ resource "helm_release" "external_secrets" {
       }
     }
   })]
+
+  depends_on = [kubectl_manifest.services_namespace]
 }
 
-# ---------- ClusterSecretStore ----------
-
+# ---------- SecretStore (namespaced) ----------
+# Lives in the retool namespace alongside the ExternalSecrets. With no explicit
+# serviceAccountRef, ESO's azurekv WorkloadIdentity auth uses the controller
+# pod's projected token — the external-secrets controller SA carries the
+# azure.workload.identity labels/annotation and is federated to the eso identity.
+# (A namespaced SecretStore cannot reference a service account in another
+# namespace, which is why the cross-namespace serviceAccountRef is dropped.)
+# Always created so a platform-provided ESO reconciles it in shared clusters.
 resource "kubectl_manifest" "secret_store" {
   yaml_body = yamlencode({
     apiVersion = "external-secrets.io/v1beta1"
-    kind       = "ClusterSecretStore"
+    kind       = local.secret_store_kind
     metadata = {
-      name = "azure-keyvault"
+      name      = local.secret_store_name
+      namespace = local.retool_namespace
     }
     spec = {
       provider = {
@@ -116,16 +137,15 @@ resource "kubectl_manifest" "secret_store" {
           authType = "WorkloadIdentity"
           tenantId = data.azurerm_client_config.current.tenant_id
           vaultUrl = var.vnet.key_vault_uri
-          serviceAccountRef = {
-            name      = local.eso.service_account_name
-            namespace = local.eso.namespace
-          }
         }
       }
     }
   })
 
-  depends_on = [helm_release.external_secrets]
+  depends_on = [
+    helm_release.external_secrets,
+    kubectl_manifest.retool_namespace,
+  ]
 }
 
 # ---------- ExternalSecrets ----------
@@ -143,8 +163,8 @@ resource "kubectl_manifest" "external_secret" {
     spec = {
       refreshInterval = "1m"
       secretStoreRef = {
-        kind = "ClusterSecretStore"
-        name = "azure-keyvault"
+        kind = local.secret_store_kind
+        name = local.secret_store_name
       }
       target = {
         name           = each.value.name
@@ -169,8 +189,8 @@ resource "kubectl_manifest" "external_secret_extra_env_vars" {
     spec = {
       refreshInterval = "1m"
       secretStoreRef = {
-        kind = "ClusterSecretStore"
-        name = "azure-keyvault"
+        kind = local.secret_store_kind
+        name = local.secret_store_name
       }
       target = {
         name           = "extra-env-vars"
@@ -202,8 +222,8 @@ resource "kubectl_manifest" "external_secret_license_key" {
     spec = {
       refreshInterval = "1m"
       secretStoreRef = {
-        kind = "ClusterSecretStore"
-        name = "azure-keyvault"
+        kind = local.secret_store_kind
+        name = local.secret_store_name
       }
       target = {
         name           = "license-key"
@@ -237,8 +257,8 @@ resource "kubectl_manifest" "external_secret_agent_sandbox" {
     spec = {
       refreshInterval = "1m"
       secretStoreRef = {
-        kind = "ClusterSecretStore"
-        name = "azure-keyvault"
+        kind = local.secret_store_kind
+        name = local.secret_store_name
       }
       target = {
         name           = "agent-sandbox"
@@ -273,8 +293,8 @@ resource "kubectl_manifest" "external_secret_rr_blob" {
     spec = {
       refreshInterval = "1m"
       secretStoreRef = {
-        kind = "ClusterSecretStore"
-        name = "azure-keyvault"
+        kind = local.secret_store_kind
+        name = local.secret_store_name
       }
       target = {
         name           = "rr-blob-credentials"

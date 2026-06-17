@@ -41,6 +41,45 @@ variable "retool_service_port" {
   default     = 3000
 }
 
+variable "retool_services" {
+  type = object({
+    retool_namespace   = optional(string)
+    services_namespace = optional(string)
+  })
+  default     = null
+  description = "Retool-services outputs (e.g. module.retool-services.outputs). The TLS Certificate is created in retool_namespace (beside the Retool Ingress), and cert-manager/AGIC run in services_namespace. When null, falls back to the \"<prefix>-retool\" / \"<prefix>-retool-services\" defaults."
+}
+
+variable "enable_agic" {
+  type        = bool
+  default     = true
+  description = "Whether to create the Application Gateway and install the AGIC controller. Disable in shared clusters that already run an ingress controller — set ingress_class_name to that controller's class so Retool's Ingress is reconciled by it."
+}
+
+variable "enable_cert_manager" {
+  type        = bool
+  default     = true
+  description = "Whether to install cert-manager (and create its DNS-01 managed identity + ClusterIssuer). Only relevant when enable_https is true. Disable in shared clusters that already run cert-manager and pass cluster_issuer_name pointing at an existing ClusterIssuer."
+}
+
+variable "install_crds" {
+  type        = bool
+  default     = true
+  description = "Whether the bundled cert-manager installs its CRDs. Set false in shared clusters where these cluster-scoped CRDs are already managed out of band."
+}
+
+variable "ingress_class_name" {
+  type        = string
+  default     = "azure-application-gateway"
+  description = "ingressClassName Retool's Ingress is annotated with. Defaults to AGIC's class; override to target a different ingress controller in a shared cluster."
+}
+
+variable "cluster_issuer_name" {
+  type        = string
+  default     = null
+  description = "Name of the cert-manager ClusterIssuer the TLS Certificate references. When null, this module creates a \"letsencrypt-prod\" ClusterIssuer (requires enable_cert_manager). Set to an existing issuer's name to consume the platform's cert-manager instead."
+}
+
 variable "enable_https" {
   type        = bool
   description = <<-EOT

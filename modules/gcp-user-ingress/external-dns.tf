@@ -1,7 +1,12 @@
 locals {
+  # Namespaces sourced from the retool-services outputs (single source of truth),
+  # with prefix-based fallbacks when this module is used standalone.
+  retool_namespace   = coalesce(try(var.retool_services.retool_namespace, null), "${var.prefix}-retool")
+  services_namespace = coalesce(try(var.retool_services.services_namespace, null), "${var.prefix}-retool-services")
+
   external_dns = {
     name                 = "external-dns"
-    namespace            = "external-dns"
+    namespace            = local.services_namespace
     service_account_name = "external-dns"
   }
 }
@@ -31,8 +36,10 @@ resource "google_project_iam_member" "external_dns_admin" {
 }
 
 resource "helm_release" "external_dns" {
+  count = var.enable_external_dns ? 1 : 0
+
   namespace        = local.external_dns.namespace
-  create_namespace = true
+  create_namespace = false
 
   name       = local.external_dns.name
   repository = var.external_dns_chart.repository
@@ -64,12 +71,15 @@ resource "helm_release" "external_dns" {
       }
     }
 
-    # zone-id-filter has to be passed as a flag. The chart has no zoneIdFilters
-    # value and silently drops one, which leaves external-dns free to write to
-    # every zone in the project.
     extraArgs = [
       "--google-project=${var.project_id}",
+      # zone-id-filter has to be passed as a flag. The chart has no zoneIdFilters
+      # value and silently drops one, which leaves external-dns free to write to
+      # every zone in the project.
       "--zone-id-filter=${google_dns_managed_zone.main.name}",
+      # Watch only the retool namespace (external-dns runs in services_namespace
+      # but its --namespace flag restricts which HTTPRoutes it sees).
+      "--namespace=${local.retool_namespace}",
     ]
   })]
 }
