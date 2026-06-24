@@ -131,32 +131,38 @@ resource "helm_release" "external_secrets" {
   version    = var.external_secrets_chart.version
   wait       = true
 
-  values = [yamlencode({
-    installCRDs = var.install_crds
+  values = [
+    yamlencode({
+      installCRDs = var.install_crds
 
-    # The operator, webhook and cert-controller are three deployments running the
-    # same image, each reading its own values block. Setting only the top one
-    # leaves the other two pulling from upstream.
-    image          = local.eso_image
-    certController = { image = local.eso_image }
+      # The operator, webhook and cert-controller are three deployments running the
+      # same image, each reading its own values block. Setting only the top one
+      # leaves the other two pulling from upstream.
+      image          = local.eso_image
+      certController = { image = local.eso_image }
 
-    webhook = {
-      image = local.eso_image
+      webhook = {
+        image = local.eso_image
 
-      # Terraform destroys the node pool before these releases, so the webhook
-      # pods are gone by the time the CRs are deleted. Under the default Fail
-      # policy the unreachable webhook rejects those deletes and the destroy
-      # hangs. From 2.8.0 the chart wires this into every validating webhook,
-      # including `secretstore-validate`, which earlier versions left at Fail.
-      failurePolicy = "Ignore"
-    }
-
-    serviceAccount = {
-      annotations = {
-        "iam.gke.io/gcp-service-account" = google_service_account.eso.email
+        # Terraform destroys the node pool before these releases, so the webhook
+        # pods are gone by the time the CRs are deleted. Under the default Fail
+        # policy the unreachable webhook rejects those deletes and the destroy
+        # hangs. From 2.8.0 the chart wires this into every validating webhook,
+        # including `secretstore-validate`, which earlier versions left at Fail.
+        failurePolicy = "Ignore"
       }
-    }
-  })]
+
+      serviceAccount = {
+        annotations = {
+          "iam.gke.io/gcp-service-account" = google_service_account.eso.email
+        }
+      }
+    }),
+    yamlencode(local.has_pod_scheduling ? merge(local.pod_scheduling, {
+      webhook        = local.pod_scheduling
+      certController = local.pod_scheduling
+    }) : {}),
+  ]
 
   depends_on = [kubernetes_namespace_v1.services]
 }

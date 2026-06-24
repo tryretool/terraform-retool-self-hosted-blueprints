@@ -21,12 +21,19 @@ resource "helm_release" "cert_manager" {
   version    = "v1.11.0"
   timeout    = 600
 
-  values = [jsonencode({
-    installCRDs = var.install_crds
-    securityContext = {
-      fsGroup = 1001
-    }
-  })]
+  values = [
+    jsonencode({
+      installCRDs = var.install_crds
+      securityContext = {
+        fsGroup = 1001
+      }
+    }),
+    yamlencode(local.has_pod_scheduling ? merge(local.pod_scheduling, {
+      webhook         = local.pod_scheduling
+      cainjector      = local.pod_scheduling
+      startupapicheck = local.pod_scheduling
+    }) : {}),
+  ]
 
   depends_on = [kubernetes_namespace_v1.services]
 }

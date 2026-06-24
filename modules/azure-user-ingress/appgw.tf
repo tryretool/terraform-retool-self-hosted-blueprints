@@ -169,21 +169,26 @@ resource "helm_release" "agic" {
   wait       = true
   timeout    = 600
 
-  values = [yamlencode({
-    appgw = {
-      subscriptionId = data.azurerm_subscription.current.subscription_id
-      resourceGroup  = var.resource_group_name
-      name           = azurerm_application_gateway.main[0].name
-      usePrivateIP   = false
-    }
-    armAuth = {
-      type             = "workloadIdentity"
-      identityClientID = azurerm_user_assigned_identity.agic[0].client_id
-    }
-    rbac = {
-      enabled = true
-    }
-  })]
+  values = [
+    yamlencode({
+      appgw = {
+        subscriptionId = data.azurerm_subscription.current.subscription_id
+        resourceGroup  = var.resource_group_name
+        name           = azurerm_application_gateway.main[0].name
+        usePrivateIP   = false
+      }
+      armAuth = {
+        type             = "workloadIdentity"
+        identityClientID = azurerm_user_assigned_identity.agic[0].client_id
+      }
+      rbac = {
+        enabled = true
+      }
+    }),
+    # AGIC's scheduling lives under the `kubernetes.*` values prefix (the
+    # top-level nodeSelector is legacy), so pod_scheduling is nested there.
+    yamlencode(local.has_pod_scheduling ? { kubernetes = local.pod_scheduling } : {}),
+  ]
 
   depends_on = [
     azurerm_role_assignment.agic_appgw_contributor,

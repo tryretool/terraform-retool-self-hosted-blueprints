@@ -140,6 +140,14 @@ locals {
       enabled = var.dbconnector_enabled
     }
   })]
+
+  # Top-level scheduling is inherited by most services; the agent sandbox pods
+  # have their own override (which only falls back to global when unset), so set
+  # it explicitly when the agent sandbox is enabled.
+  pod_scheduling_values = local.has_pod_scheduling ? [yamlencode(merge(
+    local.pod_scheduling,
+    local.agent_sandbox_enabled ? { rr = { agentSandbox = local.pod_scheduling } } : {},
+  ))] : []
 }
 
 resource "helm_release" "retool" {
@@ -163,6 +171,7 @@ resource "helm_release" "retool" {
     local.workflows_values,
     local.dbconnector_values,
     local.user_ingress_values,
+    local.pod_scheduling_values,
     var.retool_helm_extra_values,
   )
 

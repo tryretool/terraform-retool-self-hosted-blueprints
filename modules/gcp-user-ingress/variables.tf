@@ -60,3 +60,21 @@ variable "external_dns_chart" {
   }
   description = "Where to fetch the ExternalDNS chart and image. Defaults to upstream. Override to serve both from a private registry, which GCP Marketplace requires and restricted-egress installs need. Use an oci:// URL for repository when the chart lives in an OCI registry. Note the chart and app versions differ (chart 1.21.1 ships app v0.21.0)."
 }
+
+# Pod scheduling — applied to every pod this module schedules via Helm. In a
+# shared cluster with dedicated/labelled/tainted node pools, set these so the
+# pods land on (and tolerate) the right nodes. See local.pod_scheduling in
+# pod-scheduling.tf for how they are merged into each chart's values.
+variable "pod_node_selector" {
+  type        = map(string)
+  default     = {}
+  description = "nodeSelector applied to every pod this module schedules (all Helm charts/components). Empty = unset (chart defaults apply)."
+}
+
+variable "pod_tolerations" {
+  # A list of Kubernetes toleration objects (key/operator/value/effect/tolerationSeconds),
+  # passed verbatim into Helm values. Typed `any` to avoid rendering omitted fields as null.
+  type        = any
+  default     = []
+  description = "Tolerations applied to every pod this module schedules. A list of Kubernetes toleration objects. Empty = unset."
+}

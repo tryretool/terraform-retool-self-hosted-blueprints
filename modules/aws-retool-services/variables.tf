@@ -229,3 +229,21 @@ variable "enable_rr_s3" {
   default     = false
   description = "Whether to create an S3 bucket and IAM service account for Retool Remote Repository storage."
 }
+
+# Pod scheduling — applied to every pod this module schedules via Helm. In a
+# shared cluster with dedicated/labelled/tainted node pools, set these so the
+# pods land on (and tolerate) the right nodes. See local.pod_scheduling in
+# pod-scheduling.tf for how they are merged into each chart's values.
+variable "pod_node_selector" {
+  type        = map(string)
+  default     = {}
+  description = "nodeSelector applied to every pod this module schedules (all Helm charts/components). Empty = unset (chart defaults apply)."
+}
+
+variable "pod_tolerations" {
+  # A list of Kubernetes toleration objects (key/operator/value/effect/tolerationSeconds),
+  # passed verbatim into Helm values. Typed `any` to avoid rendering omitted fields as null.
+  type        = any
+  default     = []
+  description = "Tolerations applied to every pod this module schedules. A list of Kubernetes toleration objects. Empty = unset."
+}

@@ -90,6 +90,57 @@ clouds. Cloud-specific points:
   cluster is via `enable_agic = false` (bring your own ingress) rather than
   renaming the class.
 
+## Pinning pods to node pools
+
+A shared cluster often has dedicated node pools for different workloads,
+labelled and/or tainted so only intended workloads land there. For Retool's pods
+to schedule onto such a pool, they need a matching `nodeSelector` and/or
+`tolerations`.
+
+Every module that deploys pods via Helm — `*-retool-services`, `retool-helm`,
+and `*-user-ingress` — exposes two variables for this:
+
+- `pod_node_selector` (`map(string)`, default `{}`)
+- `pod_tolerations` (list of Kubernetes toleration objects, default `[]`)
+
+They apply to **every** pod the module's charts create. Set the same values on
+each module you deploy so the whole stack lands on the pool:
+
+```hcl
+locals {
+  pod_node_selector = { "retool.com/pool" = "retool" }
+  pod_tolerations = [{
+    key      = "dedicated"
+    operator = "Equal"
+    value    = "retool"
+    effect   = "NoSchedule"
+  }]
+}
+
+module "retool-services" {
+  # ...
+  pod_node_selector = local.pod_node_selector
+  pod_tolerations   = local.pod_tolerations
+}
+
+module "user-ingress" {
+  # ...
+  pod_node_selector = local.pod_node_selector
+  pod_tolerations   = local.pod_tolerations
+}
+
+module "retool" {
+  # ...
+  pod_node_selector = local.pod_node_selector
+  pod_tolerations   = local.pod_tolerations
+}
+```
+
+Leave them unset (the default) to keep the charts' own defaults. Note that when
+set, `pod_node_selector` replaces a chart's built-in `nodeSelector` default
+where one exists (e.g. cert-manager defaults to `kubernetes.io/os: linux`);
+include any such keys you still need in your map.
+
 ## Migrating an existing from-scratch deployment
 
 The namespace is a force-new attribute on the Helm release and the

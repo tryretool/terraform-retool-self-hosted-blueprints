@@ -48,38 +48,41 @@ resource "helm_release" "external_dns" {
   wait       = true
   timeout    = 600
 
-  values = [yamlencode({
-    provider = { name = "google" }
+  values = [
+    yamlencode({
+      provider = { name = "google" }
 
-    image = {
-      repository = var.external_dns_chart.image_repository
-      tag        = var.external_dns_chart.image_tag
-    }
-
-    # Watch Gateway HTTPRoute resources for hostnames to publish.
-    sources = ["gateway-httproute"]
-
-    # Never delete records — safe default for shared or delegated zones.
-    policy = "upsert-only"
-
-    # Unique owner ID so txt records from multiple deployments don't collide.
-    txtOwnerId = var.prefix
-
-    serviceAccount = {
-      annotations = {
-        "iam.gke.io/gcp-service-account" = google_service_account.external_dns.email
+      image = {
+        repository = var.external_dns_chart.image_repository
+        tag        = var.external_dns_chart.image_tag
       }
-    }
 
-    extraArgs = [
-      "--google-project=${var.project_id}",
-      # zone-id-filter has to be passed as a flag. The chart has no zoneIdFilters
-      # value and silently drops one, which leaves external-dns free to write to
-      # every zone in the project.
-      "--zone-id-filter=${google_dns_managed_zone.main.name}",
-      # Watch only the retool namespace (external-dns runs in services_namespace
-      # but its --namespace flag restricts which HTTPRoutes it sees).
-      "--namespace=${local.retool_namespace}",
-    ]
-  })]
+      # Watch Gateway HTTPRoute resources for hostnames to publish.
+      sources = ["gateway-httproute"]
+
+      # Never delete records — safe default for shared or delegated zones.
+      policy = "upsert-only"
+
+      # Unique owner ID so txt records from multiple deployments don't collide.
+      txtOwnerId = var.prefix
+
+      serviceAccount = {
+        annotations = {
+          "iam.gke.io/gcp-service-account" = google_service_account.external_dns.email
+        }
+      }
+
+      extraArgs = [
+        "--google-project=${var.project_id}",
+        # zone-id-filter has to be passed as a flag. The chart has no zoneIdFilters
+        # value and silently drops one, which leaves external-dns free to write to
+        # every zone in the project.
+        "--zone-id-filter=${google_dns_managed_zone.main.name}",
+        # Watch only the retool namespace (external-dns runs in services_namespace
+        # but its --namespace flag restricts which HTTPRoutes it sees).
+        "--namespace=${local.retool_namespace}",
+      ]
+    }),
+    yamlencode(local.has_pod_scheduling ? local.pod_scheduling : {}),
+  ]
 }
