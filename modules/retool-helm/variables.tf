@@ -104,3 +104,20 @@ variable "dbconnector_enabled" {
   default     = true
   description = "Whether to enable the dbconnector service in the Retool deployment."
 }
+
+# Pod scheduling — applied to the Retool chart's pods. In a shared cluster with
+# dedicated/labelled/tainted node pools, set these so Retool's pods land on (and
+# tolerate) the right nodes. See local.pod_scheduling in pod-scheduling.tf.
+variable "pod_node_selector" {
+  type        = map(string)
+  default     = {}
+  description = "nodeSelector applied to the Retool chart's pods. Empty = unset (chart defaults apply)."
+}
+
+variable "pod_tolerations" {
+  # A list of Kubernetes toleration objects (key/operator/value/effect/tolerationSeconds),
+  # passed verbatim into Helm values. Typed `any` to avoid rendering omitted fields as null.
+  type        = any
+  default     = []
+  description = "Tolerations applied to the Retool chart's pods. A list of Kubernetes toleration objects. Empty = unset."
+}

@@ -13,6 +13,10 @@ resource "helm_release" "metrics_server" {
   version    = "3.12.2"
   timeout    = 300
 
+  values = [
+    yamlencode(local.has_pod_scheduling ? local.pod_scheduling : {}),
+  ]
+
   depends_on = [
     kubernetes_namespace_v1.services,
   ]

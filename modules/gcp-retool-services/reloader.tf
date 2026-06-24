@@ -9,23 +9,26 @@ resource "helm_release" "reloader" {
   chart      = "reloader"
   version    = var.reloader_chart.version
 
-  values = [yamlencode({
-    image = {
-      repository = var.reloader_chart.image_repository
-      tag        = var.reloader_chart.image_tag
-    }
+  values = [
+    yamlencode({
+      image = {
+        repository = var.reloader_chart.image_repository
+        tag        = var.reloader_chart.image_tag
+      }
 
-    reloader = {
-      reloadOnCreate   = true
-      reloadOnDelete   = true
-      syncAfterRestart = true
-      autoReloadAll    = true
-      # Scope reloader to only watch the retool namespace so it never restarts
-      # other tenants' workloads in a shared cluster. Every namespace carries the
-      # immutable `kubernetes.io/metadata.name` label, so we select by that.
-      namespaceSelector = "kubernetes.io/metadata.name=${local.retool_namespace}"
-    }
-  })]
+      reloader = {
+        reloadOnCreate   = true
+        reloadOnDelete   = true
+        syncAfterRestart = true
+        autoReloadAll    = true
+        # Scope reloader to only watch the retool namespace so it never restarts
+        # other tenants' workloads in a shared cluster. Every namespace carries the
+        # immutable `kubernetes.io/metadata.name` label, so we select by that.
+        namespaceSelector = "kubernetes.io/metadata.name=${local.retool_namespace}"
+      }
+    }),
+    yamlencode(local.has_pod_scheduling ? { reloader = { deployment = local.pod_scheduling } } : {}),
+  ]
 
   depends_on = [kubernetes_namespace_v1.services]
 }

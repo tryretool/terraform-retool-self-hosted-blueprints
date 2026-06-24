@@ -58,20 +58,27 @@ resource "helm_release" "cert_manager" {
   version    = "v1.17.1"
   wait       = true
 
-  values = [yamlencode({
-    installCRDs = var.install_crds
-    serviceAccount = {
-      labels = {
+  values = [
+    yamlencode({
+      installCRDs = var.install_crds
+      serviceAccount = {
+        labels = {
+          "azure.workload.identity/use" = "true"
+        }
+        annotations = {
+          "azure.workload.identity/client-id" = azurerm_user_assigned_identity.cert_manager[0].client_id
+        }
+      }
+      podLabels = {
         "azure.workload.identity/use" = "true"
       }
-      annotations = {
-        "azure.workload.identity/client-id" = azurerm_user_assigned_identity.cert_manager[0].client_id
-      }
-    }
-    podLabels = {
-      "azure.workload.identity/use" = "true"
-    }
-  })]
+    }),
+    yamlencode(local.has_pod_scheduling ? merge(local.pod_scheduling, {
+      webhook         = local.pod_scheduling
+      cainjector      = local.pod_scheduling
+      startupapicheck = local.pod_scheduling
+    }) : {}),
+  ]
 }
 
 data "azurerm_subscription" "current" {}

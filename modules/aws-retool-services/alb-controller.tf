@@ -155,37 +155,40 @@ resource "helm_release" "alb_controller" {
   version    = "v1.13.2"
 
   # values reference: https://github.com/aws/eks-charts/blob/master/stable/aws-load-balancer-controller/values.yaml
-  values = [yamlencode({
-    nameOverride = local.alb_controller.name
-    # set region and vpcId, otherwise it tries to discover these via ec2
-    # metadata which hits permissions errors
-    region = var.region
-    vpcId  = var.vpc.vpc_id
-    # without the cert-manager dependency, this chart tries to create its own
-    # tls certs dynamically which the helm provider can't deal with
-    enableCertManager = true
-    clusterName       = var.eks.name
-    rbac = {
-      create = true
-    }
-    serviceAccount = {
-      create = true
-      name   = local.alb_controller.service_account_name
-      annotations = {
-        "eks.amazonaws.com/role-arn" = module.alb_controller_irsa_role[0].iam_role_arn
+  values = [
+    yamlencode({
+      nameOverride = local.alb_controller.name
+      # set region and vpcId, otherwise it tries to discover these via ec2
+      # metadata which hits permissions errors
+      region = var.region
+      vpcId  = var.vpc.vpc_id
+      # without the cert-manager dependency, this chart tries to create its own
+      # tls certs dynamically which the helm provider can't deal with
+      enableCertManager = true
+      clusterName       = var.eks.name
+      rbac = {
+        create = true
       }
-    }
-    # Prefixed IngressClass, default-class controlled by make_default_ingress_class
-    # (off by default so a shared cluster's existing default class is untouched).
-    ingressClass = local.alb_controller.ingress_class_name
-    ingressClassConfig = {
-      default = var.make_default_ingress_class
-    }
-    # propagated to every AWS resource the controller creates (ALBs, target
-    # groups, listeners, controller-managed security groups). becomes the
-    # --default-tags CLI flag on the controller.
-    defaultTags = local.alb_controller_default_tags
-  })]
+      serviceAccount = {
+        create = true
+        name   = local.alb_controller.service_account_name
+        annotations = {
+          "eks.amazonaws.com/role-arn" = module.alb_controller_irsa_role[0].iam_role_arn
+        }
+      }
+      # Prefixed IngressClass, default-class controlled by make_default_ingress_class
+      # (off by default so a shared cluster's existing default class is untouched).
+      ingressClass = local.alb_controller.ingress_class_name
+      ingressClassConfig = {
+        default = var.make_default_ingress_class
+      }
+      # propagated to every AWS resource the controller creates (ALBs, target
+      # groups, listeners, controller-managed security groups). becomes the
+      # --default-tags CLI flag on the controller.
+      defaultTags = local.alb_controller_default_tags
+    }),
+    yamlencode(local.has_pod_scheduling ? local.pod_scheduling : {}),
+  ]
 
   depends_on = [
     helm_release.cert_manager,

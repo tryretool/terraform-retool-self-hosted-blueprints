@@ -163,9 +163,15 @@ resource "helm_release" "external_secrets" {
   version    = "0.12.1"
   wait       = true
 
-  values = [yamlencode({
-    installCRDs = var.install_crds
-  })]
+  values = [
+    yamlencode({
+      installCRDs = var.install_crds
+    }),
+    yamlencode(local.has_pod_scheduling ? merge(local.pod_scheduling, {
+      webhook        = local.pod_scheduling
+      certController = local.pod_scheduling
+    }) : {}),
+  ]
 
   depends_on = [kubernetes_namespace_v1.services]
 }

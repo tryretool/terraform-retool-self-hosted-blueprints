@@ -100,17 +100,23 @@ resource "helm_release" "external_secrets" {
   version    = "0.12.1"
   wait       = true
 
-  values = [yamlencode({
-    installCRDs = var.install_crds
-    serviceAccount = {
-      labels = {
-        "azure.workload.identity/use" = "true"
+  values = [
+    yamlencode({
+      installCRDs = var.install_crds
+      serviceAccount = {
+        labels = {
+          "azure.workload.identity/use" = "true"
+        }
+        annotations = {
+          "azure.workload.identity/client-id" = azurerm_user_assigned_identity.eso.client_id
+        }
       }
-      annotations = {
-        "azure.workload.identity/client-id" = azurerm_user_assigned_identity.eso.client_id
-      }
-    }
-  })]
+    }),
+    yamlencode(local.has_pod_scheduling ? merge(local.pod_scheduling, {
+      webhook        = local.pod_scheduling
+      certController = local.pod_scheduling
+    }) : {}),
+  ]
 
   depends_on = [kubernetes_namespace_v1.services]
 }
