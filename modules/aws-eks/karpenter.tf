@@ -46,6 +46,13 @@ module "karpenter" {
   create_instance_profile = false
   enable_inline_policy    = true
 
+  # Deterministic, prefix-based names for the controller IAM role and policy
+  # instead of the chart default "KarpenterController-<random suffix>".
+  iam_role_name              = "${local.cluster_name}-karpenter-controller"
+  iam_role_use_name_prefix   = false
+  iam_policy_name            = "${local.cluster_name}-karpenter-controller"
+  iam_policy_use_name_prefix = false
+
   iam_role_tags = merge(local.all_tags, {
     karpenter = true
   })
