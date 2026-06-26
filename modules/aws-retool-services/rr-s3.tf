@@ -2,7 +2,7 @@
 
 resource "aws_s3_bucket" "rr" {
   count  = var.enable_rr_s3 ? 1 : 0
-  bucket = "retool-${var.prefix}-rr"
+  bucket = coalesce(var.rr_s3_bucket_name, "retool-${var.prefix}-rr")
   tags   = local.all_tags
 }
 

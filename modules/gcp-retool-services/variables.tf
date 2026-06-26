@@ -132,6 +132,12 @@ variable "enable_rr_gcs" {
   description = "Whether to create a GCS bucket and HMAC keys for Retool Remote Repository storage. Uses GCS S3-compatible API."
 }
 
+variable "rr_gcs_bucket_name" {
+  type        = string
+  default     = null
+  description = "Override the name of the GCS bucket created for Retool Remote Repository storage. GCS bucket names are globally unique across all of Google Cloud, so set this when the default \"retool-<prefix>-rr\" is already taken. Only used when enable_rr_gcs is true."
+}
+
 variable "external_secrets_chart" {
   type = object({
     repository       = string
