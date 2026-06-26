@@ -159,6 +159,12 @@ variable "enable_rr_blob" {
   description = "Whether to create an Azure Storage Account and Blob container for Retool Remote Repository storage."
 }
 
+variable "rr_storage_account_name" {
+  type        = string
+  default     = null
+  description = "Override the name of the Azure Storage Account created for Retool Remote Repository storage. Storage account names are globally unique and must be 3-24 lowercase alphanumeric characters, so set this when the default (\"<prefix>rr\" with hyphens removed) is already taken. Only used when enable_rr_blob is true."
+}
+
 variable "tags" {
   type        = map(string)
   default     = {}

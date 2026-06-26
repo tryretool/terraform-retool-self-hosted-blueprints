@@ -230,6 +230,12 @@ variable "enable_rr_s3" {
   description = "Whether to create an S3 bucket and IAM service account for Retool Remote Repository storage."
 }
 
+variable "rr_s3_bucket_name" {
+  type        = string
+  default     = null
+  description = "Override the name of the S3 bucket created for Retool Remote Repository storage. S3 bucket names are globally unique across all AWS accounts, so set this when the default \"retool-<prefix>-rr\" is already taken. Only used when enable_rr_s3 is true."
+}
+
 # Pod scheduling — applied to every pod this module schedules via Helm. In a
 # shared cluster with dedicated/labelled/tainted node pools, set these so the
 # pods land on (and tolerate) the right nodes. See local.pod_scheduling in
