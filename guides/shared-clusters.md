@@ -171,3 +171,57 @@ that the operators consolidate into one namespace on next apply.
 When you're ready to adopt the prefixed namespaces, do it as a deliberate
 migration: drain/cordon as needed, apply, and re-point DNS once the new release
 is healthy.
+
+### Relocating CRD-installing charts (cert-manager, External Secrets Operator)
+
+cert-manager and the External Secrets Operator install their CRDs with their
+Helm release (`install_crds = true`), and those CRDs carry
+`helm.sh/resource-policy: keep`. When the release moves namespaces, Helm
+uninstalls the old release but **keeps the CRDs** — stamped with the old
+release's ownership annotation. The relocated release then fails to install:
+
+```
+Error: Unable to continue with install: CustomResourceDefinition
+"certificaterequests.cert-manager.io" ... cannot be imported into the current
+release: invalid ownership metadata; annotation validation error: key
+"meta.helm.sh/release-namespace" must equal "<prefix>-retool-services":
+current value is "cert-manager"
+```
+
+The CRDs already exist cluster-wide, so resolve it one of two ways:
+
+1. **Don't re-own the CRDs (simplest).** Set `install_crds = false` on the
+   relocated module for the migration apply — the existing CRDs are left in
+   place and the new release doesn't try to adopt them. cert-manager / ESO work
+   fine against externally-managed CRDs.
+
+   ```hcl
+   module "retool-services" { # and azure user-ingress (cert-manager)
+     # ...
+     install_crds = false
+   }
+   ```
+
+2. **Keep Helm managing them.** Re-stamp the retained CRDs' ownership annotation
+   to the new namespace before re-applying, so the relocated release (with
+   `install_crds = true`) can adopt them:
+
+   ```sh
+   # cert-manager
+   kubectl annotate crd \
+     certificaterequests.cert-manager.io certificates.cert-manager.io \
+     challenges.acme.cert-manager.io clusterissuers.cert-manager.io \
+     issuers.cert-manager.io orders.acme.cert-manager.io \
+     meta.helm.sh/release-namespace=<prefix>-retool-services --overwrite
+
+   # External Secrets Operator (if you hit the same error)
+   kubectl annotate crd \
+     $(kubectl get crd -o name | grep external-secrets.io) \
+     meta.helm.sh/release-namespace=<prefix>-retool-services --overwrite
+   ```
+
+   (The release *name* is unchanged — `cert-manager` / `external-secrets` — so
+   only `release-namespace` needs patching.)
+
+This only affects in-place migrations; net-new deployments in the prefixed
+layout create the CRDs owned by the relocated release from the start.
