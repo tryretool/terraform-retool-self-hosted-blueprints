@@ -11,13 +11,15 @@ a single `terraform apply`.
 
 ## Repository layout
 
-- [`modules/`](./modules) — the building-block Terraform modules (one set per
-  cloud, plus the cloud-agnostic [`retool-helm`](./modules/retool-helm) module).
 - [`examples/`](./examples) — copy-paste starting points that wire the modules
   together. Start here.
-- [`guides/`](./guides) — topic guides that apply across clouds (e.g.
-  [scaling](./guides/scaling.md), [deploying into a shared/existing
-  cluster](./guides/shared-clusters.md)).
+- [`modules/`](./modules) — the building-block Terraform modules (one set per
+  cloud, plus the cloud-agnostic [`retool-helm`](./modules/retool-helm) module).
+- [`guides/`](./guides) — topic guides that apply across clouds 
+  - [Troubleshooting](./guides/troubleshooting.md))
+  - [Scaling](./guides/scaling.md) 
+  - [Using a shared/existing Kubernetes cluster](./guides/shared-clusters.md)
+  - [Upgrades (v0.x)](./guides/upgrade-v0.md)
 
 ## Requirements
 
