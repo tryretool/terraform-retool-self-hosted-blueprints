@@ -72,8 +72,6 @@ resource "aws_acm_certificate" "cert" {
   validation_method = "DNS"
 
   lifecycle {
-    create_before_destroy = true
-
     precondition {
       condition     = local.manage_dns
       error_message = "aws-user-ingress cannot validate a certificate for ${var.domain_name} without a hosted zone. Either leave create_hosted_zone = true, set hosted_zone_id to an existing zone, or supply acm_certificate_arn to bring your own certificate."
@@ -166,10 +164,6 @@ resource "aws_lb_target_group" "alb_target_group" {
     timeout             = 5
     interval            = 30
     matcher             = "200"
-  }
-
-  lifecycle {
-    create_before_destroy = true
   }
 }
 
