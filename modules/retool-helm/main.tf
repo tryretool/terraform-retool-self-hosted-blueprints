@@ -52,11 +52,10 @@ locals {
       }
   })] : []
 
-  repository = (
-    var.retool_helm_chart_use_unpublished_branch == null
-    ? "https://charts.retool.com"
-    : "git+https://github.com/tryretool/retool-helm@charts/retool?ref=${var.retool_helm_chart_use_unpublished_branch}&sparse=1"
-  )
+  default_published_repository  = "https://charts.retool.com"
+  unpublished_branch_repository = "git+https://github.com/tryretool/retool-helm@charts/retool?ref=${var.retool_helm_chart_use_unpublished_branch}&sparse=1"
+  default_repository            = var.retool_helm_chart_use_unpublished_branch == null ? local.default_published_repository : local.unpublished_branch_repository
+  repository                    = coalesce(var.retool_helm_chart_repository, local.default_repository)
 
   rr_bucket_values = (var.retool_services != null && var.retool_services.rr_bucket_k8s_secret_name != null) ? [yamlencode({
     env = {
