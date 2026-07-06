@@ -24,7 +24,7 @@ variable "retool_helm_chart_use_unpublished_branch" {
 
 variable "retool_helm_chart_repository" {
   type        = string
-  description = "Overrides the chart repository. Set this to serve the chart from somewhere other than charts.retool.com — e.g. an OCI registry like \"oci://us-docker.pkg.dev/my-project/my-repo\" (pair with retool_helm_chart_name). Takes precedence over retool_helm_chart_use_unpublished_branch. Leave null to use the published chart."
+  description = "Overrides the chart repository. Takes precedence over retool_helm_chart_use_unpublished_branch. Leave null to use the published chart."
   default     = null
 }
 
