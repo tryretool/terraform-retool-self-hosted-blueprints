@@ -23,7 +23,7 @@ Everything is placed in dedicated namespaces instead of `default`:
 |---|---|
 | `<prefix>-retool` | the Retool Helm release, its ExternalSecrets, the namespaced ESO `SecretStore`, the RR credentials Secret, the user-ingress `TargetGroupBinding` |
 | `<prefix>-retool-services` | the supporting operators this deployment owns (ESO, reloader, cert-manager, ALB controller, metrics-server) |
-| `kube-system` | Karpenter only (cluster-wide; from-scratch clusters only) |
+| `kube-system` | AWS Karpenter only (cluster-wide; from-scratch clusters only) |
 
 Both namespaces are computed once inside `aws-retool-services` and exported as
 `retool_namespace` / `services_namespace`, so `retool-helm` and
@@ -141,38 +141,9 @@ set, `pod_node_selector` replaces a chart's built-in `nodeSelector` default
 where one exists (e.g. cert-manager defaults to `kubernetes.io/os: linux`);
 include any such keys you still need in your map.
 
-## Migrating an existing from-scratch deployment
-
-The namespace is a force-new attribute on the Helm release and the
-ExternalSecrets. Upgrading an existing `default`-namespace deployment to the new
-prefixed defaults will **destroy and recreate** the Retool release and its
-secrets (a brief outage, and any in-cluster-only state is lost).
-
-To upgrade **in place with no churn**, pin the namespaces back to their previous
-values and tell the module the namespaces already exist:
-
-```hcl
-module "retool-services" {
-  # ...
-  retool_namespace   = "default"
-  services_namespace = "default" # operators previously lived in their own ns;
-                                  # see below if you want to preserve those exactly
-  create_namespaces  = false
-}
-```
-
-Note the operators previously ran in distinct namespaces (`external-secrets`,
-`cert-manager`, `alb-controller`) and metrics-server in `kube-system`. Helm
-releases are namespace-scoped, so moving them is also a recreate. If you need a
-zero-disruption upgrade of the operators too, plan the move during a maintenance
-window, or keep the old layout by overriding `services_namespace` and accepting
-that the operators consolidate into one namespace on next apply.
-
-When you're ready to adopt the prefixed namespaces, do it as a deliberate
-migration: drain/cordon as needed, apply, and re-point DNS once the new release
-is healthy.
-
 ### Relocating CRD-installing charts (cert-manager, External Secrets Operator)
+
+**TODO:** change this guidance to have `install_crds = true` (default) in exactly 1 of the retool-services modules deployed to a shared cluster.
 
 cert-manager and the External Secrets Operator install their CRDs with their
 Helm release (`install_crds = true`), and those CRDs carry
