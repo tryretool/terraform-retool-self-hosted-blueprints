@@ -120,6 +120,12 @@ resource "helm_release" "external_secrets" {
         "iam.gke.io/gcp-service-account" = google_service_account.eso.email
       }
     }
+    # On destroy the webhook pods can go away before the ExternalSecret CRs are
+    # deleted; with the default Fail policy the API server then rejects those
+    # deletes and terraform destroy hangs. Ignore lets the deletes through.
+    webhook = {
+      failurePolicy = "Ignore"
+    }
   })]
 }
 
