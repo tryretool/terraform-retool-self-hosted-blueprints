@@ -89,7 +89,7 @@ module "retool" {
   retool_helm_extra_values = [
     yamlencode({
       image = {
-        tag = "3.391.0-edge"
+        tag = "4.0.5-stable"
       }
       podDisruptionBudget = {
         maxUnavailable = 1
