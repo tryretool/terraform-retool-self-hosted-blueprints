@@ -73,7 +73,7 @@ module "retool" {
 
   retool_helm_extra_values = [yamlencode({
     image = {
-      tag = "4.0.3-stable"
+      tag = "4.0.5-stable"
     }
     podDisruptionBudget = {
       maxUnavailable = 1
