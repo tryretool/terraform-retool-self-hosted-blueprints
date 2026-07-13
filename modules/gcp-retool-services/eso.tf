@@ -191,7 +191,10 @@ resource "kubectl_manifest" "secret_store" {
     }
   })
 
-  depends_on = [kubectl_manifest.secretstore_webhook_failure_policy]
+  depends_on = [
+    helm_release.external_secrets,
+    kubectl_manifest.secretstore_webhook_failure_policy,
+  ]
 }
 
 locals {
