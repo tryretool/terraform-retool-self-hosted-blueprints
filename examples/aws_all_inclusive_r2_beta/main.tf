@@ -64,7 +64,7 @@ module "retool" {
   version = "~> 0.3"
 
   retool_helm_name                         = "retool"
-  retool_helm_chart_version                = "6.11.6"
+  retool_helm_chart_version                = "6.11.10"
 
   db                                       = module.db-main.outputs
   retool_services                          = module.retool-services.outputs
