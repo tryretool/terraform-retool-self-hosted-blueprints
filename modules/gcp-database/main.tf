@@ -36,6 +36,12 @@ module "pg" {
 
   deletion_protection = var.deletion_protection
 
+  # On destroy, Postgres refuses API-level DROP of the database (it has non-superuser
+  # grantees) and the user (it holds SQL roles), so terraform destroy hangs. ABANDON
+  # drops them from state instead; the instance deletion that follows removes them.
+  database_deletion_policy = "ABANDON"
+  user_deletion_policy     = "ABANDON"
+
   database_flags = local.database_flags
 
   # Cloud SQL does not use security groups. With private IP, access is controlled by

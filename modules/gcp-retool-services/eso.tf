@@ -120,7 +120,48 @@ resource "helm_release" "external_secrets" {
         "iam.gke.io/gcp-service-account" = google_service_account.eso.email
       }
     }
+    # If a webhook pod is gone at destroy time, the default Fail policy rejects
+    # the CR deletes and terraform destroy hangs; Ignore lets them through. This
+    # only reaches the `externalsecret-validate` webhook — the chart hardcodes
+    # `secretstore-validate` to Fail, so we patch that one below.
+    webhook = {
+      failurePolicy = "Ignore"
+    }
   })]
+}
+
+# Flip `secretstore-validate` (which the chart leaves at Fail) to Ignore too, so
+# deleting the ClusterSecretStore doesn't hang destroy when its webhook pod is
+# gone. secret_store depends on this, so the store is removed while Ignore is
+# still in effect. Server-side apply on only failurePolicy leaves the rest of
+# the webhook — notably the cert-controller's injected caBundle — untouched.
+resource "kubectl_manifest" "secretstore_webhook_failure_policy" {
+  server_side_apply = true
+  force_conflicts   = true
+  # Partial manifest: the required webhook fields (clientConfig, sideEffects,
+  # admissionReviewVersions) are omitted so SSA leaves them to the cert-controller.
+  # Disable client-side schema validation, which would reject the incomplete object.
+  validate_schema = false
+
+  yaml_body = yamlencode({
+    apiVersion = "admissionregistration.k8s.io/v1"
+    kind       = "ValidatingWebhookConfiguration"
+    metadata = {
+      name = "secretstore-validate"
+    }
+    webhooks = [
+      {
+        name          = "validate.secretstore.external-secrets.io"
+        failurePolicy = "Ignore"
+      },
+      {
+        name          = "validate.clustersecretstore.external-secrets.io"
+        failurePolicy = "Ignore"
+      },
+    ]
+  })
+
+  depends_on = [helm_release.external_secrets]
 }
 
 resource "kubectl_manifest" "secret_store" {
@@ -150,7 +191,10 @@ resource "kubectl_manifest" "secret_store" {
     }
   })
 
-  depends_on = [helm_release.external_secrets]
+  depends_on = [
+    helm_release.external_secrets,
+    kubectl_manifest.secretstore_webhook_failure_policy,
+  ]
 }
 
 locals {
