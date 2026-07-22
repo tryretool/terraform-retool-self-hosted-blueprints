@@ -1,6 +1,6 @@
 locals {
   eso = {
-    name                 = "external-secrets"
+    name                 = "${var.prefix}-external-secrets"
     namespace            = local.services_namespace
     service_account_name = "external-secrets"
   }
@@ -160,12 +160,36 @@ resource "helm_release" "external_secrets" {
   name       = local.eso.name
   repository = "https://charts.external-secrets.io"
   chart      = "external-secrets"
-  version    = "0.12.1"
+  version    = "2.8.0"
   wait       = true
 
   values = [
     yamlencode({
+      # avoid creating cluster-wide ClusterRole resources
+      scopedRBAC = true
+      rbac = {
+        servicebindings = {
+          create = false
+        }
+      }
+      # only resolve secret resources in the retool namespace, even though ESO
+      # itself is deployed into the services namespace, as the secrets need to
+      # live with the workloads that consume them.
+      scopedNamespace = local.retool_namespace
+      # don't install CRDs, i.e. in shared-cluster envs
       installCRDs = var.install_crds
+      webhook = {
+        # don't create validating webhook, as ValidatingWebhookConfiguration is
+        # a cluster-scoped resource and its name is hardcoded in the chart,
+        # making it prevent multiple deployments in a shared cluster
+        create = false
+        # use the separately installed cert-manager instead of the built-in
+        # certController, because ESO's certController requires a ClusterRole that
+        # makes it unfriendly to multiple deployments sharing a cluster
+        certManager = {
+          enabled = true
+        }
+      }
     }),
     yamlencode(local.has_pod_scheduling ? merge(local.pod_scheduling, {
       webhook        = local.pod_scheduling
@@ -183,7 +207,7 @@ resource "helm_release" "external_secrets" {
 # (platform or bundled) ESO reconciles.
 resource "kubectl_manifest" "secret_store" {
   yaml_body = yamlencode({
-    apiVersion = "external-secrets.io/v1beta1"
+    apiVersion = "external-secrets.io/v1"
     kind       = local.secret_store_kind
     metadata = {
       name      = local.secret_store_name
@@ -209,7 +233,7 @@ resource "kubectl_manifest" "external_secret" {
   for_each = var.create_external_secrets ? { for s in local.external_secrets : s.name => s } : {}
 
   yaml_body = yamlencode({
-    apiVersion = "external-secrets.io/v1beta1"
+    apiVersion = "external-secrets.io/v1"
     kind       = "ExternalSecret"
     metadata = {
       name      = each.value.name
@@ -237,7 +261,7 @@ resource "kubectl_manifest" "external_secret_agent_sandbox" {
   count = var.create_external_secrets && var.enable_agent_sandbox ? 1 : 0
 
   yaml_body = yamlencode({
-    apiVersion = "external-secrets.io/v1beta1"
+    apiVersion = "external-secrets.io/v1"
     kind       = "ExternalSecret"
     metadata = {
       name      = local.agent_sandbox_external_secret.name
@@ -269,7 +293,7 @@ resource "kubectl_manifest" "external_secret_extra_env_vars" {
   count = var.create_external_secrets ? 1 : 0
 
   yaml_body = yamlencode({
-    apiVersion = "external-secrets.io/v1beta1"
+    apiVersion = "external-secrets.io/v1"
     kind       = "ExternalSecret"
     metadata = {
       name      = "extra-env-vars"
