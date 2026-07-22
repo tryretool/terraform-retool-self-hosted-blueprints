@@ -7,7 +7,7 @@ resource "helm_release" "reloader" {
   name       = "reloader"
   repository = "https://stakater.github.io/stakater-charts"
   chart      = "reloader"
-  version    = "2.2.9"
+  version    = "2.2.14"
 
   values = [
     yamlencode({
@@ -17,8 +17,11 @@ resource "helm_release" "reloader" {
         syncAfterRestart = true
         autoReloadAll    = true
         # Scope reloader to only watch the retool namespace so it never restarts
-        # other tenants' workloads in a shared cluster.
-        namespaceSelector = "kubernetes.io/metadata.name=${local.retool_namespace}"
+        # other tenants' workloads in a shared cluster. This also disables
+        # ClusterRole creation which allows multiple deployments in different
+        # namespaces within a shared cluster.
+        namespaces = [local.retool_namespace]
+        watchGlobally = false
       }
     }),
     yamlencode(local.has_pod_scheduling ? { reloader = { deployment = local.pod_scheduling } } : {}),

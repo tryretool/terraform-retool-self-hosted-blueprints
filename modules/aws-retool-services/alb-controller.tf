@@ -1,7 +1,7 @@
 locals {
   all_tags = merge(var.default_tags, var.tags)
   alb_controller = {
-    name                 = "alb-controller"
+    name                 = "${var.prefix}-alb-controller"
     namespace            = local.services_namespace
     service_account_name = "alb-controller"
     # Prefixed IngressClass name so it never collides with an "alb" IngressClass

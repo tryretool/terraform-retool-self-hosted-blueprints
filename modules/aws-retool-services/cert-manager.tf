@@ -1,6 +1,6 @@
 locals {
   cert_manager = {
-    name      = "cert-manager"
+    name      = "${var.prefix}-cert-manager"
     namespace = local.services_namespace
   }
 }
@@ -18,12 +18,16 @@ resource "helm_release" "cert_manager" {
   name       = local.cert_manager.name
   repository = "https://charts.jetstack.io"
   chart      = "cert-manager"
-  version    = "v1.11.0"
+  version    = "v1.21.0"
+  skip_crds  = !var.install_crds
   timeout    = 600
 
   values = [
     jsonencode({
       installCRDs = var.install_crds
+      crds = {
+        enabled = var.install_crds
+      }
       securityContext = {
         fsGroup = 1001
       }
