@@ -206,6 +206,8 @@ resource "helm_release" "external_secrets" {
 # is provided by the platform — since it is app-specific configuration the
 # (platform or bundled) ESO reconciles.
 resource "kubectl_manifest" "secret_store" {
+  count = var.create_external_secrets ? 1 : 0
+
   yaml_body = yamlencode({
     apiVersion = "external-secrets.io/v1"
     kind       = local.secret_store_kind
@@ -254,7 +256,7 @@ resource "kubectl_manifest" "external_secret" {
     }
   })
 
-  depends_on = [kubectl_manifest.secret_store]
+  depends_on = [kubectl_manifest.secret_store[0]]
 }
 
 resource "kubectl_manifest" "external_secret_agent_sandbox" {
@@ -286,7 +288,7 @@ resource "kubectl_manifest" "external_secret_agent_sandbox" {
     }
   })
 
-  depends_on = [kubectl_manifest.secret_store]
+  depends_on = [kubectl_manifest.secret_store[0]]
 }
 
 resource "kubectl_manifest" "external_secret_extra_env_vars" {
@@ -318,5 +320,5 @@ resource "kubectl_manifest" "external_secret_extra_env_vars" {
     }
   })
 
-  depends_on = [kubectl_manifest.secret_store]
+  depends_on = [kubectl_manifest.secret_store[0]]
 }
