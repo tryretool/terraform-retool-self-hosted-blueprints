@@ -2,7 +2,7 @@ locals {
   eso = {
     name                 = "${var.prefix}-external-secrets"
     namespace            = local.services_namespace
-    service_account_name = "external-secrets"
+    service_account_name = "${var.prefix}-external-secrets"
   }
 
   # Namespaced SecretStore (lives in the retool namespace alongside the
@@ -165,6 +165,9 @@ resource "helm_release" "external_secrets" {
 
   values = [
     yamlencode({
+      serviceAccount = {
+        name = local.eso.service_account_name
+      }
       # avoid creating cluster-wide ClusterRole resources
       scopedRBAC = true
       rbac = {
@@ -182,7 +185,7 @@ resource "helm_release" "external_secrets" {
         # don't create validating webhook, as ValidatingWebhookConfiguration is
         # a cluster-scoped resource and its name is hardcoded in the chart,
         # making it prevent multiple deployments in a shared cluster
-        create = false
+        # create = false
         # use the separately installed cert-manager instead of the built-in
         # certController, because ESO's certController requires a ClusterRole that
         # makes it unfriendly to multiple deployments sharing a cluster
