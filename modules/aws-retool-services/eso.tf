@@ -143,23 +143,23 @@ resource "aws_iam_role_policy_attachment" "eso" {
 
 # Create a self-signed Issuer so ESO can use the cert-manager also deployed in
 # this module
-# resource "kubectl_manifest" "eso-selfsigned-issuer" {
-#   count = var.enable_external_secrets ? 1 : 0
+resource "kubectl_manifest" "eso-selfsigned-issuer" {
+  count = var.enable_external_secrets ? 1 : 0
 
-#   yaml_body = yamlencode({
-#     apiVersion = "cert-manager.io/v1"
-#     kind       = "Issuer"
-#     metadata = {
-#       name      = local.eso.issuer_name
-#       namespace = local.eso.namespace
-#     }
-#     spec = {
-#       selfSigned = {}
-#     }
-#   })
+  yaml_body = yamlencode({
+    apiVersion = "cert-manager.io/v1"
+    kind       = "Issuer"
+    metadata = {
+      name      = local.eso.issuer_name
+      namespace = local.eso.namespace
+    }
+    spec = {
+      selfSigned = {}
+    }
+  })
 
-#   depends_on = [helm_release.cert_manager]
-# }
+  depends_on = [helm_release.cert_manager]
+}
 
 # Pod-identity wiring only makes sense for the operator we install ourselves.
 # In a shared cluster (enable_external_secrets = false) the platform's ESO uses
@@ -218,16 +218,16 @@ resource "helm_release" "external_secrets" {
         # use the separately installed cert-manager instead of the built-in
         # certController, because ESO's certController requires a ClusterRole that
         # makes it unfriendly to multiple deployments sharing a cluster
-        # certManager = {
-        #   enabled = true
-        #   cert = {
-        #     issuerRef = {
-        #       group = "cert-manager.io"
-        #       kind  = "Issuer"
-        #       name  = local.eso.issuer_name
-        #     }
-        #   }
-        # }
+        certManager = {
+          enabled = true
+          cert = {
+            issuerRef = {
+              group = "cert-manager.io"
+              kind  = "Issuer"
+              name  = local.eso.issuer_name
+            }
+          }
+        }
       }
     }),
     yamlencode(local.has_pod_scheduling ? merge(local.pod_scheduling, {
