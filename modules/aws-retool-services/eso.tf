@@ -1,9 +1,10 @@
 locals {
   eso = {
-    name                 = "${var.prefix}-external-secrets"
-    namespace            = local.services_namespace
-    service_account_name = "${var.prefix}-external-secrets"
-    issuer_name          = "${var.prefix}-external-secrets-selfsigned-issuer"
+    name                  = "${var.prefix}-external-secrets"
+    namespace             = local.services_namespace
+    controller_class_name = "${var.prefix}-external-secrets"
+    service_account_name  = "${var.prefix}-external-secrets"
+    issuer_name           = "${var.prefix}-external-secrets-selfsigned-issuer"
   }
 
   # Namespaced SecretStore (lives in the retool namespace alongside the
@@ -186,6 +187,7 @@ resource "helm_release" "external_secrets" {
 
   values = [
     yamlencode({
+      controllerClass = local.eso.controller_class_name
       serviceAccount = {
         name = local.eso.service_account_name
       }
@@ -253,6 +255,7 @@ resource "kubectl_manifest" "secret_store" {
       namespace = local.retool_namespace
     }
     spec = {
+      controller = local.eso.controller_class_name
       provider = {
         aws = {
           service = "SecretsManager"
