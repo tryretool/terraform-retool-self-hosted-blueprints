@@ -3,6 +3,7 @@ locals {
     name                 = "${var.prefix}-external-secrets"
     namespace            = local.services_namespace
     service_account_name = "${var.prefix}-external-secrets"
+    issuer_name          = "${var.prefix}-external-secrets-selfsigned-issuer"
   }
 
   # Namespaced SecretStore (lives in the retool namespace alongside the
@@ -139,6 +140,26 @@ resource "aws_iam_role_policy_attachment" "eso" {
   policy_arn = aws_iam_policy.eso.arn
 }
 
+# Create a self-signed Issuer so ESO can use the cert-manager also deployed in
+# this module
+# resource "kubectl_manifest" "eso-selfsigned-issuer" {
+#   count = var.enable_external_secrets ? 1 : 0
+
+#   yaml_body = yamlencode({
+#     apiVersion = "cert-manager.io/v1"
+#     kind       = "Issuer"
+#     metadata = {
+#       name      = local.eso.issuer_name
+#       namespace = local.eso.namespace
+#     }
+#     spec = {
+#       selfSigned = {}
+#     }
+#   })
+
+#   depends_on = [helm_release.cert_manager]
+# }
+
 # Pod-identity wiring only makes sense for the operator we install ourselves.
 # In a shared cluster (enable_external_secrets = false) the platform's ESO uses
 # its own service account; attach the aws_iam_role.eso policy to it out of band.
@@ -181,17 +202,30 @@ resource "helm_release" "external_secrets" {
       scopedNamespace = local.retool_namespace
       # don't install CRDs, i.e. in shared-cluster envs
       installCRDs = var.install_crds
+
+      # uses static cluster-scoped resources
+      certController = {
+        create = var.install_crds
+      }
       webhook = {
         # don't create validating webhook, as ValidatingWebhookConfiguration is
         # a cluster-scoped resource and its name is hardcoded in the chart,
         # making it prevent multiple deployments in a shared cluster
-        # create = false
+        create = false
+
         # use the separately installed cert-manager instead of the built-in
         # certController, because ESO's certController requires a ClusterRole that
         # makes it unfriendly to multiple deployments sharing a cluster
-        certManager = {
-          enabled = true
-        }
+        # certManager = {
+        #   enabled = true
+        #   cert = {
+        #     issuerRef = {
+        #       group = "cert-manager.io"
+        #       kind  = "Issuer"
+        #       name  = local.eso.issuer_name
+        #     }
+        #   }
+        # }
       }
     }),
     yamlencode(local.has_pod_scheduling ? merge(local.pod_scheduling, {
