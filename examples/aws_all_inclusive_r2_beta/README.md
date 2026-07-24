@@ -21,7 +21,7 @@ Without it, `terraform apply` fails when fetching the chart.
 ## Quick start
 
 ```sh
-cp provider.example.tf provider.tf
+cp provider.tf.example provider.tf
 # edit the locals block in main.tf: prefix, aws_profile, region, domain_name
 aws sso login --profile <your-profile>   # or otherwise authenticate
 terraform init

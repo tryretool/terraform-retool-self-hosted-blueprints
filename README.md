@@ -20,8 +20,8 @@ a single `terraform apply`.
 
 ## Requirements
 
-- [Terraform](https://developer.hashicorp.com/terraform/install) **>= 1.11**
-  (the modules use write-only secret arguments introduced in 1.11).
+- [Terraform](https://developer.hashicorp.com/terraform/install) **>= 1.11.1**
+  (the modules use write-only secret arguments introduced in 1.11.1).
 - [Helm v3+](https://helm.sh/docs/intro/install)
 - [`kubectl`](https://kubernetes.io/docs/tasks/tools/)
 - The CLI for your cloud, authenticated with admin credentials:
@@ -44,7 +44,7 @@ a single `terraform apply`.
    place), then turn the provider stub into a real config:
 
    ```sh
-   cp provider.example.tf provider.tf
+   cp provider.tf.example provider.tf
    ```
 
 3. **Edit the `locals` block** at the top of `main.tf` — set `prefix`,
