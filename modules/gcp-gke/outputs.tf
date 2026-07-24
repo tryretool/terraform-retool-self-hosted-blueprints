@@ -18,7 +18,7 @@ locals {
 }
 
 # The cluster output shape mirrors the AWS EKS module's cluster output for the
-# fields used by Kubernetes and Helm providers, so provider.example.tf is recognizable.
+# fields used by Kubernetes and Helm providers, so provider.tf.example is recognizable.
 output "cluster" {
   description = "GKE cluster details"
   value       = local.outputs
