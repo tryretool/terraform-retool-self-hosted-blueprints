@@ -1,12 +1,10 @@
 terraform {
-  # >= 1.11 for write-only (secret_data_wo) arguments.
-  required_version = ">= 1.11"
+  # Capped at 1.5.7 because GCP Marketplace / Infra Manager runs no newer.
+  required_version = ">= 1.5.7"
 
   required_providers {
     google = {
-      source = "hashicorp/google"
-      # >= 6.16 for secret_data_wo / secret_data_wo_version on
-      # google_secret_manager_secret_version.
+      source  = "hashicorp/google"
       version = ">= 6.16"
     }
     google-beta = {

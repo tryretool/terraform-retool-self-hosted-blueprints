@@ -120,12 +120,6 @@ variable "max_connections" {
   description = "Override the PostgreSQL max_connections setting. Cloud SQL defaults vary by tier (e.g. 25 for db-f1-micro, 200 for db-g1-small). Set this when hitting connection limits. Also configurable via database_flags."
 }
 
-variable "db_password_wo_version" {
-  type        = number
-  default     = 1
-  description = "Version counter for the generated database password secret value (write-only). Increment to force Terraform to rewrite it."
-}
-
 variable "database_flags" {
   type = list(object({
     name  = string

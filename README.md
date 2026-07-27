@@ -21,7 +21,9 @@ a single `terraform apply`.
 ## Requirements
 
 - [Terraform](https://developer.hashicorp.com/terraform/install) **>= 1.11**
-  (the modules use write-only secret arguments introduced in 1.11).
+  for the Azure and AWS modules (they use write-only secret arguments introduced
+  in 1.11). The GCP modules run on **>= 1.5.7** so they can deploy via GCP
+  Marketplace / Infrastructure Manager.
 - [Helm v3+](https://helm.sh/docs/intro/install)
 - [`kubectl`](https://kubernetes.io/docs/tasks/tools/)
 - The CLI for your cloud, authenticated with admin credentials:
