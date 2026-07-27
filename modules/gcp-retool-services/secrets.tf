@@ -112,6 +112,12 @@ resource "google_secret_manager_secret_version" "license_key" {
 
   # Seed once. ignore_changes hands the value off to admins: rotations made
   # directly in Secret Manager are not reverted as drift on later applies.
+  #
+  # secret_data (not write-only secret_data_wo) is required because the GCP
+  # modules target Terraform >= 1.5.7 for GCP Marketplace / Infra Manager, which
+  # predates write-only arguments. Consequence: var.license_key is persisted in
+  # state. Callers who need it kept out of state should pre-create the secret and
+  # use var.license_key_secret_path instead of var.license_key.
   lifecycle {
     ignore_changes = [secret_data]
   }
