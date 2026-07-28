@@ -102,9 +102,12 @@ resource "google_secret_manager_secret" "db_password" {
 }
 
 resource "google_secret_manager_secret_version" "db_password" {
-  secret = google_secret_manager_secret.db_password.id
-  # Write-only: not persisted in state, only (re)written when the version
-  # counter changes. Bump db_password_wo_version to reapply from state.
-  secret_data_wo         = random_password.pg_password.result
-  secret_data_wo_version = var.db_password_wo_version
+  secret      = google_secret_manager_secret.db_password.id
+  secret_data = random_password.pg_password.result
+
+  # Seed once. ignore_changes hands the value off to admins: rotations made
+  # directly in Secret Manager are not reverted as drift on later applies.
+  lifecycle {
+    ignore_changes = [secret_data]
+  }
 }

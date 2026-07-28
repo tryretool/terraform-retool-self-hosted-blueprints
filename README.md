@@ -21,7 +21,16 @@ a single `terraform apply`.
 ## Requirements
 
 - [Terraform](https://developer.hashicorp.com/terraform/install) **>= 1.11**
-  (the modules use write-only secret arguments introduced in 1.11).
+  for the Azure and AWS modules (they use write-only secret arguments introduced
+  in 1.11). The GCP modules run on **>= 1.5.7** so they can deploy via GCP
+  Marketplace / Infrastructure Manager.
+  > **GCP secret handling:** Because 1.5.7 predates write-only arguments, the
+  > GCP modules write generated secrets (DB password, encryption key, JWT secret)
+  > and any `license_key` you pass into Terraform state. Use a remote,
+  > encrypted, access-restricted backend (e.g. a GCS bucket with CMEK + tight
+  > IAM). To keep specific secrets out of state entirely, pre-create them in
+  > Secret Manager and pass them by name via `encryption_key_secret_name` /
+  > `license_key_secret_path`.
 - [Helm v3+](https://helm.sh/docs/intro/install)
 - [`kubectl`](https://kubernetes.io/docs/tasks/tools/)
 - The CLI for your cloud, authenticated with admin credentials:
