@@ -17,7 +17,7 @@ resource "google_project_service" "container" {
 # Node service account for GKE nodes. Granting cloud-platform scope + IAM roles is the
 # GCP-recommended pattern (vs using default Compute SA which has broad permissions).
 resource "google_service_account" "gke_nodes" {
-  account_id   = "${var.prefix}-gke-nodes"
+  account_id   = substr("${var.prefix}-gke-nodes", 0, 30)
   display_name = "${var.prefix} GKE node service account"
   project      = var.project_id
 }

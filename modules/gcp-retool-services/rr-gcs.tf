@@ -17,7 +17,7 @@ resource "google_storage_bucket" "rr" {
 resource "google_service_account" "rr" {
   count = var.enable_rr_gcs ? 1 : 0
 
-  account_id   = "${var.prefix}-rr"
+  account_id   = substr("${var.prefix}-rr", 0, 30)
   display_name = "${var.prefix} RR storage service account"
   project      = var.project_id
 }

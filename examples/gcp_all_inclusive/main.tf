@@ -56,7 +56,7 @@ module "retool-services" {
   gke        = module.gke.outputs
   db         = module.db-main.outputs
 
-  # encryption_key_secret_name = null  # (default) auto-generates a random key
+  license_key = "MY-LICENSE-KEY"
 }
 
 module "user-ingress" {
