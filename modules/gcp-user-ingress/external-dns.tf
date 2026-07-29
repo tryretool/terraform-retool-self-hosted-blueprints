@@ -7,7 +7,7 @@ locals {
 }
 
 resource "google_service_account" "external_dns" {
-  account_id   = "${var.prefix}-external-dns"
+  account_id   = substr("${var.prefix}-external-dns", 0, 30)
   display_name = "${var.prefix} external-dns service account"
   project      = var.project_id
 }

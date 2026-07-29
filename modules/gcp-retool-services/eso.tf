@@ -23,7 +23,7 @@ locals {
 }
 
 resource "google_service_account" "eso" {
-  account_id   = "${var.prefix}-eso"
+  account_id   = substr("${var.prefix}-eso", 0, 30)
   display_name = "${var.prefix} External Secrets Operator service account"
   project      = var.project_id
 }
