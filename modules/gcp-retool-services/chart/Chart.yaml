@@ -1,0 +1,11 @@
+apiVersion: v2
+name: retool-manifests
+description: >-
+  Applies manifests this module builds in Terraform. GCP Marketplace only permits
+  a fixed set of providers, which excludes gavinbunney/kubectl, and
+  kubernetes_manifest can't be used because it needs the cluster reachable and the
+  CRD registered at plan time -- neither is true before the GKE cluster exists.
+  Helm is permitted and applies whatever YAML it's handed, so it's the delivery
+  mechanism for the External Secrets CRs.
+type: application
+version: 0.1.0
