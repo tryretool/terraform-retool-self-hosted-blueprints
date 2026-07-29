@@ -56,6 +56,8 @@ module "retool-services" {
   vnet                = module.vnet.outputs
   aks                 = module.aks.outputs
   db                  = module.db-main.outputs
+  
+  license_key = "MY-LICENSE-KEY"
 }
 
 module "user-ingress" {
