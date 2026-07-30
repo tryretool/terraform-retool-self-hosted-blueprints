@@ -77,3 +77,35 @@ variable "enable_rr_gcs" {
   default     = false
   description = "Whether to create a GCS bucket and HMAC keys for Retool Remote Repository storage. Uses GCS S3-compatible API."
 }
+
+variable "external_secrets_chart" {
+  type = object({
+    repository       = string
+    version          = string
+    image_repository = string
+    image_tag        = string
+  })
+  default = {
+    repository       = "https://charts.external-secrets.io"
+    version          = "2.8.0"
+    image_repository = "ghcr.io/external-secrets/external-secrets"
+    image_tag        = "v2.8.0"
+  }
+  description = "Where to fetch the External Secrets chart and image. Defaults to upstream. Override to serve both from a private registry, which GCP Marketplace requires and restricted-egress installs need. Use an oci:// URL for repository when the chart lives in an OCI registry. Keep version and image_tag in step: the chart and the operator are released together, and a mismatch is not tested upstream."
+}
+
+variable "reloader_chart" {
+  type = object({
+    repository       = string
+    version          = string
+    image_repository = string
+    image_tag        = string
+  })
+  default = {
+    repository       = "https://stakater.github.io/stakater-charts"
+    version          = "2.2.14"
+    image_repository = "ghcr.io/stakater/reloader"
+    image_tag        = "v1.4.19"
+  }
+  description = "Where to fetch the Reloader chart and image. Defaults to upstream. Override to serve both from a private registry. Note the chart and app versions differ (chart 2.2.14 ships app v1.4.19)."
+}

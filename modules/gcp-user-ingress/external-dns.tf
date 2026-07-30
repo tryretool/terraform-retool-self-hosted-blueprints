@@ -36,20 +36,30 @@ resource "helm_release" "external_dns" {
   create_namespace = true
 
   name       = local.external_dns.name
-  repository = "https://kubernetes-sigs.github.io/external-dns/"
+  repository = var.external_dns_chart.repository
   chart      = "external-dns"
-  version    = "1.15.0"
+  version    = var.external_dns_chart.version
   wait       = true
   timeout    = 600
 
   values = [yamlencode({
     provider = { name = "google" }
 
+    image = {
+      repository = var.external_dns_chart.image_repository
+      tag        = var.external_dns_chart.image_tag
+    }
+
     # Watch Gateway HTTPRoute resources for hostnames to publish.
     sources = ["gateway-httproute"]
 
-    # Scope to this zone by ID rather than filtering by domain string.
-    zoneIdFilters = [google_dns_managed_zone.main.name]
+    # Scope to this zone by ID rather than filtering by domain string. This has
+    # to go through extraArgs: the chart has no zoneIdFilters value and silently
+    # ignores one, which leaves external-dns free to write to every zone the
+    # project grants it.
+    extraArgs = {
+      "zone-id-filter" = [google_dns_managed_zone.main.name]
+    }
 
     # Never delete records — safe default for shared or delegated zones.
     policy = "upsert-only"

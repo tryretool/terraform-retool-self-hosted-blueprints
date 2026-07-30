@@ -5,6 +5,11 @@ locals {
     service_account_name = "external-secrets"
   }
 
+  eso_image = {
+    repository = var.external_secrets_chart.image_repository
+    tag        = var.external_secrets_chart.image_tag
+  }
+
   # Secret name for encryption-key — either user-provided or auto-generated
   encryption_key_secret_ref = (
     var.encryption_key_secret_name != null
@@ -113,25 +118,35 @@ resource "helm_release" "external_secrets" {
   create_namespace = true
 
   name       = local.eso.name
-  repository = "https://charts.external-secrets.io"
+  repository = var.external_secrets_chart.repository
   chart      = "external-secrets"
-  version    = "0.12.1"
+  version    = var.external_secrets_chart.version
   wait       = true
 
   values = [yamlencode({
     installCRDs = true
+
+    # The operator, webhook and cert-controller are three deployments running the
+    # same image, each reading its own values block. Setting only the top one
+    # leaves the other two pulling from upstream.
+    image          = local.eso_image
+    certController = { image = local.eso_image }
+
+    webhook = {
+      image = local.eso_image
+
+      # Terraform destroys the node pool before these releases, so the webhook
+      # pods are gone by the time the CRs are deleted. Under the default Fail
+      # policy the unreachable webhook rejects those deletes and the destroy
+      # hangs. From 2.8.0 the chart wires this into every validating webhook,
+      # including `secretstore-validate`, which earlier versions left at Fail.
+      failurePolicy = "Ignore"
+    }
+
     serviceAccount = {
       annotations = {
         "iam.gke.io/gcp-service-account" = google_service_account.eso.email
       }
-    }
-    # If a webhook pod is gone at destroy time, the default Fail policy rejects
-    # the CR deletes and terraform destroy hangs; Ignore lets them through. The
-    # chart only wires this value into `externalsecret-validate`. It leaves
-    # `secretstore-validate` at Fail until 2.8.0, so deleting the
-    # ClusterSecretStore can still stall if that webhook's pod is already gone.
-    webhook = {
-      failurePolicy = "Ignore"
     }
   })]
 }
@@ -149,7 +164,7 @@ resource "helm_release" "secret_store" {
 
   values = [yamlencode({
     manifests = [{
-      apiVersion = "external-secrets.io/v1beta1"
+      apiVersion = "external-secrets.io/v1"
       kind       = "ClusterSecretStore"
       metadata = {
         name = local.secret_store_ref.name
@@ -254,7 +269,7 @@ locals {
 
   external_secret_manifests = concat(
     [for s in local.external_secrets : {
-      apiVersion = "external-secrets.io/v1beta1"
+      apiVersion = "external-secrets.io/v1"
       kind       = "ExternalSecret"
       metadata = {
         name      = s.name
@@ -272,7 +287,7 @@ locals {
       }
     }],
     [for s in local.external_secrets_extract : {
-      apiVersion = "external-secrets.io/v1beta1"
+      apiVersion = "external-secrets.io/v1"
       kind       = "ExternalSecret"
       metadata = {
         name      = s.name
