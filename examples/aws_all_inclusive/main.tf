@@ -62,7 +62,7 @@ module "retool" {
   version = "~> 0.3"
 
   retool_helm_name          = "retool"
-  retool_helm_chart_version = "6.11.1"
+  retool_helm_chart_version = "6.11.10"
 
   db                        = module.db-main.outputs
   retool_services           = module.retool-services.outputs
@@ -71,7 +71,7 @@ module "retool" {
 
   retool_helm_extra_values = [yamlencode({
     image = {
-      tag = "3.334.0-stable"
+      tag = "4.0.5-stable"
     }
     podDisruptionBudget = {
       maxUnavailable = 1
