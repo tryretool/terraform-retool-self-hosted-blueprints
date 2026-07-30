@@ -22,9 +22,8 @@ resource "google_service_account_iam_binding" "external_dns_workload_identity" {
   ]
 }
 
-# external-dns needs dns.managedZones.list to discover zones even when zoneIdFilters
-# is set — that permission is project-scoped and not included in zone-level bindings.
-# roles/dns.admin at the project level covers all required operations.
+# external-dns lists zones to discover them even when the zone filter is set, and
+# that permission is project-scoped rather than part of a zone-level binding.
 resource "google_project_iam_member" "external_dns_admin" {
   project = var.project_id
   role    = "roles/dns.admin"
@@ -53,14 +52,6 @@ resource "helm_release" "external_dns" {
     # Watch Gateway HTTPRoute resources for hostnames to publish.
     sources = ["gateway-httproute"]
 
-    # Scope to this zone by ID rather than filtering by domain string. This has
-    # to go through extraArgs: the chart has no zoneIdFilters value and silently
-    # ignores one, which leaves external-dns free to write to every zone the
-    # project grants it.
-    extraArgs = {
-      "zone-id-filter" = [google_dns_managed_zone.main.name]
-    }
-
     # Never delete records — safe default for shared or delegated zones.
     policy = "upsert-only"
 
@@ -73,6 +64,12 @@ resource "helm_release" "external_dns" {
       }
     }
 
-    extraArgs = ["--google-project=${var.project_id}"]
+    # zone-id-filter has to be passed as a flag. The chart has no zoneIdFilters
+    # value and silently drops one, which leaves external-dns free to write to
+    # every zone in the project.
+    extraArgs = [
+      "--google-project=${var.project_id}",
+      "--zone-id-filter=${google_dns_managed_zone.main.name}",
+    ]
   })]
 }
