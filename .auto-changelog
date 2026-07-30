@@ -4,6 +4,7 @@
   "template": "compact",
   "unreleased": true,
   "commitLimit": false,
-  "ignoreCommitPattern": "chore\\(release\\)",
+  "ignoreCommitPattern": "chore\\(.*\\)",
+  "hideEmptyReleases": true,
   "tagPrefix": "f"
 }

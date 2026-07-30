@@ -62,11 +62,12 @@ require-on-main-branch:
 release: require-on-main-branch 
 release: require-BUMP
 release: ## Full release pipeline. Must run on main branch and use BUMP=(patch|minor|major).
-	target_version=$$($(MAKE) version-next BUMP=${BUMP}); \
+	@set -e -x; \
+		target_version=$$($(MAKE) version-next BUMP=${BUMP}); \
 	  echo "Releasing $$target_version"; \
 	  $(MAKE) changelog-sync VERSION=$$target_version; \
 		git add CHANGELOG.md; \
-		git commit --allow-empty -m "chore(release): $$target_version"; \
+		git commit -m "chore(release): $$target_version"; \
 	  git tag $$target_version; \
 	  git push origin main $$target_version; \
 	  gh release create $$target_version -t "$$target_version" --generate-notes
