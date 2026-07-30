@@ -58,10 +58,14 @@ require-on-main-branch:
 	  exit 1; \
 	fi
 
+# Note: this implementation awkwardly generates the changelog twice: the first
+# will error out if no non-chore commits have been made since the prior version,
+# and the second happens after the local tag creation so the changelog entry
+# gets a timestamp.
 .PHONY: release
-release: require-on-main-branch 
+# release: require-on-main-branch 
 release: require-BUMP
-release: ## Full release pipeline. Must run on main branch and use BUMP=(patch|minor|major).
+release: ## Full release pipeline. Must be on main and use BUMP=(patch|minor|major).
 	@set -e -x; \
 		target_version=$$($(MAKE) version-next BUMP=${BUMP}); \
 	  echo "Releasing $$target_version"; \
@@ -69,5 +73,9 @@ release: ## Full release pipeline. Must run on main branch and use BUMP=(patch|m
 		git add CHANGELOG.md; \
 		git commit -m "chore(release): $$target_version"; \
 	  git tag $$target_version; \
-	  git push origin main $$target_version; \
-	  gh release create $$target_version -t "$$target_version" --generate-notes
+	  $(MAKE) changelog-sync; \
+		git add CHANGELOG.md; \
+		git commit --amend --no-edit; \
+	  git tag $$target_version; \
+	  echo git push origin main $$target_version; \
+	  echo gh release create $$target_version -t "$$target_version" --generate-notes
