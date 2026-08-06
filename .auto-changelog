@@ -1,0 +1,10 @@
+{
+  "_docs": "https://github.com/cookpete/auto-changelog",
+  "output": "CHANGELOG.md",
+  "template": "compact",
+  "unreleased": true,
+  "commitLimit": false,
+  "ignoreCommitPattern": "chore\\(.*\\)",
+  "hideEmptyReleases": true,
+  "tagPrefix": "f"
+}
