@@ -19,17 +19,21 @@ Azure equivalents are noted where they differ.
 
 Everything is placed in dedicated namespaces instead of `default`:
 
-| Namespace | Contents |
-|---|---|
-| `<prefix>-retool` | the Retool Helm release, its ExternalSecrets, the namespaced ESO `SecretStore`, the RR credentials Secret, the user-ingress `TargetGroupBinding` |
-| `<prefix>-retool-services` | the supporting operators this deployment owns (ESO, reloader, cert-manager, ALB controller, metrics-server) |
-| `kube-system` | AWS Karpenter only (cluster-wide; from-scratch clusters only) |
+| Namespace                  | Contents                                                                                                                                         |
+|----------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------|
+| `<prefix>-retool`          | the Retool Helm release, its ExternalSecrets, the namespaced ESO `SecretStore`, the RR credentials Secret, the user-ingress `TargetGroupBinding` |
+| `<prefix>-retool-services` | the supporting operators this deployment owns (ESO, reloader, cert-manager, ALB controller, metrics-server)                                      |
+| `kube-system`              | AWS Karpenter only (cluster-wide; from-scratch clusters only)                                                                                    |
 
-Both namespaces are computed once inside `aws-retool-services` and exported as
-`retool_namespace` / `services_namespace`, so `retool-helm` and
-`aws-user-ingress` consume the same values. Override `retool_namespace` /
-`services_namespace` to target namespaces your platform team pre-created, and
-set `create_namespaces = false` so Terraform doesn't try to own them.
+Both namespaces are computed once inside `<cloud>-retool-services` and exported
+as `retool_namespace` / `services_namespace`, so downstream modules
+`retool-helm` and `aws-user-ingress` use the same namespaces without diverging
+or duplicate config. 
+
+If you want to deploy these workloads into existing namespaces, override
+`retool_namespace` / `services_namespace` to target namespaces your platform
+team pre-created, and set `create_namespaces = false` so Terraform doesn't try
+to own them.
 
 ### 2. Disable the cluster-wide singletons you already run
 
@@ -55,40 +59,14 @@ left untainted for general workloads).
 ### 3. Scoped operators and non-default ingress classes
 
 - **reloader** is scoped to only watch `<prefix>-retool` (via a
-  `namespaceSelector` on the namespace's `kubernetes.io/metadata.name` label), so
-  it never restarts other tenants' workloads.
-- The **ALB controller's IngressClass** is named `<prefix>-alb` and is **not**
+  `namespaceSelector` on the namespace's `kubernetes.io/metadata.name` label),
+  so it never restarts other namespaces' workloads.
+- In AWS, The **ALB controller's IngressClass** is named `<prefix>-alb` and is **not**
   marked the cluster-default class. Set `make_default_ingress_class = true` only
   if you want this deployment to own the default IngressClass. (Retool routes via
   a `TargetGroupBinding` and does not need a default class.)
 
-## Per-cloud differences
-
-The namespace model, `create_namespaces`, and the namespaced ESO `SecretStore`
-(named `retool-secretstore`, in the retool namespace) are identical across
-clouds. Cloud-specific points:
-
-- **AWS** — operators (ESO, cert-manager, ALB controller, metrics-server) live in
-  `aws-retool-services`. Toggles: `enable_external_secrets`, `enable_reloader`,
-  `enable_cert_manager`, `enable_alb_controller`, `enable_metrics_server`,
-  `install_crds`, `make_default_ingress_class`. `aws-eks` adds `enable_karpenter`.
-  ESO uses controller-based auth (Pod Identity); in shared mode attach
-  `eso_irsa_role_arn` to the platform ESO.
-- **GCP** — `gcp-retool-services` runs ESO + reloader (`enable_external_secrets`,
-  `enable_reloader`, `install_crds`); `gcp-user-ingress` runs external-dns
-  (`enable_external_dns`), already scoped to the retool namespace and using a
-  per-deployment `txtOwnerId`. The Gateway/HTTPRoute live in the retool
-  namespace. ESO uses the controller's Workload Identity; in shared mode bind the
-  platform ESO to `eso_gcp_service_account_email`.
-- **Azure** — `azure-retool-services` runs ESO + reloader; `azure-user-ingress`
-  runs cert-manager + AGIC. Toggles: `enable_external_secrets`, `enable_reloader`,
-  `enable_cert_manager`, `enable_agic`, `install_crds`, plus `ingress_class_name`
-  and `cluster_issuer_name` to target an existing ingress controller / ClusterIssuer.
-  ESO uses the controller's Workload Identity; in shared mode federate the
-  platform ESO's service account to `eso_identity_client_id`. AGIC's own
-  IngressClass name is fixed by its chart, so conflict avoidance in a shared
-  cluster is via `enable_agic = false` (bring your own ingress) rather than
-  renaming the class.
+<!-- TODO: confirm the above?-->
 
 ## Pinning pods to node pools
 
@@ -108,6 +86,7 @@ each module you deploy so the whole stack lands on the pool:
 
 ```hcl
 locals {
+  # ...
   pod_node_selector = { "retool.com/pool" = "retool" }
   pod_tolerations = [{
     key      = "dedicated"
@@ -141,58 +120,102 @@ set, `pod_node_selector` replaces a chart's built-in `nodeSelector` default
 where one exists (e.g. cert-manager defaults to `kubernetes.io/os: linux`);
 include any such keys you still need in your map.
 
-### Relocating CRD-installing charts (cert-manager, External Secrets Operator)
+## Shared vs. per-instance Postgres database
 
-**TODO:** change this guidance to have `install_crds = true` (default) in exactly 1 of the retool-services modules deployed to a shared cluster.
+When deploying multiple Retool instances into a single Kubernetes cluster, you
+have the choice of sharing a single Postgres DB for all Retool instances, or
+running a dedicated Postgres DB for each instance. The high level tradeoffs are
+below.
 
-cert-manager and the External Secrets Operator install their CRDs with their
-Helm release (`install_crds = true`), and those CRDs carry
-`helm.sh/resource-policy: keep`. When the release moves namespaces, Helm
-uninstalls the old release but **keeps the CRDs** — stamped with the old
-release's ownership annotation. The relocated release then fails to install:
+| Factor                        | Shared DB                 | Per-instance DB                  |
+|-------------------------------|---------------------------|----------------------------------|
+| Cost                          | :white_check_mark: Lowest | :warning: Moderate–High          |
+| Resource exhaustion tolerance | :warning: Lowest          | :white_check_mark: High          |
+| Reliability                   | :warning: Lowest          | :white_check_mark: High          |
+| Manual setup                  | :warning: Some required   | :white_check_mark: None required |
 
+Besides the above tradeoffs, running multiple Retool instances off a single
+Postgres DB instance is fully supported if adequately setup.
+
+### Configuration for shared Postgres DB host
+
+For the sake of illustration, say your goal is to create 2 separate Retool
+instances, a "dev" and "prod" pair, and you want them to share a Kubernetes
+cluster and a Postgres DB host to minimize costs.
+
+To accomplish this, you'll need to follow these steps, explained in detail below:
+
+1. Create 2 databases within your Postgres DB host, 1 for each Retool instance
+2. Arrange your Terraform code so that each Retool instance uses the same
+   Postgres host and connection credentials but only uses its corresponding
+   database within the host.
+
+#### 1. Creating per-instance databases inside the Postgres DB instance
+<!-- TODO: separate guide for getting a psql shell -->
+
+```sql
+CREATE DATABASE "retool-acme-dev";
+CREATE DATABASE "retool-acme-prod";
 ```
-Error: Unable to continue with install: CustomResourceDefinition
-"certificaterequests.cert-manager.io" ... cannot be imported into the current
-release: invalid ownership metadata; annotation validation error: key
-"meta.helm.sh/release-namespace" must equal "<prefix>-retool-services":
-current value is "cert-manager"
+
+#### 1. Duplicating Retool instances to share a Postgres host
+
+The `<cloud>-retool-services` and `retool-helm` modules usually expect an input
+variable like `db = module.db-main.outputs`. This `db` input contains structured
+connection settings that tell the downstream `<cloud>-retool-services` and
+`retool-helm` modules where to find and how to connect to their database.
+
+In the case of multiple Retool instances sharing a single Postgres host, we need
+to have each Retool instance use mostly the same shared connection settings
+(i.e. host, port, username, password stored in the CSP's secure secret store),
+but with an override for database name. We can accomplish that with a config
+arranged like below.
+
+```terraform
+locals {
+  # ...
+  prefix_global = "acme"
+  
+  dev = {
+    prefix = "acme-dev"
+    db_outputs = merge(module.db-main.outputs, {
+      name = "retool-${local.prefix_dev}"
+    })
+  }
+  
+  prod = {
+    prefix = "acme-prod"
+    db_outputs = merge(module.db-main.outputs, {
+      name = "retool-${local.prefix_prod}"
+    })
+  }
+}
+
+module "db-main" {
+  # ...
+  prefix = prefix_global
+}
+
+# repeat this whole module for -dev and -prod both
+module "retool-services-dev" {
+  # ...
+  prefix = local.dev.prefix
+  db = local.dev.db_outputs
+}
+
+# repeat this whole module for -dev and -prod both
+module "retool-dev" {
+  # ...
+  retool_services = module.retool-services-dev.outputs
+  db = local.dev.db_outputs
+}
 ```
 
-The CRDs already exist cluster-wide, so resolve it one of two ways:
-
-1. **Don't re-own the CRDs (simplest).** Set `install_crds = false` on the
-   relocated module for the migration apply — the existing CRDs are left in
-   place and the new release doesn't try to adopt them. cert-manager / ESO work
-   fine against externally-managed CRDs.
-
-   ```hcl
-   module "retool-services" { # and azure user-ingress (cert-manager)
-     # ...
-     install_crds = false
-   }
-   ```
-
-2. **Keep Helm managing them.** Re-stamp the retained CRDs' ownership annotation
-   to the new namespace before re-applying, so the relocated release (with
-   `install_crds = true`) can adopt them:
-
-   ```sh
-   # cert-manager
-   kubectl annotate crd \
-     certificaterequests.cert-manager.io certificates.cert-manager.io \
-     challenges.acme.cert-manager.io clusterissuers.cert-manager.io \
-     issuers.cert-manager.io orders.acme.cert-manager.io \
-     meta.helm.sh/release-namespace=<prefix>-retool-services --overwrite
-
-   # External Secrets Operator (if you hit the same error)
-   kubectl annotate crd \
-     $(kubectl get crd -o name | grep external-secrets.io) \
-     meta.helm.sh/release-namespace=<prefix>-retool-services --overwrite
-   ```
-
-   (The release *name* is unchanged — `cert-manager` / `external-secrets` — so
-   only `release-namespace` needs patching.)
-
-This only affects in-place migrations; net-new deployments in the prefixed
-layout create the CRDs owned by the relocated release from the start.
+> [!NOTE]  
+> The above snippet does not show how your `<cloud>-vpc`/`<cloud>-vnet` module,
+> your managed Kubernetes module, nor your `<cloud>-user-ingress` module should
+> be configured with this setup. Your vpc/vnet module and Kubernetes modules
+> would use the `local.prefix_global` shown here, like `db-main` does. Your
+> `<cloud>-user-ingress` module would be duplicated for each Retool instance,
+> like `retool-dev` shown here, and would use a per-instance domain name, but it
+> does not need a `db` input.
