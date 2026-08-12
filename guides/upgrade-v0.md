@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+### metrics-server moved from `aws-retool-services` to `aws-eks`
+
+metrics-server is now installed by `aws-eks` as an EKS-managed addon in
+`kube-system`, rather than by `aws-retool-services` as a Helm release. Move the
+`enable_metrics_server` variable to your `aws-eks` module block if you set it
+(it still defaults to `true`); shared-cluster deployments don't use `aws-eks` and
+no longer install metrics-server at all.
+
+Just apply. The old Helm release is uninstalled and the addon created in the same
+run. The two have no dependency between them, so if Terraform happens to
+uninstall last it can delete the cluster-scoped `metrics.k8s.io` APIService the
+new addon just took over. Check afterwards:
+
+```
+kubectl top nodes
+```
+
+If that fails, re-create the addon:
+
+```
+terraform apply -replace='module.eks.aws_eks_addon.metrics_server[0]'
+```
+
 ### Helm release namespace consolidation
 
 The modules for `retool-helm`, `<cloud>-retool-services`, and

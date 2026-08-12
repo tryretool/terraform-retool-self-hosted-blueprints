@@ -23,12 +23,6 @@ variable "eks" {
   description = "EKS cluster outputs: name and oidc_provider_arn (e.g. module.eks.outputs)."
 }
 
-variable "enable_metrics_server" {
-  type        = bool
-  default     = true
-  description = "Whether to deploy the Kubernetes metrics-server (needed for kubectl top / HPA). Disable in shared clusters where a cluster-wide metrics-server already exists (only one can own the metrics.k8s.io APIService)."
-}
-
 # --- Namespaces ---
 # Both the Retool application namespace and the supporting-services namespace are
 # computed here (this module is the single source of truth) and exported via
@@ -45,7 +39,7 @@ variable "retool_namespace" {
 variable "services_namespace" {
   type        = string
   default     = null
-  description = "Namespace for Retool's supporting operators (External Secrets Operator, reloader, cert-manager, ALB controller, metrics-server). When null, defaults to \"<prefix>-retool-services\"."
+  description = "Namespace for Retool's supporting operators (External Secrets Operator, reloader, cert-manager, ALB controller). When null, defaults to \"<prefix>-retool-services\"."
 }
 
 variable "create_namespaces" {

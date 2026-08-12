@@ -35,7 +35,7 @@ output "retool_namespace" {
 }
 
 output "services_namespace" {
-  description = "Namespace the supporting operators (ESO, reloader, cert-manager, ALB controller, metrics-server) are deployed into."
+  description = "Namespace the supporting operators (ESO, reloader, cert-manager, ALB controller) are deployed into."
   value       = local.outputs.services_namespace
 }
 

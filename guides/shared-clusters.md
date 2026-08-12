@@ -22,8 +22,8 @@ Everything is placed in dedicated namespaces instead of `default`:
 | Namespace                  | Contents                                                                                                                                         |
 |----------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------|
 | `<prefix>-retool`          | the Retool Helm release, its ExternalSecrets, the namespaced ESO `SecretStore`, the RR credentials Secret, the user-ingress `TargetGroupBinding` |
-| `<prefix>-retool-services` | the supporting operators this deployment owns (ESO, reloader, cert-manager, ALB controller, metrics-server)                                      |
-| `kube-system`              | AWS Karpenter only (cluster-wide; from-scratch clusters only)                                                                                    |
+| `<prefix>-retool-services` | the supporting operators this deployment owns (ESO, reloader, cert-manager, ALB controller)                                                      |
+| `kube-system`              | AWS Karpenter and the cluster addons (cluster-wide; from-scratch clusters only)                                                                  |
 
 Both namespaces are computed once inside `<cloud>-retool-services` and exported
 as `retool_namespace` / `services_namespace`, so downstream modules
@@ -43,7 +43,6 @@ A shared cluster usually already runs these. Each has an `enable_*` toggle on
 - `enable_external_secrets` — the External Secrets Operator
 - `enable_cert_manager` — cert-manager (used by the ALB controller's webhook)
 - `enable_alb_controller` — the AWS Load Balancer Controller
-- `enable_metrics_server` — metrics-server
 - `install_crds` — whether the bundled operators install their (cluster-scoped) CRDs
 
 Turning `enable_external_secrets` off still creates the `SecretStore` and the
