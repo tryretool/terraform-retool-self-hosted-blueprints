@@ -4,7 +4,6 @@ This is a Terraform module which adds provides extensions to an EKS Kubernetes c
 
 * Installs [AWS Load Balancer Controller](https://kubernetes-sigs.github.io/aws-load-balancer-controller/latest/)
   * Includes a default IngressClass and a suitable Service Account with necessary IAM permissions
-* Installs [Metrics Server](https://github.com/kubernetes-sigs/metrics-server)
 * Installs [External Secrets Operator](https://external-secrets.io/latest/)
   * Includes a suitable Service Account with necessary IAM permissions
 * Creates an S3 bucket for use as git storage backend for Retool apps

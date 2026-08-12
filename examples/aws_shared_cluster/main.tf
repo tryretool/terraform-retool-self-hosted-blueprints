@@ -8,12 +8,12 @@
 #   - <prefix>-retool-services  Retool's supporting operators (only the ones
 #                               this deployment owns)
 #
-# Cluster-wide singletons (ESO, cert-manager, the ALB controller, metrics-server)
-# are assumed to already exist in the shared cluster and are turned OFF here. The
-# SecretStore + ExternalSecrets are still created (the platform's ESO reconciles
-# them), and you must grant the platform ESO read access to Retool's secrets —
-# attach module.retool-services.outputs.eso_irsa_role_arn to its service account
-# (or replicate that policy onto whatever identity its controller uses).
+# Cluster-wide singletons (ESO, cert-manager, the ALB controller) are assumed to
+# already exist in the shared cluster and are turned OFF here. The SecretStore +
+# ExternalSecrets are still created (the platform's ESO reconciles them), and
+# you must grant the platform ESO read access to Retool's secrets — attach
+# module.retool-services.outputs.eso_irsa_role_arn to its service account (or
+# replicate that policy onto whatever identity its controller uses).
 ###############################################################################
 
 locals {
@@ -98,7 +98,6 @@ module "retool-services" {
   enable_external_secrets = false
   enable_cert_manager     = false
   enable_alb_controller   = false
-  enable_metrics_server   = false
   install_crds            = false
 }
 

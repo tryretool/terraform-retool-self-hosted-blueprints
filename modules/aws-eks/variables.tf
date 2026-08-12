@@ -154,6 +154,16 @@ variable "enable_ebs_csi_driver" {
 }
 
 # ---------------------------------------------------------------------------
+# Metrics server
+# ---------------------------------------------------------------------------
+
+variable "enable_metrics_server" {
+  type        = bool
+  default     = true
+  description = "Whether to install the EKS-managed metrics-server addon (needed for kubectl top / HPA). It is a cluster-wide singleton — only one copy can own the metrics.k8s.io APIService — so disable it if the cluster already runs one."
+}
+
+# ---------------------------------------------------------------------------
 # Access entries
 # ---------------------------------------------------------------------------
 
