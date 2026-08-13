@@ -27,9 +27,3 @@ provider "helm" {
   }
 }
 
-provider "kubectl" {
-  host                   = "https://${module.gke.cluster.endpoint}"
-  token                  = data.google_client_config.default.access_token
-  cluster_ca_certificate = base64decode(module.gke.cluster.certificate_authority_data)
-  load_config_file       = false
-}

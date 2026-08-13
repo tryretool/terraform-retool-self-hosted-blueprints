@@ -53,7 +53,7 @@ resource "google_certificate_manager_certificate_map_entry" "main" {
   project      = var.project_id
   labels       = local.all_labels
   lifecycle {
-    replace_triggered_by = [ google_certificate_manager_certificate.main ]    
+    replace_triggered_by = [google_certificate_manager_certificate.main]
   }
 }
 
@@ -65,6 +65,6 @@ resource "google_certificate_manager_certificate_map_entry" "wildcard" {
   project      = var.project_id
   labels       = local.all_labels
   lifecycle {
-    replace_triggered_by = [ google_certificate_manager_certificate.main ]    
+    replace_triggered_by = [google_certificate_manager_certificate.main]
   }
 }

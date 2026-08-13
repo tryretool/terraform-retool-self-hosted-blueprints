@@ -17,9 +17,27 @@ resource "random_password" "pg_password" {
   special = false
 }
 
+# Cloud SQL takes its private IP from the peering range that private_service_access
+# sets up, and that range is not usable the moment the peering resource returns.
+# Callers order this module after the VPC (the marketplace root uses depends_on), so
+# with no wait the instance create fires a fraction of a second after peering and the
+# create operation comes back with a transient INTERNAL_ERROR. The provider prints that
+# as an empty "Error waiting for Create Instance:" and never retries, so the apply fails
+# while GCP goes on to build the instance. Cleaning that up means deleting an orphan
+# whose name Cloud SQL then reserves for a week, which costs far more than the wait.
+resource "time_sleep" "psa_propagation" {
+  create_duration = "90s"
+
+  triggers = {
+    network_id = var.vpc.network_id
+  }
+}
+
 module "pg" {
   source  = "terraform-google-modules/sql-db/google//modules/postgresql"
   version = "25.2.2"
+
+  module_depends_on = [time_sleep.psa_propagation.id]
 
   name                 = "${var.prefix}-${var.db_purpose}"
   random_instance_name = true

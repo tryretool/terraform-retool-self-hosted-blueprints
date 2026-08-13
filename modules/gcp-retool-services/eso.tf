@@ -5,6 +5,11 @@ locals {
     service_account_name = "external-secrets"
   }
 
+  eso_image = {
+    repository = var.external_secrets_chart.image_repository
+    tag        = var.external_secrets_chart.image_tag
+  }
+
   # Secret name for encryption-key — either user-provided or auto-generated
   encryption_key_secret_ref = (
     var.encryption_key_secret_name != null
@@ -32,13 +37,18 @@ resource "google_service_account" "eso" {
 # carry that dependency into the graph so that eso_workload_identity (below) waits
 # until the GKE cluster is up and its Workload Identity pool ({project_id}.svc.id.goog)
 # has been created before we try to bind it.
-resource "terraform_data" "gke_workload_identity_pool_ready" {
-  input = var.gke.endpoint
+#
+# null_resource rather than terraform_data because GCP Marketplace rejects the
+# builtin terraform provider that terraform_data comes from.
+resource "null_resource" "gke_workload_identity_pool_ready" {
+  triggers = {
+    endpoint = var.gke.endpoint
+  }
 }
 
 # Workload Identity binding: k8s ServiceAccount external-secrets/external-secrets → GCP SA
 resource "google_service_account_iam_binding" "eso_workload_identity" {
-  depends_on = [terraform_data.gke_workload_identity_pool_ready]
+  depends_on = [null_resource.gke_workload_identity_pool_ready]
 
   service_account_id = google_service_account.eso.name
   role               = "roles/iam.workloadIdentityUser"
@@ -108,98 +118,90 @@ resource "helm_release" "external_secrets" {
   create_namespace = true
 
   name       = local.eso.name
-  repository = "https://charts.external-secrets.io"
+  repository = var.external_secrets_chart.repository
   chart      = "external-secrets"
-  version    = "0.12.1"
+  version    = var.external_secrets_chart.version
   wait       = true
 
   values = [yamlencode({
     installCRDs = true
+
+    # The operator, webhook and cert-controller are three deployments running the
+    # same image, each reading its own values block. Setting only the top one
+    # leaves the other two pulling from upstream.
+    image          = local.eso_image
+    certController = { image = local.eso_image }
+
+    webhook = {
+      image = local.eso_image
+
+      # Terraform destroys the node pool before these releases, so the webhook
+      # pods are gone by the time the CRs are deleted. Under the default Fail
+      # policy the unreachable webhook rejects those deletes and the destroy
+      # hangs. From 2.8.0 the chart wires this into every validating webhook,
+      # including `secretstore-validate`, which earlier versions left at Fail.
+      failurePolicy = "Ignore"
+    }
+
     serviceAccount = {
       annotations = {
         "iam.gke.io/gcp-service-account" = google_service_account.eso.email
       }
     }
-    # If a webhook pod is gone at destroy time, the default Fail policy rejects
-    # the CR deletes and terraform destroy hangs; Ignore lets them through. This
-    # only reaches the `externalsecret-validate` webhook — the chart hardcodes
-    # `secretstore-validate` to Fail, so we patch that one below.
-    webhook = {
-      failurePolicy = "Ignore"
-    }
   })]
 }
 
-# Flip `secretstore-validate` (which the chart leaves at Fail) to Ignore too, so
-# deleting the ClusterSecretStore doesn't hang destroy when its webhook pod is
-# gone. secret_store depends on this, so the store is removed while Ignore is
-# still in effect. Server-side apply on only failurePolicy leaves the rest of
-# the webhook — notably the cert-controller's injected caBundle — untouched.
-resource "kubectl_manifest" "secretstore_webhook_failure_policy" {
-  server_side_apply = true
-  force_conflicts   = true
-  # Partial manifest: the required webhook fields (clientConfig, sideEffects,
-  # admissionReviewVersions) are omitted so SSA leaves them to the cert-controller.
-  # Disable client-side schema validation, which would reject the incomplete object.
-  validate_schema = false
+# The External Secrets CRs are applied through Helm because GCP Marketplace
+# permits neither gavinbunney/kubectl nor kubernetes_manifest here. See
+# chart/Chart.yaml for why.
+#
+# The store is its own release so it's created before the ExternalSecrets that
+# reference it, rather than leaning on how Helm happens to order unknown kinds.
+resource "helm_release" "secret_store" {
+  name      = "${var.prefix}-secret-store"
+  namespace = local.retool_namespace
+  chart     = "${path.module}/chart"
 
-  yaml_body = yamlencode({
-    apiVersion = "admissionregistration.k8s.io/v1"
-    kind       = "ValidatingWebhookConfiguration"
-    metadata = {
-      name = "secretstore-validate"
-    }
-    webhooks = [
-      {
-        name          = "validate.secretstore.external-secrets.io"
-        failurePolicy = "Ignore"
-      },
-      {
-        name          = "validate.clustersecretstore.external-secrets.io"
-        failurePolicy = "Ignore"
-      },
-    ]
-  })
-
-  depends_on = [helm_release.external_secrets]
-}
-
-resource "kubectl_manifest" "secret_store" {
-  yaml_body = yamlencode({
-    apiVersion = "external-secrets.io/v1beta1"
-    kind       = "ClusterSecretStore"
-    metadata = {
-      name = "gcp-secretsmanager"
-    }
-    spec = {
-      provider = {
-        gcpsm = {
-          projectID = var.project_id
-          auth = {
-            workloadIdentity = {
-              clusterLocation  = var.gke.location
-              clusterName      = var.gke.name
-              clusterProjectID = var.project_id
-              serviceAccountRef = {
-                name      = local.eso.service_account_name
-                namespace = local.eso.namespace
+  values = [yamlencode({
+    manifests = [{
+      apiVersion = "external-secrets.io/v1"
+      kind       = "ClusterSecretStore"
+      metadata = {
+        name = local.secret_store_ref.name
+      }
+      spec = {
+        provider = {
+          gcpsm = {
+            projectID = var.project_id
+            auth = {
+              workloadIdentity = {
+                clusterLocation  = var.gke.location
+                clusterName      = var.gke.name
+                clusterProjectID = var.project_id
+                serviceAccountRef = {
+                  name      = local.eso.service_account_name
+                  namespace = local.eso.namespace
+                }
               }
             }
           }
         }
       }
-    }
-  })
+    }]
+  })]
 
-  depends_on = [
-    helm_release.external_secrets,
-    kubectl_manifest.secretstore_webhook_failure_policy,
-  ]
+  depends_on = [helm_release.external_secrets]
 }
 
 locals {
   retool_namespace = "default"
 
+  secret_store_ref = {
+    kind = "ClusterSecretStore"
+    name = "gcp-secretsmanager"
+  }
+
+  # ExternalSecrets that map named Secret Manager secrets to individual keys.
   external_secrets = concat(
     [
       {
@@ -238,126 +240,79 @@ locals {
       },
     ] : [],
   )
-}
 
-resource "kubectl_manifest" "external_secret" {
-  for_each = { for s in local.external_secrets : s.name => s }
+  # ExternalSecrets that expand every key of a JSON secret. extra-env-vars uses
+  # Merge so keys written into the target Secret by other means survive a refresh.
+  external_secrets_extract = concat(
+    [
+      {
+        name                   = "extra-env-vars"
+        remote_key             = "retool-${var.prefix}-extra-env-vars"
+        target_deletion_policy = "Merge"
+      },
+    ],
+    var.enable_agent_sandbox ? [
+      {
+        name                   = "agent-sandbox"
+        remote_key             = "retool-${var.prefix}-agent-sandbox"
+        target_deletion_policy = "Retain"
+      },
+    ] : [],
+    var.enable_rr_gcs ? [
+      {
+        name                   = "rr-gcs-credentials"
+        remote_key             = "retool-${var.prefix}-rr-gcs"
+        target_deletion_policy = "Retain"
+      },
+    ] : [],
+  )
 
-  yaml_body = yamlencode({
-    apiVersion = "external-secrets.io/v1beta1"
-    kind       = "ExternalSecret"
-    metadata = {
-      name      = each.value.name
-      namespace = local.retool_namespace
-    }
-    spec = {
-      refreshInterval = "1m"
-      secretStoreRef = {
-        kind = "ClusterSecretStore"
-        name = "gcp-secretsmanager"
+  external_secret_manifests = concat(
+    [for s in local.external_secrets : {
+      apiVersion = "external-secrets.io/v1"
+      kind       = "ExternalSecret"
+      metadata = {
+        name      = s.name
+        namespace = local.retool_namespace
       }
-      target = {
-        name           = each.value.name
-        creationPolicy = "Owner"
-        deletionPolicy = each.value.target_deletion_policy
-      }
-      data = each.value.data
-    }
-  })
-
-  depends_on = [kubectl_manifest.secret_store]
-}
-
-resource "kubectl_manifest" "external_secret_extra_env_vars" {
-  yaml_body = yamlencode({
-    apiVersion = "external-secrets.io/v1beta1"
-    kind       = "ExternalSecret"
-    metadata = {
-      name      = "extra-env-vars"
-      namespace = local.retool_namespace
-    }
-    spec = {
-      refreshInterval = "1m"
-      secretStoreRef = {
-        kind = "ClusterSecretStore"
-        name = "gcp-secretsmanager"
-      }
-      target = {
-        name           = "extra-env-vars"
-        creationPolicy = "Owner"
-        deletionPolicy = "Merge"
-      }
-      dataFrom = [{
-        extract = {
-          key = "retool-${var.prefix}-extra-env-vars"
+      spec = {
+        refreshInterval = "1m"
+        secretStoreRef  = local.secret_store_ref
+        target = {
+          name           = s.name
+          creationPolicy = "Owner"
+          deletionPolicy = s.target_deletion_policy
         }
-      }]
-    }
-  })
-
-  depends_on = [kubectl_manifest.secret_store]
+        data = s.data
+      }
+    }],
+    [for s in local.external_secrets_extract : {
+      apiVersion = "external-secrets.io/v1"
+      kind       = "ExternalSecret"
+      metadata = {
+        name      = s.name
+        namespace = local.retool_namespace
+      }
+      spec = {
+        refreshInterval = "1m"
+        secretStoreRef  = local.secret_store_ref
+        target = {
+          name           = s.name
+          creationPolicy = "Owner"
+          deletionPolicy = s.target_deletion_policy
+        }
+        dataFrom = [{ extract = { key = s.remote_key } }]
+      }
+    }],
+  )
 }
 
-resource "kubectl_manifest" "external_secret_agent_sandbox" {
-  count = var.enable_agent_sandbox ? 1 : 0
+resource "helm_release" "external_secret_crs" {
+  name      = "${var.prefix}-external-secrets"
+  namespace = local.retool_namespace
+  chart     = "${path.module}/chart"
 
-  yaml_body = yamlencode({
-    apiVersion = "external-secrets.io/v1beta1"
-    kind       = "ExternalSecret"
-    metadata = {
-      name      = "agent-sandbox"
-      namespace = local.retool_namespace
-    }
-    spec = {
-      refreshInterval = "1m"
-      secretStoreRef = {
-        kind = "ClusterSecretStore"
-        name = "gcp-secretsmanager"
-      }
-      target = {
-        name           = "agent-sandbox"
-        creationPolicy = "Owner"
-        deletionPolicy = "Retain"
-      }
-      dataFrom = [{
-        extract = {
-          key = "retool-${var.prefix}-agent-sandbox"
-        }
-      }]
-    }
-  })
+  values = [yamlencode({ manifests = local.external_secret_manifests })]
 
-  depends_on = [kubectl_manifest.secret_store]
-}
-
-resource "kubectl_manifest" "external_secret_rr_gcs" {
-  count = var.enable_rr_gcs ? 1 : 0
-
-  yaml_body = yamlencode({
-    apiVersion = "external-secrets.io/v1beta1"
-    kind       = "ExternalSecret"
-    metadata = {
-      name      = "rr-gcs-credentials"
-      namespace = local.retool_namespace
-    }
-    spec = {
-      refreshInterval = "1m"
-      secretStoreRef = {
-        kind = "ClusterSecretStore"
-        name = "gcp-secretsmanager"
-      }
-      target = {
-        name           = "rr-gcs-credentials"
-        creationPolicy = "Owner"
-        deletionPolicy = "Retain"
-      }
-      dataFrom = [{
-        extract = {
-          key = "retool-${var.prefix}-rr-gcs"
-        }
-      }]
-    }
-  })
-
-  depends_on = [kubectl_manifest.secret_store]
+  depends_on = [helm_release.secret_store]
 }

@@ -3,11 +3,16 @@ resource "helm_release" "reloader" {
   create_namespace = false
 
   name       = "reloader"
-  repository = "https://stakater.github.io/stakater-charts"
+  repository = var.reloader_chart.repository
   chart      = "reloader"
-  version    = "2.2.9"
+  version    = var.reloader_chart.version
 
   values = [yamlencode({
+    image = {
+      repository = var.reloader_chart.image_repository
+      tag        = var.reloader_chart.image_tag
+    }
+
     reloader = {
       reloadOnCreate   = true
       reloadOnDelete   = true
