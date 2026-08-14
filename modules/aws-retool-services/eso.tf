@@ -17,15 +17,20 @@ locals {
     : var.license_key_secret_path
   )
 
+  jwt_secret_remote_ref = coalesce(var.jwt_secret_secret_path, "retool/${var.prefix}/jwt-secret")
+
   external_secrets = concat(
     [
       {
         name = "encryption-key"
         data = [{
           secretKey = "encryption-key"
-          remoteRef = {
-            key = var.encryption_key_secret_name != null ? var.encryption_key_secret_name : local.encryption_key_sm_path
-          }
+          remoteRef = merge(
+            {
+              key = var.encryption_key_secret_name != null ? var.encryption_key_secret_name : local.encryption_key_sm_path
+            },
+            var.encryption_key_secret_property != null ? { property = var.encryption_key_secret_property } : {},
+          )
         }]
         target_deletion_policy = "Retain"
       },
@@ -33,7 +38,10 @@ locals {
         name = "jwt-secret"
         data = [{
           secretKey = "jwt-secret"
-          remoteRef = { key = "retool/${var.prefix}/jwt-secret" }
+          remoteRef = merge(
+            { key = local.jwt_secret_remote_ref },
+            var.jwt_secret_secret_property != null ? { property = var.jwt_secret_secret_property } : {},
+          )
         }]
         target_deletion_policy = "Retain"
       },
@@ -43,7 +51,7 @@ locals {
           secretKey = "password"
           remoteRef = {
             key      = var.db.master_user_secret_arn
-            property = "password"
+            property = var.db_password_secret_property
           }
         }]
         target_deletion_policy = "Retain"
@@ -54,7 +62,10 @@ locals {
         name = "license-key"
         data = [{
           secretKey = "license-key"
-          remoteRef = { key = local.license_key_remote_ref }
+          remoteRef = merge(
+            { key = local.license_key_remote_ref },
+            var.license_key_secret_property != null ? { property = var.license_key_secret_property } : {},
+          )
         }]
         target_deletion_policy = "Retain"
       },
@@ -65,6 +76,20 @@ locals {
     name   = "agent-sandbox"
     sm_key = "retool/${var.prefix}/agent-sandbox"
   } : null
+
+  # Everything ESO is allowed to read: this module's own retool/{prefix}/*
+  # namespace, the database credentials, plus any pre-existing secrets the
+  # caller pointed us at (which live wherever their owner put them).
+  eso_readable_secrets = distinct(compact(concat(
+    [
+      "arn:aws:secretsmanager:${var.region}:${data.aws_caller_identity.current.account_id}:secret:retool/${var.prefix}/*",
+      var.db.master_user_secret_arn,
+      var.encryption_key_secret_name,
+      var.jwt_secret_secret_path,
+      var.license_key_secret_path,
+    ],
+    var.extra_secret_read_arns,
+  )))
 }
 
 data "aws_caller_identity" "current" {}
@@ -90,52 +115,17 @@ resource "aws_iam_policy" "eso" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = concat(
-      [{
-        Effect = "Allow"
-        Action = [
-          "secretsmanager:GetSecretValue",
-          "secretsmanager:DescribeSecret",
-          "secretsmanager:ListSecretVersionIds",
-          "secretsmanager:GetResourcePolicy",
-          "secretsmanager:BatchGetSecretValue",
-        ]
-        Resource = "arn:aws:secretsmanager:${var.region}:${data.aws_caller_identity.current.account_id}:secret:retool/${var.prefix}/*"
-      }],
-      [{
-        Effect = "Allow"
-        Action = [
-          "secretsmanager:GetSecretValue",
-          "secretsmanager:DescribeSecret",
-          "secretsmanager:ListSecretVersionIds",
-          "secretsmanager:GetResourcePolicy",
-          "secretsmanager:BatchGetSecretValue",
-        ]
-        Resource = var.db.master_user_secret_arn
-      }],
-      var.encryption_key_secret_name != null ? [{
-        Effect = "Allow"
-        Action = [
-          "secretsmanager:GetSecretValue",
-          "secretsmanager:DescribeSecret",
-          "secretsmanager:ListSecretVersionIds",
-          "secretsmanager:GetResourcePolicy",
-          "secretsmanager:BatchGetSecretValue",
-        ]
-        Resource = var.encryption_key_secret_name
-      }] : [],
-      var.license_key_secret_path != null ? [{
-        Effect = "Allow"
-        Action = [
-          "secretsmanager:GetSecretValue",
-          "secretsmanager:DescribeSecret",
-          "secretsmanager:ListSecretVersionIds",
-          "secretsmanager:GetResourcePolicy",
-          "secretsmanager:BatchGetSecretValue",
-        ]
-        Resource = var.license_key_secret_path
-      }] : []
-    )
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:DescribeSecret",
+        "secretsmanager:ListSecretVersionIds",
+        "secretsmanager:GetResourcePolicy",
+        "secretsmanager:BatchGetSecretValue",
+      ]
+      Resource = local.eso_readable_secrets
+    }]
   })
 }
 

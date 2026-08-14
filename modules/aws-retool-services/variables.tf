@@ -49,6 +49,49 @@ variable "encryption_key_secret_name" {
   description = "Name or ARN of an existing Secrets Manager secret to use as the Retool encryption key. If null, a random key is generated at retool/{prefix}/encryption-key. Provide a value to support data migration from an existing deployment."
 }
 
+# --- Existing-secret JSON properties ---
+# Secrets this module generates hold a bare string, so no property is needed to
+# read them. Secrets created by other tooling are often JSON objects, and the
+# key holding the value varies (e.g. a CloudFormation GenerateSecretString
+# secret nests it under "password"). Set the matching *_property variable to
+# extract a single field instead of syncing the whole JSON blob.
+
+variable "encryption_key_secret_property" {
+  type        = string
+  default     = null
+  description = "JSON property to extract from encryption_key_secret_name. Leave null when the secret holds a bare string."
+}
+
+variable "jwt_secret_secret_path" {
+  type        = string
+  default     = null
+  description = "Name or ARN of an existing Secrets Manager secret to use as the Retool JWT secret. If null, a random secret is generated at retool/{prefix}/jwt-secret. Provide a value to keep existing user sessions valid when migrating an existing deployment."
+}
+
+variable "jwt_secret_secret_property" {
+  type        = string
+  default     = null
+  description = "JSON property to extract from jwt_secret_secret_path. Leave null when the secret holds a bare string."
+}
+
+variable "license_key_secret_property" {
+  type        = string
+  default     = null
+  description = "JSON property to extract from license_key_secret_path. Leave null when the secret holds a bare string."
+}
+
+variable "db_password_secret_property" {
+  type        = string
+  default     = "password"
+  description = "JSON property holding the database password within the secret at db.master_user_secret_arn. Defaults to \"password\", which matches both RDS-managed master user secrets and the Retool CloudFormation templates."
+}
+
+variable "extra_secret_read_arns" {
+  type        = list(string)
+  default     = []
+  description = "Additional Secrets Manager secret ARNs (or ARN patterns) that External Secrets Operator is granted read access to. Use this when you author ExternalSecret manifests outside this module — e.g. credentials for a second database — that read secrets outside the retool/{prefix}/* namespace."
+}
+
 variable "license_key" {
   type        = string
   default     = null

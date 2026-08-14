@@ -6,10 +6,46 @@ locals {
 
   # Target group name: max 32 characters; alphanumeric and hyphens only.
   tg_name = length(local.name_slug) <= 27 ? "${local.name_slug}-tg" : "${substr(local.name_slug, 0, 27)}-tg"
+
+  # The zone this module writes records into: the one it created, or an existing
+  # one the caller nominated. Null means DNS is managed entirely outside this
+  # stack and we write no records at all.
+  zone_id = var.create_hosted_zone ? aws_route53_zone.hosted_zone[0].zone_id : var.hosted_zone_id
+
+  # Only mint a certificate when HTTPS is on and the caller didn't bring one.
+  create_certificate = var.enable_https_listener && var.acm_certificate_arn == null
+
+  # The certificate the HTTPS listener serves — brought in or minted here. Null
+  # when there is no HTTPS listener to attach it to.
+  certificate_arn = (
+    var.enable_https_listener
+    ? coalesce(var.acm_certificate_arn, one(aws_acm_certificate.cert[*].arn))
+    : null
+  )
 }
 
 resource "aws_route53_zone" "hosted_zone" {
+  count = var.create_hosted_zone ? 1 : 0
+
   name = var.domain_name
+}
+
+# The hosted zone and the ALB alias records below became conditional in v0.4.
+# These keep existing deployments from planning a destroy/create when their
+# state still records the resources at their pre-count addresses.
+moved {
+  from = aws_route53_zone.hosted_zone
+  to   = aws_route53_zone.hosted_zone[0]
+}
+
+moved {
+  from = aws_route53_record.alb_alias
+  to   = aws_route53_record.alb_alias[0]
+}
+
+moved {
+  from = aws_route53_record.alb_alias_wildcard
+  to   = aws_route53_record.alb_alias_wildcard[0]
 }
 
 # ACM only provisions DNS-validated public certs for domains ACM can resolve
@@ -17,7 +53,7 @@ resource "aws_route53_zone" "hosted_zone" {
 # the AWS provider waits until ISSUED — so we only create the certificate when
 # enable_https_listener is true (real customer domains with delegatable DNS).
 resource "aws_acm_certificate" "cert" {
-  count = var.enable_https_listener ? 1 : 0
+  count = local.create_certificate ? 1 : 0
 
   domain_name = var.domain_name
   subject_alternative_names = [
@@ -28,11 +64,16 @@ resource "aws_acm_certificate" "cert" {
 
   lifecycle {
     create_before_destroy = true
+
+    precondition {
+      condition     = local.zone_id != null
+      error_message = "aws-user-ingress cannot validate a certificate for ${var.domain_name} without a hosted zone. Either leave create_hosted_zone = true, set hosted_zone_id to an existing zone, or supply acm_certificate_arn to bring your own certificate."
+    }
   }
 }
 
 resource "aws_route53_record" "cert_validation" {
-  for_each = var.enable_https_listener ? {
+  for_each = local.create_certificate ? {
     for dvo in aws_acm_certificate.cert[0].domain_validation_options : dvo.domain_name => {
       name   = dvo.resource_record_name
       type   = dvo.resource_record_type
@@ -42,7 +83,7 @@ resource "aws_route53_record" "cert_validation" {
 
   allow_overwrite = true
 
-  zone_id = aws_route53_zone.hosted_zone.zone_id
+  zone_id = local.zone_id
   name    = each.value.name
   type    = each.value.type
   ttl     = 60
@@ -50,7 +91,7 @@ resource "aws_route53_record" "cert_validation" {
 }
 
 resource "aws_acm_certificate_validation" "cert_valid_status" {
-  count           = var.enable_https_listener ? 1 : 0
+  count           = local.create_certificate ? 1 : 0
   certificate_arn = aws_acm_certificate.cert[0].arn
 }
 
@@ -130,14 +171,41 @@ resource "aws_lb_listener" "https" {
   port              = 443
   protocol          = "HTTPS"
   ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
-  certificate_arn   = aws_acm_certificate.cert[0].arn
+  certificate_arn   = local.certificate_arn
+
+  # Edge authentication, when configured: users must complete the OIDC flow
+  # before any request reaches Retool. `order` matters — ALB evaluates actions in
+  # ascending order and the authenticate action has to run first.
+  dynamic "default_action" {
+    for_each = var.alb_authenticate_oidc != null ? [var.alb_authenticate_oidc] : []
+
+    content {
+      type  = "authenticate-oidc"
+      order = 1
+
+      authenticate_oidc {
+        issuer                              = default_action.value.issuer
+        authorization_endpoint              = default_action.value.authorization_endpoint
+        token_endpoint                      = default_action.value.token_endpoint
+        user_info_endpoint                  = default_action.value.user_info_endpoint
+        client_id                           = default_action.value.client_id
+        client_secret                       = default_action.value.client_secret
+        scope                               = default_action.value.scope
+        session_cookie_name                 = default_action.value.session_cookie_name
+        session_timeout                     = default_action.value.session_timeout
+        on_unauthenticated_request          = default_action.value.on_unauthenticated_request
+        authentication_request_extra_params = default_action.value.authentication_request_extra_params
+      }
+    }
+  }
 
   default_action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.alb_target_group.arn
+    order            = var.alb_authenticate_oidc != null ? 2 : null
   }
 
-  depends_on = [aws_acm_certificate_validation.cert_valid_status[0]]
+  depends_on = [aws_acm_certificate_validation.cert_valid_status]
 }
 
 resource "aws_lb_listener" "http_redirect" {
@@ -199,7 +267,9 @@ resource "kubectl_manifest" "target_group_binding" {
 }
 
 resource "aws_route53_record" "alb_alias" {
-  zone_id = aws_route53_zone.hosted_zone.zone_id
+  count = local.zone_id != null ? 1 : 0
+
+  zone_id = local.zone_id
   name    = var.domain_name
   type    = "A"
 
@@ -211,7 +281,9 @@ resource "aws_route53_record" "alb_alias" {
 }
 
 resource "aws_route53_record" "alb_alias_wildcard" {
-  zone_id = aws_route53_zone.hosted_zone.zone_id
+  count = local.zone_id != null ? 1 : 0
+
+  zone_id = local.zone_id
   name    = "*.${var.domain_name}"
   type    = "A"
 

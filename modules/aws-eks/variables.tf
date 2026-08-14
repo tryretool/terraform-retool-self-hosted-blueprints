@@ -33,6 +33,12 @@ variable "endpoint_public_access" {
   description = "Whether the EKS API server endpoint is publicly accessible. Set false for private-only clusters."
 }
 
+variable "cluster_encryption_kms_key_arn" {
+  type        = string
+  default     = null
+  description = "ARN of an existing KMS key to encrypt EKS secrets with. If null, this module creates a key for the cluster. Supply a value when your organization mandates a specific CMK — the key cannot be changed after the cluster is created."
+}
+
 variable "enable_cluster_creator_admin_permissions" {
   type        = bool
   default     = true

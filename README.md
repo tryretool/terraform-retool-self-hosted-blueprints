@@ -49,15 +49,27 @@ a single `terraform apply`.
    Remote Repository storage. Each example has its own `README.md` with
    cloud-specific notes.
 
+   Already running Retool on AWS ECS/Fargate via the
+   [`retool-onpremise`](https://github.com/tryretool/retool-onpremise)
+   CloudFormation templates? Start from
+   [`aws_migrate_from_cloudformation`](./examples/aws_migrate_from_cloudformation)
+   instead — it adopts your existing VPC and database rather than creating new
+   ones, and is configured with variables rather than a `locals` block.
+
 2. **Copy the example** into your own Terraform working directory (or work in
    place), then turn the provider stub into a real config:
 
    ```sh
-   cp provider.example.tf provider.tf
+   mv provider.example.tf provider.tf
    ```
 
+   Use `mv`, not `cp`: Terraform loads every `*.tf` file in the directory, and
+   `provider.example.tf` matches, so keeping both declares each provider twice.
+
 3. **Edit the `locals` block** at the top of `main.tf` — set `prefix`,
-   your cloud project/subscription, `region`, and `domain_name`.
+   your cloud project/subscription, `region`, and `domain_name`. (The
+   `aws_migrate_from_cloudformation` example instead uses variables: copy
+   `vars.tf.example` to `terraform.tfvars` and edit that.)
 
 4. **Deploy:**
 
