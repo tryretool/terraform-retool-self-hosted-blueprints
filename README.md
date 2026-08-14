@@ -51,10 +51,20 @@ a single `terraform apply`.
 
    Already running Retool on AWS ECS/Fargate via the
    [`retool-onpremise`](https://github.com/tryretool/retool-onpremise)
-   CloudFormation templates? Start from
-   [`aws_migrate_from_cloudformation`](./examples/aws_migrate_from_cloudformation)
-   instead — it adopts your existing VPC and database rather than creating new
-   ones, and is configured with variables rather than a `locals` block.
+   CloudFormation templates? Start from one of the migration examples instead.
+   Both keep your existing VPC and database, run the new deployment alongside
+   the old one, and cut over by moving DNS; they differ in who ends up owning
+   the databases:
+
+   - [`aws_migrate_from_cloudformation`](./examples/aws_migrate_from_cloudformation)
+     — the databases stay CloudFormation-managed and Terraform only reads them.
+     The smallest change.
+   - [`aws_import_from_cloudformation`](./examples/aws_import_from_cloudformation)
+     — the databases are imported into Terraform state so CloudFormation can be
+     deleted entirely. Ships a helper that discovers the configuration and
+     performs the imports.
+
+   Both are configured with variables rather than a `locals` block.
 
 2. **Copy the example** into your own Terraform working directory (or work in
    place), then turn the provider stub into a real config:

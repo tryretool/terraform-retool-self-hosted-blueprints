@@ -14,6 +14,14 @@ Retool Helm release, and a new load balancer to cut traffic over to.
 Both deployments run side by side until you switch DNS, so you can validate the
 new one before committing to it, and roll back by switching DNS back.
 
+> [!TIP]
+> If you want CloudFormation gone entirely rather than left owning the
+> databases, use
+> [`aws_import_from_cloudformation`](../aws_import_from_cloudformation) instead.
+> It imports the databases into Terraform state and ships a helper that
+> discovers the configuration and performs the imports. This example is the
+> smaller change; that one is the cleaner end state.
+
 See the [repository README](../../README.md) for general prerequisites.
 
 ## What changes, and what doesn't

@@ -1,0 +1,108 @@
+# Copy this file to terraform.tfvars and fill it in.
+#
+#   cp vars.tf.example terraform.tfvars
+#
+# This file holds only the values that are *your* choices. Everything derivable
+# from the CloudFormation stack — VPC and subnet IDs, database configuration,
+# security group rules, secret ARNs, certificate ARN, image tag — is written to
+# imported.tfvars by the helper:
+#
+#   ./import_from_cloudformation.py import-tfvars --stack-name <name> --region <region>
+#
+# Apply with both, imported first so your choices win on any overlap:
+#
+#   terraform apply -var-file=imported.tfvars -var-file=terraform.tfvars
+#
+# See variables.tf for the full description of every input.
+
+# ---------------------------------------------------------------------------
+# Deployment identity
+# ---------------------------------------------------------------------------
+
+# Keep this distinct from your CloudFormation stack name — both deployments run
+# side by side until you cut over.
+prefix      = "retool-prod"
+region      = "us-west-2"
+aws_profile = "retool"
+
+tags = {
+  environment = "production"
+}
+
+# ---------------------------------------------------------------------------
+# Cluster
+# ---------------------------------------------------------------------------
+
+cluster_version = "1.32"
+
+# Set only if your organization mandates a specific CMK for EKS secret
+# encryption. It cannot be changed after the cluster is created.
+# cluster_encryption_kms_key_arn = "arn:aws:kms:us-west-2:012345678901:key/..."
+
+# Grant your team kubectl access beyond the identity that runs terraform apply.
+# eks_additional_access_entries = {
+#   "arn:aws:iam::012345678901:role/Engineers" = {
+#     policy_associations = {
+#       admin = {
+#         policy_arn   = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+#         access_scope = { type = "cluster" }
+#       }
+#     }
+#   }
+# }
+
+# ---------------------------------------------------------------------------
+# DNS
+# ---------------------------------------------------------------------------
+#
+# domain_name and acm_certificate_arn come from imported.tfvars (BaseDomain and
+# CertificateARN). Set hosted_zone_id only if you want this stack to manage the
+# alias records for domain_name in a Route53 zone you already own. Leave it
+# unset when DNS is managed elsewhere — you then point domain_name at the
+# alb_dns_name output yourself when you cut over.
+#
+# hosted_zone_id = "Z0123456789ABCDEFGHIJ"
+
+# ---------------------------------------------------------------------------
+# Temporal
+# ---------------------------------------------------------------------------
+#
+# Set by imported.tfvars to "imported" when the helper finds a standalone
+# Temporal RDS instance, or "external" when it finds an Aurora cluster (which
+# the aws-database module cannot represent). Override to "none" to run Retool
+# without Workflows.
+#
+# temporal_db_mode = "none"
+
+temporal = {
+  # The Temporal Web UI, reachable via `kubectl port-forward`.
+  enable_web_ui = false
+}
+
+# ---------------------------------------------------------------------------
+# CloudAuth (Amazon-internal only)
+# ---------------------------------------------------------------------------
+#
+# The helper reads these from the CloudFormation template's Mappings block and
+# writes them to imported.tfvars. Set here only to override.
+#
+# cloudauth = {
+#   vpc_endpoint_service_name = "com.amazonaws.vpce.us-west-2.vpce-svc-0000000000000000"
+#   fqen                      = "/svc1/CloudAuth/prod/us-west-2"
+#   subdomain                 = "oauth.cloudauth.a2z.com"
+#   api_gateway_account_ids   = ["012345678901"]
+# }
+
+# ---------------------------------------------------------------------------
+# Retool application
+# ---------------------------------------------------------------------------
+#
+# retool_image_tag and replica_counts come from imported.tfvars (RetoolImage and
+# the Desired*Count parameters). Override here when you want to change them.
+
+retool_helm_chart_version = "6.11.6"
+
+# R2 features, absent from the CloudFormation stack. Leave false for a
+# like-for-like migration and turn them on afterwards.
+enable_agent_sandbox = false
+enable_rr_s3         = false

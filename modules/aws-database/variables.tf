@@ -273,3 +273,82 @@ variable "multi_az" {
   type        = bool
   default     = false
 }
+
+# ---------------------------------------------------------------------------
+# Adopting an existing database
+#
+# These exist so a database created by other tooling — a CloudFormation stack,
+# say — can be imported into this module without Terraform replacing it or
+# changing how it authenticates. All of them default to this module's normal
+# behavior, so they are no-ops unless you are importing.
+# ---------------------------------------------------------------------------
+
+variable "manage_master_user_password" {
+  type        = bool
+  description = <<-EOT
+    Whether RDS manages the master user password in Secrets Manager, rotating it
+    and owning the secret. This is the default for databases this module creates.
+
+    Set false when importing a database whose password is managed elsewhere:
+    Terraform then leaves the existing password alone, rather than having RDS
+    generate a new one — which would immediately lock out anything still reading
+    the old credentials. Supply master_user_secret_arn alongside it.
+  EOT
+  default     = true
+}
+
+variable "master_user_secret_arn" {
+  type        = string
+  description = "ARN of the Secrets Manager secret holding the master credentials, overriding the `master_user_secret_arn` output. Required when manage_master_user_password is false, because RDS only populates that ARN for secrets it manages itself."
+  default     = null
+
+  validation {
+    condition     = var.manage_master_user_password || var.master_user_secret_arn != null
+    error_message = "master_user_secret_arn is required when manage_master_user_password is false: RDS does not report a secret ARN for a password it does not manage, so downstream modules would have nothing to read the database credentials from."
+  }
+}
+
+variable "security_group_name" {
+  type        = string
+  description = <<-EOT
+    Exact name of the database security group. Leave null and this module names
+    it "{identifier}-rds-sg" with a unique suffix.
+
+    Set it to the existing group's name when importing one: a security group's
+    name cannot be changed in place, so a mismatch here makes Terraform destroy
+    and recreate the group, taking every rule on it with it.
+  EOT
+  default     = null
+}
+
+variable "manage_security_group_rules" {
+  type        = bool
+  description = <<-EOT
+    Whether this module manages the rules on the database security group (ingress
+    from the EKS nodes, and all egress).
+
+    Set false when importing a security group whose existing rules must survive —
+    Terraform would otherwise delete every rule it doesn't know about, and fail
+    on the ones it would duplicate. You are then responsible for declaring the
+    rules yourself, including access for the EKS nodes.
+  EOT
+  default     = true
+}
+
+variable "db_subnet_group_name" {
+  type        = string
+  description = "Exact name of the DB subnet group. Leave null and this module names it after the identifier with a unique suffix. As with security_group_name, set it to the existing name when importing, since the name cannot be changed in place."
+  default     = null
+}
+
+variable "create_db_parameter_group" {
+  type        = bool
+  description = "Whether to create a DB parameter group for this instance. Set false when importing a database that should keep the parameter group it already uses; combine with parameter_group_name to name it."
+  default     = true
+}
+
+variable "parameter_group_name" {
+  type        = string
+  description = "Name of an existing DB parameter group to attach. Only used when create_db_parameter_group is false."
+  default     = null
+}
