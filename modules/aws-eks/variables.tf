@@ -163,6 +163,18 @@ variable "enable_metrics_server" {
   description = "Whether to install the EKS-managed metrics-server addon (needed for kubectl top / HPA). It is a cluster-wide singleton — only one copy can own the metrics.k8s.io APIService — so disable it if the cluster already runs one."
 }
 
+variable "launch_template_version" {
+  type        = string
+  default     = null
+  description = "The version of the launch template to use for the Karpenter controller node group. If null, the latest version will be used."
+}
+
+variable "update_launch_template_default_version" {
+  type        = bool
+  default     = true
+  description = "Whether to update the launch template default version when a new version is created. This is required for Karpenter to use the latest launch template version."
+}
+
 # ---------------------------------------------------------------------------
 # Access entries
 # ---------------------------------------------------------------------------

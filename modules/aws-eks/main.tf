@@ -123,9 +123,13 @@ module "eks" {
           effect = "NO_SCHEDULE"
         }
       } : {}
-      tags = {
+      
+      launch_template_version = var.launch_template_version != null ? var.launch_template_version : null
+      update_launch_template_default_version = var.update_launch_template_default_version
+      
+      tags = merge(local.all_tags,{
         "karpenter.sh/discovery" = local.karpenter.discovery_value
-      }
+      })
 
       iam_role_additional_policies = {
         additional = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
