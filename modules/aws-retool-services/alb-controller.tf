@@ -162,6 +162,9 @@ resource "helm_release" "alb_controller" {
       # metadata which hits permissions errors
       region = var.region
       vpcId  = var.vpc.vpc_id
+      # disable the service mutator which turns LoadBalancer services into ALBs,
+      # because we don't need that and the webhook can cause other things to fail
+      enableServiceMutatorHook = false
       # without the cert-manager dependency, this chart tries to create its own
       # tls certs dynamically which the helm provider can't deal with
       enableCertManager = true
