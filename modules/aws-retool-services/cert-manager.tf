@@ -31,6 +31,11 @@ resource "helm_release" "cert_manager" {
       securityContext = {
         fsGroup = 1001
       }
+      # scope to just the services and retool namespaces so multiple
+      # cert-manager deployments can coexist in the cluster in shared-cluster
+      # scenarios.
+      namespace = local.cert_manager.namespace
+
     }),
     yamlencode(local.has_pod_scheduling ? merge(local.pod_scheduling, {
       webhook         = local.pod_scheduling
