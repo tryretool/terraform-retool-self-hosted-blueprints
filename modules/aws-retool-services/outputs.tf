@@ -1,7 +1,6 @@
 locals {
   outputs = {
     retool_namespace                 = local.retool_namespace
-    services_namespace               = local.services_namespace
     secret_store_name                = local.secret_store_name
     secret_store_kind                = local.secret_store_kind
     encryption_key_secret_name       = "encryption-key"
@@ -22,21 +21,14 @@ locals {
       "RR_DEFAULT_S3_ACCESS_KEY_ID",
       "RR_DEFAULT_S3_SECRET_ACCESS_KEY",
     ]
-    secret_store_backend_type     = "secretsManager"
-    alb_controller_irsa_role_arn  = var.enable_alb_controller ? module.alb_controller_irsa_role[0].iam_role_arn : null
-    alb_controller_irsa_role_name = var.enable_alb_controller ? module.alb_controller_irsa_role[0].iam_role_name : null
-    eso_irsa_role_arn             = aws_iam_role.eso.arn
+    secret_store_backend_type = "secretsManager"
+    eso_role_arn              = aws_iam_role.eso.arn
   }
 }
 
 output "retool_namespace" {
   description = "Namespace the Retool application and its Secrets are deployed into. Pass to retool-helm (via retool_services) and to the user-ingress module."
   value       = local.outputs.retool_namespace
-}
-
-output "services_namespace" {
-  description = "Namespace the supporting operators (ESO, reloader, cert-manager, ALB controller) are deployed into."
-  value       = local.outputs.services_namespace
 }
 
 output "secret_store_name" {
@@ -49,9 +41,9 @@ output "secret_store_kind" {
   value       = local.outputs.secret_store_kind
 }
 
-output "eso_irsa_role_arn" {
-  description = "ARN of the IAM role granting Secrets Manager read access for the External Secrets Operator. In a shared cluster (enable_external_secrets = false), attach this to the platform ESO's service account."
-  value       = local.outputs.eso_irsa_role_arn
+output "eso_role_arn" {
+  description = "ARN of this deployment's IAM role granting read access to its own secrets in Secrets Manager. The cluster's shared External Secrets Operator assumes it — the namespaced SecretStore names it via spec.provider.aws.role. Trust it from the controller by passing eks = module.eks.outputs, or by listing the controller's role in eso_controller_role_arns."
+  value       = local.outputs.eso_role_arn
 }
 
 output "encryption_key_secret_name" {
@@ -117,16 +109,6 @@ output "rr_bucket_k8s_secret_name" {
 output "secret_store_backend_type" {
   description = "ESO secret store backend type identifier for use in Retool Helm values."
   value       = local.outputs.secret_store_backend_type
-}
-
-output "alb_controller_irsa_role_arn" {
-  description = "ARN of the IAM role used by the ALB controller (IRSA)."
-  value       = local.outputs.alb_controller_irsa_role_arn
-}
-
-output "alb_controller_irsa_role_name" {
-  description = "Name of the IAM role used by the ALB controller (IRSA)."
-  value       = local.outputs.alb_controller_irsa_role_name
 }
 
 output "outputs" {

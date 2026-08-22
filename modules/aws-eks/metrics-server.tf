@@ -10,7 +10,7 @@
 resource "aws_eks_addon" "metrics_server" {
   count = var.enable_metrics_server ? 1 : 0
 
-  cluster_name                = module.eks.cluster_name
+  cluster_name                = local.cluster.name
   addon_name                  = "metrics-server"
   resolve_conflicts_on_create = "OVERWRITE"
 

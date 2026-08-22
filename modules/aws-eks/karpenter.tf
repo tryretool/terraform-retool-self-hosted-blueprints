@@ -26,7 +26,7 @@ resource "aws_iam_instance_profile" "karpenter" {
   count = var.enable_karpenter ? 1 : 0
 
   name = local.karpenter.instance_profile_name
-  role = module.eks.eks_managed_node_groups["karpenter"].iam_role_name
+  role = module.eks[0].eks_managed_node_groups["karpenter"].iam_role_name
   tags = local.all_tags
 }
 
@@ -41,7 +41,7 @@ module "karpenter" {
   create_access_entry = false
 
   create_node_iam_role = false
-  node_iam_role_arn    = module.eks.eks_managed_node_groups["karpenter"].iam_role_arn
+  node_iam_role_arn    = module.eks[0].eks_managed_node_groups["karpenter"].iam_role_arn
 
   create_instance_profile = false
   enable_inline_policy    = true
@@ -110,7 +110,7 @@ resource "helm_release" "karpenter" {
       replicas : var.karpenter_replica_count
       logLevel : "debug"
       settings : {
-        clusterEndpoint : module.eks.cluster_endpoint
+        clusterEndpoint : local.cluster.endpoint
         clusterName : local.karpenter.cluster_name
         interruptionQueue : module.karpenter[0].queue_name
         batchMaxDuration : "15s" # a little longer than the default
@@ -283,9 +283,9 @@ locals {
             key      = "topology.kubernetes.io/zone"
             operator = "In"
             values = [ // this requires refinement
-              "${var.region}a",
-              "${var.region}b",
-              "${var.region}c",
+              "${local.region}a",
+              "${local.region}b",
+              "${local.region}c",
             ]
           },
           ], var.default_minimum_instance_memory_mib != null ? [

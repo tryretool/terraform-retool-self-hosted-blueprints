@@ -1,19 +1,17 @@
 ###############################################################################
 # Deploy Retool into a PRE-EXISTING (shared) EKS cluster.
 #
-# Unlike the aws_all_inclusive example, this does NOT create a VPC or an EKS
-# cluster. It looks up an existing cluster + VPC by name and deploys only the
-# Retool-specific pieces into dedicated, prefixed namespaces:
-#   - <prefix>-retool           the Retool app + its Secrets
-#   - <prefix>-retool-services  Retool's supporting operators (only the ones
-#                               this deployment owns)
+# Unlike the aws_all_inclusive example, this creates no VPC and no EKS cluster.
+# It points aws-eks at an existing cluster via existing_cluster, which installs
+# only the cluster-wide operators Retool needs, and puts the Retool deployment
+# itself in a single prefixed namespace, <prefix>-retool.
 #
-# Cluster-wide singletons (ESO, cert-manager, the ALB controller) are assumed to
-# already exist in the shared cluster and are turned OFF here. The SecretStore +
-# ExternalSecrets are still created (the platform's ESO reconciles them), and
-# you must grant the platform ESO read access to Retool's secrets — attach
-# module.retool-services.outputs.eso_irsa_role_arn to its service account (or
-# replicate that policy onto whatever identity its controller uses).
+# The operators (External Secrets, cert-manager, the ALB controller, reloader)
+# are cluster singletons — their CRDs, admission webhooks and ClusterRoles have
+# fixed cluster-scoped names, so exactly one copy can exist per cluster. Turn off
+# the ones your platform team already runs. To add a SECOND Retool deployment to
+# this cluster, do not instantiate aws-eks again: deploy only retool-services,
+# retool-helm and user-ingress with a different prefix.
 ###############################################################################
 
 locals {
@@ -41,29 +39,57 @@ data "aws_eks_cluster" "this" {
   name = local.cluster_name
 }
 
-# Resolve the cluster's IAM OIDC provider ARN (for IRSA / pod identity wiring).
-data "aws_iam_openid_connect_provider" "this" {
-  url = data.aws_eks_cluster.this.identity[0].oidc[0].issuer
-}
-
-# Shapes matching what the downstream modules expect, assembled from the data
-# sources + the identifiers above.
+# Shapes matching what the downstream modules expect, assembled from the
+# identifiers above.
 locals {
   vpc = {
     vpc_id             = local.vpc_id
     private_subnet_ids = local.private_subnet_ids
     public_subnet_ids  = local.public_subnet_ids
   }
-  eks = {
-    name                   = data.aws_eks_cluster.this.name
-    oidc_provider_arn      = data.aws_iam_openid_connect_provider.this.arn
+}
+
+# Adopts the existing cluster rather than creating one: no VPC, no node groups,
+# no Karpenter — only the cluster-wide operators. Instantiate this once per
+# cluster, from one Terraform state.
+module "eks" {
+  source  = "tryretool/self-hosted-blueprints/retool//modules/aws-eks"
+  version = "~> 0.4"
+
+  prefix = local.prefix
+  region = local.region
+
+  existing_cluster = {
+    name                   = local.cluster_name
     node_security_group_id = local.node_security_group_id
   }
+
+  # Karpenter is wired to the controller node group this module creates when it
+  # creates a cluster, so it cannot run against an adopted one.
+  enable_karpenter = false
+
+  # The cluster addons are managed by EKS and an existing cluster almost
+  # certainly already has them.
+  enable_ebs_csi_driver = false
+  enable_metrics_server = false
+
+  # Turn off any of these your platform team already runs cluster-wide.
+  enable_external_secrets = true
+  enable_cert_manager     = true
+  enable_alb_controller   = true
+  enable_reloader         = true
+
+  # Set false if the CRDs are already installed and managed out of band.
+  install_crds = true
+
+  # Leave false so this never displaces a default IngressClass the cluster
+  # already has; Retool routes via a TargetGroupBinding and does not need one.
+  make_default_ingress_class = false
 }
 
 module "db-main" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/aws-database"
-  version = "~> 0.3"
+  version = "~> 0.4"
 
   prefix     = local.prefix
   db_purpose = "main"
@@ -74,36 +100,39 @@ module "db-main" {
   multi_az              = true
 
   vpc = local.vpc
-  eks = { node_security_group_id = local.eks.node_security_group_id }
+  eks = { node_security_group_id = local.node_security_group_id }
 }
 
 module "retool-services" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/aws-retool-services"
-  version = "~> 0.3"
+  version = "~> 0.4"
 
   prefix = local.prefix
   region = local.region
-  vpc    = { vpc_id = local.vpc.vpc_id }
-  eks    = { name = local.eks.name, oidc_provider_arn = local.eks.oidc_provider_arn }
   db     = module.db-main.outputs
 
-  # Namespaces default to <prefix>-retool / <prefix>-retool-services. Override
-  # here to target namespaces the platform team pre-created, and set
-  # create_namespaces = false so this module doesn't try to own them.
-  # retool_namespace   = "team-retool"
-  # services_namespace = "team-retool"
-  # create_namespaces  = false
+  # Supplies the cluster ESO controller's role ARN. This deployment's
+  # <prefix>-eso role trusts it, so the controller can assume that role to read
+  # these secrets — and only these secrets.
+  eks = module.eks.outputs
 
-  # The shared cluster already runs these; don't install a second copy.
-  enable_external_secrets = false
-  enable_cert_manager     = false
-  enable_alb_controller   = false
-  install_crds            = false
+  # If your platform team runs the External Secrets Operator instead
+  # (enable_external_secrets = false above), name its controller's role here:
+  # eso_controller_role_arns = ["arn:aws:iam::123456789012:role/platform-eso"]
+
+  # The namespace defaults to <prefix>-retool. Override to target a namespace
+  # the platform team pre-created, and set create_namespace = false so this
+  # module doesn't try to own it.
+  # retool_namespace = "team-retool"
+  # create_namespace = false
+
+  # The SecretStore and ExternalSecrets must land after the operator's CRDs.
+  depends_on = [module.eks]
 }
 
 module "retool" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/retool-helm"
-  version = "~> 0.3"
+  version = "~> 0.4"
 
   retool_helm_name          = "retool"
   retool_helm_chart_version = "6.11.1"
@@ -128,7 +157,7 @@ module "retool" {
 
 module "user-ingress" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/aws-user-ingress"
-  version = "~> 0.3"
+  version = "~> 0.4"
 
   domain_name           = local.domain_name
   enable_https_listener = local.enable_user_ingress_https
@@ -137,7 +166,7 @@ module "user-ingress" {
   retool_services = module.retool-services.outputs
 
   vpc = { vpc_id = local.vpc.vpc_id, public_subnet_ids = local.vpc.public_subnet_ids }
-  eks = { node_security_group_id = local.eks.node_security_group_id }
+  eks = { node_security_group_id = local.node_security_group_id }
 
   depends_on = [module.retool-services, module.retool]
 }
@@ -145,6 +174,7 @@ module "user-ingress" {
 output "modules" {
   sensitive = true # just to quiet the apply output
   value = {
+    eks             = module.eks
     db-main         = module.db-main
     retool-services = module.retool-services
     user-ingress    = module.user-ingress
