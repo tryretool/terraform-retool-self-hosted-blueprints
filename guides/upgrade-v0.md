@@ -166,6 +166,35 @@ Then `terraform plan` and read it before applying. Expect:
   three, a `moved` block is missing or misspelled — fix that before applying,
   or you will hit the ownership error below.
 
+> [!WARNING]
+> **Do not skip the `moved` blocks for external-secrets.** Without them
+> Terraform destroys the old release and creates the new one with no dependency
+> between the two, so it may uninstall the old release *last* — and the ESO
+> chart templates its CRDs instead of shipping them in `crds/`, so that
+> uninstall deletes the cluster-scoped CRDs the new release just created, taking
+> every `SecretStore` and `ExternalSecret` with them. The symptom is an ESO pod
+> logging `CustomResourceDefinition ... "externalsecrets.external-secrets.io" not
+> found` while its Deployment looks healthy. `aws-eks` now stamps
+> `helm.sh/resource-policy: keep` on these CRDs so they survive any future
+> uninstall, but that only protects CRDs created by the new release — the ones
+> already in your cluster carry no such annotation.
+
+If you have already hit this and the CRDs are gone, reinstall the release to
+recreate them, then apply again so the `SecretStore` and `ExternalSecret`s are
+recreated on top:
+
+```
+terraform apply -replace='module.eks.helm_release.external_secrets[0]'
+terraform apply
+```
+
+Verify:
+
+```
+kubectl get crd | grep external-secrets.io
+kubectl get externalsecrets -A
+```
+
 Two chart-version bumps ride along: External Secrets `0.12.1` → `2.8.0` and
 cert-manager `v1.11.0` → `v1.21.0`. cert-manager `v1.11.0` is years past EOL and
 is not supported on Kubernetes 1.32, so that bump is not optional in practice.

@@ -98,7 +98,18 @@ resource "helm_release" "external_secrets" {
     yamlencode({
       installCRDs    = var.install_crds
       serviceAccount = { name = local.external_secrets.service_account_name }
-      crds           = { unsafeServeV1Beta1 = var.external_secrets_serve_v1beta1 }
+      crds = {
+        unsafeServeV1Beta1 = var.external_secrets_serve_v1beta1
+        # This chart templates its CRDs rather than shipping them in crds/, so
+        # without this a `helm uninstall` — including the one that retires an
+        # older release of this same operator — deletes the cluster-scoped CRDs
+        # out from under whatever is using them, and the garbage collector takes
+        # every SecretStore and ExternalSecret with them. cert-manager does this
+        # by default (crds.keep); this chart does not.
+        annotations = {
+          "helm.sh/resource-policy" = "keep"
+        }
+      }
     }),
     yamlencode(local.has_pod_scheduling ? merge(local.pod_scheduling, {
       webhook        = local.pod_scheduling
