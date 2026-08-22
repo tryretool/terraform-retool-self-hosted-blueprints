@@ -12,7 +12,7 @@ module "ebs_csi_irsa" {
 
   oidc_providers = {
     main = {
-      provider_arn               = module.eks.oidc_provider_arn
+      provider_arn               = local.cluster.oidc_provider_arn
       namespace_service_accounts = ["kube-system:ebs-csi-controller-sa"]
     }
   }
@@ -23,7 +23,7 @@ module "ebs_csi_irsa" {
 resource "aws_eks_addon" "ebs_csi" {
   count = var.enable_ebs_csi_driver ? 1 : 0
 
-  cluster_name                = module.eks.cluster_name
+  cluster_name                = local.cluster.name
   addon_name                  = "aws-ebs-csi-driver"
   resolve_conflicts_on_create = "OVERWRITE"
   service_account_role_arn    = module.ebs_csi_irsa[0].iam_role_arn

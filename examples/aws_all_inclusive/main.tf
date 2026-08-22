@@ -48,10 +48,9 @@ module "retool-services" {
 
   prefix = local.prefix
   region = local.region
-  vpc    = module.vpc.outputs
   eks    = module.eks.outputs
   db     = module.db-main.outputs
-  
+
   license_key = "MY-LICENSE-KEY"
 
   depends_on = [module.eks]

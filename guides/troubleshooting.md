@@ -155,7 +155,28 @@ The various `helm_release` resources used in `retool-helm`, `<cloud>-retool-serv
 **old** release's `meta.helm.sh/release-namespace` annotation. Helm refuses to
 adopt a resource owned by another release.
 
-### Fix 1 — delete conflicting resources and re-apply
+### Fix 1 — re-stamp the ownership metadata (preferred)
+
+Helm's adoption check reads exactly three pieces of metadata: the
+`meta.helm.sh/release-name` and `meta.helm.sh/release-namespace` annotations, and
+the `app.kubernetes.io/managed-by=Helm` label. Rewriting those in place makes
+Helm adopt the existing object instead of refusing it — nothing is deleted, no
+custom resources are lost, and no controller reconciles on the change.
+
+The upgrade guide ships a script that does this for the operators these modules
+install: see [re-stamp Helm ownership](./upgrade-v0.md#if-helm-refuses-to-adopt-a-resource).
+For a one-off object:
+
+```sh
+kubectl annotate --overwrite <kind> <name> \
+  meta.helm.sh/release-name=<new-release> \
+  meta.helm.sh/release-namespace=<new-namespace>
+kubectl label --overwrite <kind> <name> app.kubernetes.io/managed-by=Helm
+```
+
+Then re-run `terraform apply`.
+
+### Fix 2 — delete conflicting resources and re-apply
 
 The simplest fix is to delete the resources named in the error and let the next
 apply recreate them under the new release:
@@ -182,39 +203,36 @@ release.
 > potentially disruptive: **do it during off-hours / a maintenance window**, and
 > expect the controllers to re-reconcile everything once the apply completes.
 
-If you need to avoid the delete entirely, the alternative is to re-stamp the
-ownership annotations in place so Helm adopts the existing resources — see the
-[shared-clusters migration notes](./shared-clusters.md). Deleting is simpler;
-re-stamping avoids the momentary loss of the custom resources.
+Prefer Fix 1 above where you can: re-stamping avoids the momentary loss of the
+custom resources entirely.
 
-### Fix 2 — pin to the old namespace
+### Fix 3 — pin to the old namespace
 
-If you'd rather not move namespaces at all (no deletes, no downtime), keep each
-release where it already lives. The namespace these modules use is configurable:
-`<cloud>-retool-services` is the single source of truth — it exposes
-`retool_namespace` (the Retool app and the K8s objects beside it) and
-`services_namespace` (the supporting operators), and the `retool-helm` and
-`<cloud>-user-ingress` modules consume those names from its outputs. Set the two
-variables to the namespaces your existing release already occupies and the Helm
-releases are upgraded in place rather than recreated, so the cluster-scoped
-ownership conflict never arises.
+If you'd rather not move the Retool deployment's namespace at all (no deletes,
+no downtime), keep it where it already lives. `<cloud>-retool-services` is the
+single source of truth for it — it exposes `retool_namespace`, and the
+`retool-helm` and `<cloud>-user-ingress` modules consume that name from its
+outputs. Set it to the namespace your existing release already occupies and the
+Retool Helm release is upgraded in place rather than recreated.
 
-Set them on `aws-retool-services`:
+Set it on `aws-retool-services`:
 
 ```hcl
 module "retool-services" {
   # ...
 
-  # Pin to the namespaces the existing deployment already uses instead of the
-  # new "<prefix>-retool" / "<prefix>-retool-services" defaults.
-  retool_namespace   = "default"
-  services_namespace = "default"
+  # Pin to the namespace the existing deployment already uses instead of the
+  # "<prefix>-retool" default.
+  retool_namespace = "default"
 
-  # If those namespaces already exist (created out of band or by a prior apply),
-  # don't try to create/own them here.
-  create_namespaces = false
+  # If that namespace already exists (created out of band or by a prior apply),
+  # don't try to create/own it here.
+  create_namespace = false
 }
 ```
+
+The cluster-wide operators are not pinnable this way: they are singletons
+installed once per cluster by `aws-eks` in their own conventional namespaces.
 
 `retool-helm` and `aws-user-ingress` pick the namespace up automatically from
 the retool-services outputs — no per-module change needed when they're wired the

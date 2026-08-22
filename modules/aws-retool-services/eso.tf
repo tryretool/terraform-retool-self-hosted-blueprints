@@ -1,17 +1,18 @@
 locals {
-  eso = {
-    name                  = "${var.prefix}-external-secrets"
-    namespace             = local.services_namespace
-    controller_class_name = "${var.prefix}-external-secrets"
-    service_account_name  = "${var.prefix}-external-secrets"
-    issuer_name           = "${var.prefix}-external-secrets-selfsigned-issuer"
-  }
-
   # Namespaced SecretStore (lives in the retool namespace alongside the
   # ExternalSecrets that reference it), rather than a cluster-global
   # ClusterSecretStore whose fixed name would collide in a shared cluster.
   secret_store_kind = "SecretStore"
   secret_store_name = "retool-secretstore"
+
+  # The External Secrets Operator runs once per cluster and is not deployed by
+  # this module. Whichever controller reconciles this deployment's SecretStore
+  # assumes the role below to read the secrets; it is named here so the role
+  # will trust it.
+  eso_trusted_principals = distinct(compact(concat(
+    [try(var.eks.eso_controller_role_arn, null)],
+    var.eso_controller_role_arns,
+  )))
 
   encryption_key_sm_path = "retool/${var.prefix}/encryption-key"
 
@@ -101,6 +102,14 @@ locals {
 
 data "aws_caller_identity" "current" {}
 
+# Read access to just this deployment's secrets. The cluster's shared External
+# Secrets Operator assumes it — selected per-deployment by spec.provider.aws.role
+# on the SecretStore below — so one Retool deployment can never read another's
+# secrets even though a single controller serves them all.
+#
+# Same-account assumption needs only this trust policy; IAM unions identity- and
+# resource-based grants within an account. Across accounts, the controller's role
+# also needs an identity policy allowing sts:AssumeRole on this ARN.
 resource "aws_iam_role" "eso" {
   name = "${var.prefix}-eso"
   tags = local.all_tags
@@ -109,10 +118,20 @@ resource "aws_iam_role" "eso" {
     Version = "2012-10-17"
     Statement = [{
       Effect    = "Allow"
-      Principal = { Service = "pods.eks.amazonaws.com" }
+      Principal = { AWS = local.eso_trusted_principals }
       Action    = ["sts:AssumeRole", "sts:TagSession"]
     }]
   })
+
+  lifecycle {
+    # An empty Principal list is a MalformedPolicyDocument at apply time, whether
+    # or not this deployment creates the SecretStore, so require one
+    # unconditionally and fail at plan with something actionable instead.
+    precondition {
+      condition     = length(local.eso_trusted_principals) > 0
+      error_message = "No External Secrets Operator controller to trust. Pass eks = module.eks.outputs from an aws-eks instance with enable_external_secrets = true, or set eso_controller_role_arns to the IAM role ARN(s) of the controller that will reconcile this deployment's SecretStore."
+    }
+  }
 }
 
 resource "aws_iam_policy" "eso" {
@@ -141,109 +160,10 @@ resource "aws_iam_role_policy_attachment" "eso" {
   policy_arn = aws_iam_policy.eso.arn
 }
 
-# Create a self-signed Issuer so ESO can use the cert-manager also deployed in
-# this module
-resource "kubectl_manifest" "eso-selfsigned-issuer" {
-  count = var.enable_external_secrets ? 1 : 0
-
-  yaml_body = yamlencode({
-    apiVersion = "cert-manager.io/v1"
-    kind       = "Issuer"
-    metadata = {
-      name      = local.eso.issuer_name
-      namespace = local.eso.namespace
-    }
-    spec = {
-      selfSigned = {}
-    }
-  })
-
-  depends_on = [helm_release.cert_manager]
-}
-
-# Pod-identity wiring only makes sense for the operator we install ourselves.
-# In a shared cluster (enable_external_secrets = false) the platform's ESO uses
-# its own service account; attach the aws_iam_role.eso policy to it out of band.
-resource "aws_eks_pod_identity_association" "eso" {
-  count = var.enable_external_secrets ? 1 : 0
-
-  cluster_name    = var.eks.name
-  namespace       = local.eso.namespace
-  service_account = local.eso.service_account_name
-  role_arn        = aws_iam_role.eso.arn
-}
-
-resource "helm_release" "external_secrets" {
-  count = var.enable_external_secrets ? 1 : 0
-
-  namespace        = local.eso.namespace
-  create_namespace = false
-
-  name       = local.eso.name
-  repository = "https://charts.external-secrets.io"
-  chart      = "external-secrets"
-  version    = "2.8.0"
-  wait       = true
-
-  values = [
-    yamlencode({
-      controllerClass = local.eso.controller_class_name
-      serviceAccount = {
-        name = local.eso.service_account_name
-      }
-      # avoid creating cluster-wide ClusterRole resources
-      scopedRBAC = true
-      rbac = {
-        servicebindings = {
-          create = false
-        }
-      }
-      # only resolve secret resources in the retool namespace, even though ESO
-      # itself is deployed into the services namespace, as the secrets need to
-      # live with the workloads that consume them.
-      scopedNamespace = local.retool_namespace
-      # don't install CRDs, i.e. in shared-cluster envs
-      installCRDs = var.install_crds
-
-      # uses static cluster-scoped resources
-      certController = {
-        create = var.install_crds
-      }
-      webhook = {
-        # don't create validating webhook, as ValidatingWebhookConfiguration is
-        # a cluster-scoped resource and its name is hardcoded in the chart,
-        # making it prevent multiple deployments in a shared cluster
-        create = false
-
-        # use the separately installed cert-manager instead of the built-in
-        # certController, because ESO's certController requires a ClusterRole that
-        # makes it unfriendly to multiple deployments sharing a cluster
-        certManager = {
-          enabled = true
-          cert = {
-            issuerRef = {
-              group = "cert-manager.io"
-              kind  = "Issuer"
-              name  = local.eso.issuer_name
-            }
-          }
-        }
-      }
-    }),
-    yamlencode(local.has_pod_scheduling ? merge(local.pod_scheduling, {
-      webhook        = local.pod_scheduling
-      certController = local.pod_scheduling
-    }) : {}),
-  ]
-
-  depends_on = [kubernetes_namespace_v1.services]
-}
-
-# Namespaced SecretStore in the retool namespace. ESO authenticates with the
-# controller's own credentials (the pod-identity association above), so no
-# per-store serviceAccountRef is needed. Always created — even when the operator
-# is provided by the platform — since it is app-specific configuration the
-# (platform or bundled) ESO reconciles.
+# Namespaced SecretStore in the retool namespace, beside the ExternalSecrets that
+# reference it. The cluster's shared ESO controller reconciles it using its own
+# credentials as the base identity, then assumes spec.provider.aws.role to reach
+# this deployment's secrets and nothing else.
 resource "kubectl_manifest" "secret_store" {
   count = var.create_external_secrets ? 1 : 0
 
@@ -255,20 +175,17 @@ resource "kubectl_manifest" "secret_store" {
       namespace = local.retool_namespace
     }
     spec = {
-      controller = local.eso.controller_class_name
       provider = {
         aws = {
           service = "SecretsManager"
           region  = var.region
+          role    = aws_iam_role.eso.arn
         }
       }
     }
   })
 
-  depends_on = [
-    helm_release.external_secrets,
-    kubernetes_namespace_v1.retool,
-  ]
+  depends_on = [kubernetes_namespace_v1.retool]
 }
 
 resource "kubectl_manifest" "external_secret" {
@@ -296,7 +213,7 @@ resource "kubectl_manifest" "external_secret" {
     }
   })
 
-  depends_on = [kubectl_manifest.secret_store[0]]
+  depends_on = [kubectl_manifest.secret_store]
 }
 
 resource "kubectl_manifest" "external_secret_agent_sandbox" {
@@ -328,7 +245,7 @@ resource "kubectl_manifest" "external_secret_agent_sandbox" {
     }
   })
 
-  depends_on = [kubectl_manifest.secret_store[0]]
+  depends_on = [kubectl_manifest.secret_store]
 }
 
 resource "kubectl_manifest" "external_secret_extra_env_vars" {
@@ -360,5 +277,5 @@ resource "kubectl_manifest" "external_secret_extra_env_vars" {
     }
   })
 
-  depends_on = [kubectl_manifest.secret_store[0]]
+  depends_on = [kubectl_manifest.secret_store]
 }

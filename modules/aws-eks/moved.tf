@@ -33,3 +33,15 @@ moved {
   from = kubectl_manifest.karpenter_nodepool_default
   to   = kubectl_manifest.karpenter_nodepool_default[0]
 }
+
+# The cluster and its KMS key are now counted so this module can adopt a
+# pre-existing cluster instead of creating one (var.existing_cluster).
+moved {
+  from = module.eks
+  to   = module.eks[0]
+}
+
+moved {
+  from = aws_kms_key.eks
+  to   = aws_kms_key.eks[0]
+}

@@ -16,7 +16,7 @@ a single `terraform apply`.
 - [`modules/`](./modules) — the building-block Terraform modules (one set per
   cloud, plus the cloud-agnostic [`retool-helm`](./modules/retool-helm) module).
 - [`guides/`](./guides) — topic guides that apply across clouds 
-  - [Troubleshooting](./guides/troubleshooting.md))
+  - [Troubleshooting](./guides/troubleshooting.md)
   - [Scaling](./guides/scaling.md) 
   - [Using a shared/existing Kubernetes cluster](./guides/shared-clusters.md)
   - [Upgrades (v0.x)](./guides/upgrade-v0.md)

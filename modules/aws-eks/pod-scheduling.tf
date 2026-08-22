@@ -1,3 +1,5 @@
+# Node placement shared by the cluster-singleton Helm charts installed here.
+# Left empty by default so each chart keeps its own defaults.
 locals {
   pod_scheduling = merge(
     length(var.pod_node_selector) > 0 ? { nodeSelector = var.pod_node_selector } : {},
