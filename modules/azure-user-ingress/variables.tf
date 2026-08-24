@@ -30,9 +30,10 @@ variable "vnet" {
 
 variable "aks" {
   type = object({
-    oidc_issuer_url = string
+    oidc_issuer_url                      = string
+    cert_manager_service_account_subject = optional(string)
   })
-  description = "AKS cluster outputs for Workload Identity federation (e.g. module.aks.outputs)."
+  description = "AKS cluster outputs (e.g. module.aks.outputs). oidc_issuer_url federates this deployment's managed identities; cert_manager_service_account_subject is the shared cert-manager controller's service account, which this deployment's DNS identity trusts so the controller can solve DNS-01 challenges against its zone."
 }
 
 variable "retool_service_port" {
@@ -43,41 +44,28 @@ variable "retool_service_port" {
 
 variable "retool_services" {
   type = object({
-    retool_namespace   = optional(string)
-    services_namespace = optional(string)
+    retool_namespace = optional(string)
   })
   default     = null
-  description = "Retool-services outputs (e.g. module.retool-services.outputs). The TLS Certificate is created in retool_namespace (beside the Retool Ingress), and cert-manager/AGIC run in services_namespace. When null, falls back to the \"<prefix>-retool\" / \"<prefix>-retool-services\" defaults."
+  description = "Retool-services outputs (e.g. module.retool-services.outputs). The TLS Certificate, the Issuer and AGIC all live in retool_namespace, beside the Retool Ingress. When null, falls back to \"<prefix>-retool\"."
 }
 
 variable "enable_agic" {
   type        = bool
   default     = true
-  description = "Whether to create the Application Gateway and install the AGIC controller. Disable in shared clusters that already run an ingress controller — set ingress_class_name to that controller's class so Retool's Ingress is reconciled by it."
-}
-
-variable "enable_cert_manager" {
-  type        = bool
-  default     = true
-  description = "Whether to install cert-manager (and create its DNS-01 managed identity + ClusterIssuer). Only relevant when enable_https is true. Disable in shared clusters that already run cert-manager and pass cluster_issuer_name pointing at an existing ClusterIssuer."
-}
-
-variable "install_crds" {
-  type        = bool
-  default     = true
-  description = "Whether the bundled cert-manager installs its CRDs. Set false in shared clusters where these cluster-scoped CRDs are already managed out of band."
+  description = "Whether to create the Application Gateway and install the AGIC controller for this deployment. Disable in shared clusters that already run an ingress controller, and set ingress_class_name to that controller's class so Retool's Ingress is reconciled by it."
 }
 
 variable "ingress_class_name" {
   type        = string
-  default     = "azure-application-gateway"
-  description = "ingressClassName Retool's Ingress is annotated with. Defaults to AGIC's class; override to target a different ingress controller in a shared cluster."
+  default     = null
+  description = "IngressClass this deployment's AGIC owns. When null, defaults to \"<prefix>-agic\", which is what lets several AGIC instances coexist in one cluster. Set it to point Retool's Ingress at an ingress controller you already run."
 }
 
 variable "cluster_issuer_name" {
   type        = string
   default     = null
-  description = "Name of the cert-manager ClusterIssuer the TLS Certificate references. When null, this module creates a \"letsencrypt-prod\" ClusterIssuer (requires enable_cert_manager). Set to an existing issuer's name to consume the platform's cert-manager instead."
+  description = "Name of an existing cert-manager ClusterIssuer to issue Retool's certificate. When null, this module creates a namespaced Issuer named \"<prefix>-letsencrypt\" that solves Let's Encrypt DNS-01 challenges against the DNS zone it manages, using the cluster's shared cert-manager."
 }
 
 variable "enable_https" {

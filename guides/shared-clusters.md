@@ -10,12 +10,10 @@ Working starting points:
 [`examples/gcp_shared_cluster`](../examples/gcp_shared_cluster),
 [`examples/azure_shared_cluster`](../examples/azure_shared_cluster).
 
-The mechanics below describe the AWS stack. GCP and Azure follow the same shape
-but still deploy their supporting operators per-deployment into a
-`<prefix>-retool-services` namespace, configured by `services_namespace`,
-`create_namespaces` and the `enable_*` toggles on `<cloud>-retool-services`
-rather than on the cluster module. Where this guide says `aws-eks` or
-`create_namespace`, read the older equivalents for those clouds.
+The mechanics are the same on all three clouds and the variable names are
+common unless noted; where a cloud genuinely differs, it gets its own block.
+`<cloud>` below stands for `aws`, `gcp` or `azure`, and the cluster module means
+`aws-eks`, `gcp-gke` or `azure-aks`.
 
 ## What changes in a shared cluster
 
@@ -25,11 +23,11 @@ The Retool deployment gets a single dedicated namespace. The cluster-wide
 operators keep their conventional namespaces, because there is only ever one of
 each per cluster.
 
-| Namespace                                                       | Contents                                                                                                                                     |
-|-----------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------|
-| `<prefix>-retool`                                                 | the Retool Helm release, its ExternalSecrets, the namespaced ESO `SecretStore`, the RR credentials Secret, the user-ingress `TargetGroupBinding` |
-| `external-secrets`, `cert-manager`, `alb-controller`, `reloader` | the cluster-wide operators — one copy per cluster, installed by `aws-eks`                                                                     |
-| `kube-system`                                                     | Karpenter and the EKS-managed cluster addons                                                                                                  |
+| Namespace | Contents |
+|---|---|
+| `<prefix>-retool` | the Retool Helm release, its ExternalSecrets, the namespaced ESO `SecretStore`, the RR credentials Secret, and whatever routes traffic to it |
+| `external-secrets`, `cert-manager`, `reloader` | the cluster-wide operators — one copy per cluster, installed by the cluster module |
+| `kube-system` | the cloud's own cluster addons |
 
 `<cloud>-retool-services` computes `retool_namespace` once and exports it, so
 `retool-helm` and `<cloud>-user-ingress` use the same namespace without
@@ -39,17 +37,36 @@ To deploy into a namespace your platform team pre-created, override
 `retool_namespace` and set `create_namespace = false` so Terraform doesn't try
 to own it.
 
-### 2. The cluster-wide operators are singletons, and live in `aws-eks`
+What lands in `<prefix>-retool` alongside Retool differs by cloud: on AWS a
+`TargetGroupBinding`, on GCP a Gateway API `Gateway` plus its `HTTPRoute`, and on
+Azure an `Ingress`, its `Certificate` and the AGIC instance that reconciles it.
 
-The External Secrets Operator, cert-manager, the AWS Load Balancer Controller,
-reloader, metrics-server and Karpenter cannot be deployed once per Retool
-instance. Each owns cluster-scoped objects — CRDs, `ValidatingWebhookConfiguration`s
-and `ClusterRole`s whose names are fixed by the chart — so a second release
-collides with the first on every one of them. They are installed **once per
-cluster** by `aws-eks`.
+### 2. The cluster-wide operators are singletons
 
-To get them onto a cluster you did not create, instantiate `aws-eks` with
-`existing_cluster`. It creates no cluster, VPC or node groups:
+Some operators cannot be deployed once per Retool instance. Each owns
+cluster-scoped objects — CRDs, `ValidatingWebhookConfiguration`s and
+`ClusterRole`s whose names are fixed by the chart — so a second release collides
+with the first on every one of them. They are installed **once per cluster** by
+the cluster module.
+
+| Operator | AWS | GCP | Azure |
+|---|---|---|---|
+| External Secrets Operator | ✅ | ✅ | ✅ |
+| reloader | ✅ | ✅ | ✅ |
+| cert-manager | ✅ | — (Google Certificate Manager issues certs) | ✅ |
+| AWS Load Balancer Controller | ✅ | — | — |
+
+Not everything that looks like an operator is a singleton. `external-dns` on GCP
+and AGIC on Azure own no CRDs and no fixed-name webhooks, so each Retool
+deployment runs its own, scoped to its own DNS zone or IngressClass. They stay
+in `<cloud>-user-ingress`.
+
+To get the singletons onto a cluster you did not create, instantiate the cluster
+module with `existing_cluster`. It creates no network, no node pools and no
+cluster:
+
+<details>
+<summary>AWS</summary>
 
 ```hcl
 module "eks" {
@@ -66,78 +83,179 @@ module "eks" {
   # Karpenter is wired to the controller node group this module creates
   # alongside a new cluster, so it cannot run against an adopted one.
   enable_karpenter = false
+}
+```
+</details>
 
-  # Turn off whatever the cluster already runs.
-  enable_ebs_csi_driver   = false
-  enable_metrics_server   = false
-  enable_external_secrets = true
-  enable_cert_manager     = true
-  enable_alb_controller   = true
-  enable_reloader         = true
+<details>
+<summary>GCP</summary>
+
+```hcl
+module "gke" {
+  source = "tryretool/self-hosted-blueprints/retool//modules/gcp-gke"
+
+  prefix     = local.prefix
+  project_id = local.project_id
+  region     = local.region
+
+  existing_cluster = {
+    name     = "my-shared-gke"
+    location = local.region
+  }
 }
 ```
 
-Every addon and chart has an enable toggle (all default `true`), so a cluster
-that already runs one can be adopted without a second copy fighting over it:
-`enable_external_secrets`, `enable_cert_manager`, `enable_alb_controller`,
-`enable_reloader`, `enable_metrics_server`, `enable_ebs_csi_driver`,
-`enable_karpenter`, `enable_coredns_addon`, `enable_kube_proxy_addon`,
-`enable_vpc_cni_addon`, `enable_pod_identity_agent`, and `install_crds` for the
-CRDs the operators would otherwise install.
+The adopted cluster must have Workload Identity enabled, and the Gateway API
+enabled if you use `gcp-user-ingress`. Both are checked at plan time.
+</details>
+
+<details>
+<summary>Azure</summary>
+
+```hcl
+module "aks" {
+  source = "tryretool/self-hosted-blueprints/retool//modules/azure-aks"
+
+  prefix              = local.prefix
+  resource_group_name = local.resource_group_name
+  location            = local.location
+
+  existing_cluster = {
+    name = "my-shared-aks"
+  }
+}
+```
+
+The adopted cluster must have `oidc_issuer_enabled` and
+`workload_identity_enabled` set — every identity Retool creates federates
+against that issuer.
+</details>
+
+Every addon and chart the cluster module installs has an enable toggle,
+all defaulting `true`, so a cluster that already runs one can be adopted without
+a second copy fighting over it. Common to all three clouds:
+`enable_external_secrets`, `enable_reloader`, `install_crds`. Then
+`enable_cert_manager` on AWS and Azure; `enable_alb_controller`,
+`enable_karpenter`, `enable_metrics_server`, `enable_ebs_csi_driver` and the four
+core-addon toggles on AWS.
 
 > [!IMPORTANT]
 > **Exactly one Terraform state per cluster may own these.** For a second Retool
-> deployment in the same cluster, do not instantiate `aws-eks` again — deploy
-> only `<cloud>-retool-services`, `retool-helm` and `<cloud>-user-ingress` with a
-> different prefix.
+> deployment in the same cluster, do not instantiate the cluster module again —
+> deploy only `<cloud>-retool-services`, `retool-helm` and
+> `<cloud>-user-ingress` with a different prefix.
 
 ### 3. Secrets stay isolated per deployment
 
 There is one External Secrets Operator for the whole cluster, but each Retool
-deployment keeps its own IAM identity, so one deployment can never read
+deployment keeps its own cloud identity, so one deployment can never read
 another's secrets.
 
-`aws-retool-services` creates a `<prefix>-eso` role holding read access to just
-that deployment's secrets, and trusts the cluster controller's role in its trust
-policy. The deployment's namespaced `SecretStore` then names that role in
-`spec.provider.aws.role`, so the controller assumes it — with its own pod
-identity as the base credential — for that deployment's secrets only.
+The shape is the same everywhere: `<cloud>-retool-services` creates a
+per-deployment identity granted access to just that deployment's secrets, and
+the deployment's namespaced `SecretStore` names it. The shared controller then
+assumes that identity for that store rather than using its own. What differs is
+the mechanism.
 
-Two supported wirings:
+<details>
+<summary>AWS — the store names an IAM role</summary>
 
-1. **`aws-eks` installs the operator.** Pass `eks = module.eks.outputs` to
-   `aws-retool-services`; the controller's role ARN flows through and everything
-   is wired automatically.
-2. **Your platform team runs the operator.** Set `enable_external_secrets = false`
-   on `aws-eks` and set `eso_controller_role_arns` on `aws-retool-services` to
-   the IAM role its controller pods use. If that operator runs in a *different*
-   AWS account, its role also needs an identity policy allowing `sts:AssumeRole`
-   on `module.retool-services.outputs.eso_role_arn` — within one account the
-   trust policy alone is sufficient.
+`<prefix>-eso` is an IAM role scoped to this deployment's Secrets Manager paths.
+Its trust policy admits the cluster ESO controller's role, and the `SecretStore`
+sets `spec.provider.aws.role` to it.
 
-If neither is set, `terraform plan` fails with a message telling you so rather
-than creating a role nothing can assume.
+If your platform team runs ESO, set `eso_controller_role_arns` on
+`aws-retool-services` to the IAM role its controller pods use. Across accounts
+that role also needs an identity policy allowing `sts:AssumeRole` on
+`module.retool-services.outputs.eso_role_arn`; within one account the trust
+policy alone is sufficient.
 
-By default the controller is allowed to assume any role in the account whose
-name ends in `-eso`, which is what `aws-retool-services` names them. Override
-`external_secrets_assumable_role_arns` on `aws-eks` to narrow that, or to widen
-it if you renamed the per-deployment roles.
+By default the controller may assume any role in the account whose name ends in
+`-eso`. Override `external_secrets_assumable_role_arns` on `aws-eks` to narrow
+that.
+</details>
 
-`create_external_secrets` on `aws-retool-services` still controls whether the
+<details>
+<summary>GCP — the store names a Kubernetes service account</summary>
+
+`<prefix>-eso` is a Google service account holding
+`roles/secretmanager.secretAccessor` on this deployment's secrets individually —
+no project-level grant. A Kubernetes service account `retool-eso` in
+`<prefix>-retool` is annotated with it and bound through Workload Identity, and
+the `SecretStore` sets `spec.provider.gcpsm.auth.workloadIdentity.serviceAccountRef`
+to that service account.
+
+If your platform team runs ESO, bind its controller to
+`module.retool-services.outputs.eso_gcp_service_account_email`, or copy the
+per-secret IAM grants onto whatever identity it uses.
+</details>
+
+<details>
+<summary>Azure — the store names a Kubernetes service account</summary>
+
+`<prefix>-eso-identity` is a user-assigned managed identity with a Key Vault
+access policy granting `Get`/`List`. A Kubernetes service account `retool-eso`
+in `<prefix>-retool` carries its client ID, a federated credential trusts that
+service account's subject, and the `SecretStore` sets
+`spec.provider.azurekv.serviceAccountRef` to it.
+
+If your platform team runs ESO, federate an additional credential on
+`module.retool-services.outputs.eso_identity_client_id` for its controller's
+service account, or grant its identity the same Key Vault access policy.
+</details>
+
+`create_external_secrets` on `<cloud>-retool-services` still controls whether the
 `SecretStore` and `ExternalSecret` objects are created at all, independently of
 who runs the operator.
 
 ### 4. Things that behave cluster-wide
 
-- **reloader** watches every namespace and, with `reloader_auto_reload_all`
-  (default `true`), restarts any workload whose referenced ConfigMap or Secret
-  changes — not just Retool's. Set it to `false` in a shared cluster where that
-  is unacceptable; Retool's own chart annotates its workloads with
-  `reloader.stakater.com/*`, so it keeps working either way.
-- **The ALB controller's IngressClass** is the chart default, `alb`, and is not
-  marked the cluster-default class. Set `make_default_ingress_class = true` on
-  `aws-eks` only if you want it to be. Retool routes via a `TargetGroupBinding`
-  and does not need a default class.
+**reloader** watches every namespace and, with `reloader_auto_reload_all`
+(default `true`), restarts any workload whose referenced ConfigMap or Secret
+changes — not just Retool's. Set it to `false` on the cluster module in a shared
+cluster where that is unacceptable; Retool's own chart annotates its workloads
+with `reloader.stakater.com/*`, so it keeps working either way.
+
+Ingress differs enough per cloud to be worth stating separately.
+
+<details>
+<summary>AWS</summary>
+
+The ALB controller's IngressClass is the chart default, `alb`, and is not marked
+the cluster-default class. Set `make_default_ingress_class = true` on `aws-eks`
+only if you want it to be. Retool routes via a `TargetGroupBinding` and does not
+need a default class.
+</details>
+
+<details>
+<summary>GCP</summary>
+
+There is no in-cluster ingress controller: the GKE Gateway controller runs in
+the control plane. Each deployment gets its own `Gateway` in its own namespace,
+and therefore its own load balancer and static IP.
+
+`external-dns` runs per deployment, named `<prefix>-external-dns` so its
+cluster-scoped RBAC does not collide, and confined to its own DNS zone
+(`--zone-id-filter`) and namespace. Set `enable_external_dns = false` to publish
+records yourself.
+</details>
+
+<details>
+<summary>Azure</summary>
+
+AGIC binds 1:1 to an Application Gateway, so each deployment runs its own,
+released as `<prefix>-ingress-azure` and confined by `ingressClass`,
+`ingressClassResource` and `watchNamespace` to its own class and namespace. Its
+IngressClass defaults to `<prefix>-agic`; override with `ingress_class_name`, or
+set `enable_agic = false` and point that variable at an ingress controller you
+already run.
+
+cert-manager is shared, but the certificate is not. Each deployment creates a
+namespaced `Issuer` (`<prefix>-letsencrypt`) whose Azure DNS solver names its own
+managed identity, and grants that identity DNS Zone Contributor on its own zone
+only. Set `cluster_issuer_name` to consume a `ClusterIssuer` your platform
+already runs instead.
+</details>
 
 ## Pinning pods to node pools
 
@@ -146,9 +264,11 @@ labelled and/or tainted so only intended workloads land there. For Retool's pods
 to schedule onto such a pool, they need a matching `nodeSelector` and/or
 `tolerations`.
 
-Every module that deploys pods via Helm exposes two variables for this — on AWS
-that is `aws-eks` (the cluster-wide operators), `retool-helm` (Retool itself),
-and on GCP/Azure the `*-retool-services` and `*-user-ingress` modules:
+Every module that deploys pods via Helm exposes two variables for this: the
+cluster module (`aws-eks` / `gcp-gke` / `azure-aks`, for the cluster-wide
+operators), `retool-helm` (Retool itself), and `gcp-user-ingress` /
+`azure-user-ingress` (external-dns and AGIC). `aws-user-ingress` deploys no pods
+and has neither variable.
 
 - `pod_node_selector` (`map(string)`, default `{}`)
 - `pod_tolerations` (list of Kubernetes toleration objects, default `[]`)

@@ -20,11 +20,10 @@ variable "domain_name" {
 
 variable "retool_services" {
   type = object({
-    retool_namespace   = optional(string)
-    services_namespace = optional(string)
+    retool_namespace = optional(string)
   })
   default     = null
-  description = "Retool-services outputs (e.g. module.retool-services.outputs). The Gateway/HTTPRoute/HealthCheckPolicy are created in retool_namespace (beside the Retool Service), and external-dns runs in services_namespace. When null, falls back to the \"<prefix>-retool\" / \"<prefix>-retool-services\" defaults."
+  description = "Retool-services outputs (e.g. module.retool-services.outputs). The Gateway, HTTPRoute, HealthCheckPolicy and external-dns are all created in retool_namespace, beside the Retool Service. When null, falls back to \"<prefix>-retool\"."
 }
 
 variable "enable_external_dns" {

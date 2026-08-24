@@ -1,8 +1,9 @@
 locals {
   outputs = {
     ingress_mode        = "azure-agic"
-    ingress_class_name  = var.ingress_class_name
-    cluster_issuer_name = var.enable_https ? local.cluster_issuer_name : null
+    ingress_class_name  = local.ingress_class_name
+    cluster_issuer_name = var.enable_https ? local.issuer_name : null
+    issuer_kind         = var.enable_https ? local.issuer_kind : null
     tls_secret_name     = var.enable_https ? "${var.prefix}-tls" : null
     zone_name_servers   = azurerm_dns_zone.main.name_servers
     zone_dns_name       = azurerm_dns_zone.main.name

@@ -57,45 +57,16 @@ variable "retool_namespace" {
   description = "Namespace for the Retool application and the K8s objects that live beside it (ExternalSecrets, the namespaced SecretStore). When null, defaults to \"<prefix>-retool\"."
 }
 
-variable "services_namespace" {
-  type        = string
-  default     = null
-  description = "Namespace for Retool's supporting operators (External Secrets Operator, reloader). When null, defaults to \"<prefix>-retool-services\"."
-}
-
-variable "create_namespaces" {
+variable "create_namespace" {
   type        = bool
   default     = true
-  description = "Whether this module creates the retool and services namespaces. Set false in shared clusters where the namespaces are provisioned out of band."
-}
-
-# --- Per-release enable toggles ---
-# All default true to preserve the from-scratch all-inclusive behavior. Flip the
-# cluster-singleton operators off when deploying into a shared cluster that
-# already runs them.
-
-variable "enable_external_secrets" {
-  type        = bool
-  default     = true
-  description = "Whether to install the External Secrets Operator (and its Workload Identity wiring). Disable in shared clusters that already run ESO; the SecretStore and ExternalSecret resources are still created so the platform's ESO reconciles them."
+  description = "Whether this module creates the retool namespace. Set false in shared clusters where the namespace is provisioned out of band."
 }
 
 variable "create_external_secrets" {
   type        = bool
   default     = true
   description = "Whether to create the ESO ExternalSecret resources that sync cloud secrets into K8s Secrets in the retool namespace. Disable if you manage the ExternalSecret resources out of band. Independent of enable_external_secrets (which controls the operator itself)."
-}
-
-variable "enable_reloader" {
-  type        = bool
-  default     = true
-  description = "Whether to install Stakater reloader. When enabled it is scoped to only watch the retool namespace."
-}
-
-variable "install_crds" {
-  type        = bool
-  default     = true
-  description = "Whether the bundled External Secrets Operator installs its CRDs. Set false in shared clusters where these cluster-scoped CRDs are already managed out of band."
 }
 
 variable "encryption_key_secret_name" {
@@ -171,20 +142,3 @@ variable "tags" {
   description = "Tags applied to all resources created by this module"
 }
 
-# Pod scheduling — applied to every pod this module schedules via Helm. In a
-# shared cluster with dedicated/labelled/tainted node pools, set these so the
-# pods land on (and tolerate) the right nodes. See local.pod_scheduling in
-# pod-scheduling.tf for how they are merged into each chart's values.
-variable "pod_node_selector" {
-  type        = map(string)
-  default     = {}
-  description = "nodeSelector applied to every pod this module schedules (all Helm charts/components). Empty = unset (chart defaults apply)."
-}
-
-variable "pod_tolerations" {
-  # A list of Kubernetes toleration objects (key/operator/value/effect/tolerationSeconds),
-  # passed verbatim into Helm values. Typed `any` to avoid rendering omitted fields as null.
-  type        = any
-  default     = []
-  description = "Tolerations applied to every pod this module schedules. A list of Kubernetes toleration objects. Empty = unset."
-}

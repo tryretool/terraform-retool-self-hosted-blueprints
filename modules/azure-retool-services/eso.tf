@@ -1,9 +1,9 @@
 locals {
-  eso = {
-    name                 = "external-secrets"
-    namespace            = local.services_namespace
-    service_account_name = "external-secrets"
-  }
+  # Service account this deployment's SecretStore names. Nothing runs as it —
+  # the cluster's shared External Secrets Operator mints a token for it and
+  # exchanges that for this deployment's managed identity, so one deployment can
+  # only read the secrets it was granted.
+  eso_service_account_name = "retool-eso"
 
   # Namespaced SecretStore (lives in the retool namespace alongside the
   # ExternalSecrets that reference it), rather than a cluster-global
@@ -64,14 +64,11 @@ resource "azurerm_user_assigned_identity" "eso" {
 # identity; grant it the eso managed identity's Key Vault access policy (this
 # module always creates that access policy and exports the identity client id).
 resource "azurerm_federated_identity_credential" "eso" {
-  count = var.enable_external_secrets ? 1 : 0
-
-  name                = "${var.prefix}-eso-federated"
-  resource_group_name = var.resource_group_name
-  parent_id           = azurerm_user_assigned_identity.eso.id
-  audience            = ["api://AzureADTokenExchange"]
-  issuer              = var.aks.oidc_issuer_url
-  subject             = "system:serviceaccount:${local.eso.namespace}:${local.eso.service_account_name}"
+  name                      = "${var.prefix}-eso-federated"
+  user_assigned_identity_id = azurerm_user_assigned_identity.eso.id
+  audience                  = ["api://AzureADTokenExchange"]
+  issuer                    = var.aks.oidc_issuer_url
+  subject                   = "system:serviceaccount:${local.retool_namespace}:${local.eso_service_account_name}"
 }
 
 # Grant ESO read access to secrets in the Key Vault via access policy.
@@ -88,46 +85,28 @@ resource "azurerm_key_vault_access_policy" "eso" {
 
 # ---------- ESO Helm release ----------
 
-resource "helm_release" "external_secrets" {
-  count = var.enable_external_secrets ? 1 : 0
+# Annotated so the shared controller's token exchange lands on this
+# deployment's managed identity.
+resource "kubernetes_service_account_v1" "eso" {
+  metadata {
+    name      = local.eso_service_account_name
+    namespace = local.retool_namespace
 
-  namespace        = local.eso.namespace
-  create_namespace = false
+    annotations = {
+      "azure.workload.identity/client-id" = azurerm_user_assigned_identity.eso.client_id
+      "azure.workload.identity/tenant-id" = data.azurerm_client_config.current.tenant_id
+    }
+  }
 
-  name       = local.eso.name
-  repository = "https://charts.external-secrets.io"
-  chart      = "external-secrets"
-  version    = "0.12.1"
-  wait       = true
-
-  values = [
-    yamlencode({
-      installCRDs = var.install_crds
-      serviceAccount = {
-        labels = {
-          "azure.workload.identity/use" = "true"
-        }
-        annotations = {
-          "azure.workload.identity/client-id" = azurerm_user_assigned_identity.eso.client_id
-        }
-      }
-    }),
-    yamlencode(local.has_pod_scheduling ? merge(local.pod_scheduling, {
-      webhook        = local.pod_scheduling
-      certController = local.pod_scheduling
-    }) : {}),
-  ]
-
-  depends_on = [kubernetes_namespace_v1.services]
+  depends_on = [kubernetes_namespace_v1.retool]
 }
 
 # ---------- SecretStore (namespaced) ----------
-# Lives in the retool namespace alongside the ExternalSecrets. With no explicit
-# serviceAccountRef, ESO's azurekv WorkloadIdentity auth uses the controller
-# pod's projected token — the external-secrets controller SA carries the
-# azure.workload.identity labels/annotation and is federated to the eso identity.
-# (A namespaced SecretStore cannot reference a service account in another
-# namespace, which is why the cross-namespace serviceAccountRef is dropped.)
+# Lives in the retool namespace alongside the ExternalSecrets it serves. Naming a
+# service account in the same namespace makes the cluster's shared controller
+# mint a token for it and assume this deployment's identity, rather than falling
+# back to the controller's own — which is what keeps deployments isolated from
+# each other's secrets.
 # Always created so a platform-provided ESO reconciles it in shared clusters.
 resource "kubectl_manifest" "secret_store" {
   yaml_body = yamlencode({
@@ -143,13 +122,16 @@ resource "kubectl_manifest" "secret_store" {
           authType = "WorkloadIdentity"
           tenantId = data.azurerm_client_config.current.tenant_id
           vaultUrl = var.vnet.key_vault_uri
+          serviceAccountRef = {
+            name = local.eso_service_account_name
+          }
         }
       }
     }
   })
 
   depends_on = [
-    helm_release.external_secrets,
+    kubernetes_service_account_v1.eso,
     kubernetes_namespace_v1.retool,
   ]
 }
