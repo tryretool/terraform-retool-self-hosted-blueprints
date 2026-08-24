@@ -1,7 +1,6 @@
 locals {
   outputs = {
     retool_namespace                 = local.retool_namespace
-    services_namespace               = local.services_namespace
     eso_identity_client_id           = azurerm_user_assigned_identity.eso.client_id
     eso_identity_principal_id        = azurerm_user_assigned_identity.eso.principal_id
     encryption_key_secret_name       = "encryption-key"
@@ -26,11 +25,6 @@ locals {
 output "retool_namespace" {
   description = "Namespace the Retool application and its Secrets are deployed into. Pass to retool-helm (via retool_services) and to the user-ingress module."
   value       = local.outputs.retool_namespace
-}
-
-output "services_namespace" {
-  description = "Namespace the supporting operators (ESO, reloader) are deployed into. The user-ingress module places cert-manager and AGIC here too."
-  value       = local.outputs.services_namespace
 }
 
 output "secret_store_kind" {

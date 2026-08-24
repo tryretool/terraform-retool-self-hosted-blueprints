@@ -12,6 +12,17 @@ Read [`guides/shared-clusters.md`](../../guides/shared-clusters.md) first — it
 explains the namespace model, why the operators are cluster singletons, and how
 the External Secrets Operator reaches Retool's secrets.
 
+## Cluster prerequisites
+
+- EKS Pod Identity available on the cluster — the External Secrets Operator gets
+  its credentials through it. `aws-eks` installs the addon for an adopted cluster
+  unless you set `enable_pod_identity_agent = false`.
+- An IAM OIDC provider for the cluster, which the ALB controller's IRSA role
+  needs. EKS does not create one; pass `existing_cluster.oidc_provider_arn` if
+  the lookup by issuer URL is ambiguous.
+- The worker-node security group id, which is not discoverable from the cluster
+  API and is required by the database and user-ingress modules.
+
 ## Before you apply
 
 1. Copy `provider.example.tf` and fill in your AWS profile/region.
@@ -28,3 +39,9 @@ the External Secrets Operator reaches Retool's secrets.
 
 This example creates a managed RDS database. If you also bring your own
 database, drop the `db-main` module and pass your connection details directly.
+
+## See also
+
+- [Upgrades](../../guides/upgrade-v0.md) — migrating an existing deployment.
+- [Troubleshooting](../../guides/troubleshooting.md)
+- [Scaling](../../guides/scaling.md)

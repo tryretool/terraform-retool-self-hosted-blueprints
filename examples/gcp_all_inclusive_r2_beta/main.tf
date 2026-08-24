@@ -80,8 +80,8 @@ module "retool" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/retool-helm"
   version = "~> 0.4"
 
-  retool_helm_name                         = "retool"
-  retool_helm_chart_version                = "6.11.15"
+  retool_helm_name          = "retool"
+  retool_helm_chart_version = "6.11.15"
 
   db              = module.db-main.outputs
   retool_services = module.retool-services.outputs

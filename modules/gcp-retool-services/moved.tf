@@ -1,17 +1,6 @@
-# from v0.3.0
+# from v0.3.0: the ExternalSecret manifests are now rendered through the local
+# passthrough chart as a single release rather than one resource per secret.
 moved {
-  from = helm_release.external_secrets
-  to   = helm_release.external_secrets[0]
-}
-
-# from v0.3.0
-moved {
-  from = helm_release.reloader
-  to   = helm_release.reloader[0]
-}
-
-# from v0.3.0
-moved {
-  from = kubectl_manifest.external_secret_extra_env_vars
-  to   = kubectl_manifest.external_secret_extra_env_vars[0]
+  from = helm_release.external_secret_crs
+  to   = helm_release.external_secret_crs[0]
 }

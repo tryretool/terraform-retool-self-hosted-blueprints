@@ -1,10 +1,11 @@
 # Troubleshooting
 
 Fixes for errors you may hit applying these modules. See also
-[deploying into a shared/existing cluster](./shared-clusters.md), whose migration
-section covers namespace-move specifics (CRD ownership, etc.).
+[deploying into a shared/existing cluster](./shared-clusters.md) for the
+namespace and operator model, and [upgrades](./upgrade-v0.md) for the
+version-to-version migration steps, including CRD ownership.
 
-## AWS EKS Pod Identity Association already in use (409 `ResourceInUseException`)
+## AWS only — EKS Pod Identity Association already in use (409 `ResourceInUseException`)
 
 ### Symptom
 
@@ -79,7 +80,7 @@ Alternatively, if you don't need to preserve it, delete the stale association
 --association-id <id> --profile <aws-profile>`) and let the next apply recreate
 it — but importing avoids any disruption to a running controller.
 
-## AWS S3 bucket name already taken (`BucketAlreadyExists`)
+## AWS only — S3 bucket name already taken (`BucketAlreadyExists`)
 
 ### Symptom
 
@@ -121,7 +122,7 @@ The bucket is referenced by resource attributes elsewhere (IAM policy, the
 > bucket), and Azure `azure-retool-services` exposes `rr_storage_account_name`
 > (Storage account, 3-24 lowercase alphanumeric chars).
 
-## Helm install fails on existing resources (`exists and cannot be imported into the current release`)
+## All clouds — Helm install fails on existing resources (`exists and cannot be imported into the current release`)
 
 ### Symptom
 
@@ -215,7 +216,7 @@ single source of truth for it — it exposes `retool_namespace`, and the
 outputs. Set it to the namespace your existing release already occupies and the
 Retool Helm release is upgraded in place rather than recreated.
 
-Set it on `aws-retool-services`:
+Set it on `<cloud>-retool-services`:
 
 ```hcl
 module "retool-services" {
@@ -232,9 +233,10 @@ module "retool-services" {
 ```
 
 The cluster-wide operators are not pinnable this way: they are singletons
-installed once per cluster by `aws-eks` in their own conventional namespaces.
+installed once per cluster by the cluster module (`aws-eks` / `gcp-gke` /
+`azure-aks`) in their own conventional namespaces.
 
-`retool-helm` and `aws-user-ingress` pick the namespace up automatically from
+`retool-helm` and `<cloud>-user-ingress` pick the namespace up automatically from
 the retool-services outputs — no per-module change needed when they're wired the
 standard way:
 

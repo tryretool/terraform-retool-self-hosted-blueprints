@@ -75,6 +75,7 @@ variable "user_ingress" {
     gateway_section_name = optional(string)
     ingress_class_name   = optional(string)
     cluster_issuer_name  = optional(string)
+    issuer_kind          = optional(string)
     tls_secret_name      = optional(string)
   })
   default     = null

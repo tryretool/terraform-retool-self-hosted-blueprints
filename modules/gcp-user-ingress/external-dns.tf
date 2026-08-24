@@ -1,13 +1,15 @@
 locals {
   # Namespaces sourced from the retool-services outputs (single source of truth),
   # with prefix-based fallbacks when this module is used standalone.
-  retool_namespace   = coalesce(try(var.retool_services.retool_namespace, null), "${var.prefix}-retool")
-  services_namespace = coalesce(try(var.retool_services.services_namespace, null), "${var.prefix}-retool-services")
-
+  retool_namespace = coalesce(try(var.retool_services.retool_namespace, null), "${var.prefix}-retool")
+  # external-dns is not a cluster singleton: it owns no CRDs and no webhooks,
+  # just a Deployment and cluster-scoped RBAC named after the release. Prefixing
+  # the release is enough for several deployments to coexist, and each keeps its
+  # own zone filter and txtOwnerId.
   external_dns = {
-    name                 = "external-dns"
-    namespace            = local.services_namespace
-    service_account_name = "external-dns"
+    name                 = "${var.prefix}-external-dns"
+    namespace            = local.retool_namespace
+    service_account_name = "${var.prefix}-external-dns"
   }
 }
 
@@ -67,6 +69,7 @@ resource "helm_release" "external_dns" {
       txtOwnerId = var.prefix
 
       serviceAccount = {
+        name = local.external_dns.service_account_name
         annotations = {
           "iam.gke.io/gcp-service-account" = google_service_account.external_dns.email
         }
@@ -78,8 +81,8 @@ resource "helm_release" "external_dns" {
         # value and silently drops one, which leaves external-dns free to write to
         # every zone in the project.
         "--zone-id-filter=${google_dns_managed_zone.main.name}",
-        # Watch only the retool namespace (external-dns runs in services_namespace
-        # but its --namespace flag restricts which HTTPRoutes it sees).
+        # Restrict which HTTPRoutes this instance sees, so two deployments in one
+        # cluster never publish records for each other's hostnames.
         "--namespace=${local.retool_namespace}",
       ]
     }),

@@ -15,9 +15,10 @@ a single `terraform apply`.
   together. Start here.
 - [`modules/`](./modules) — the building-block Terraform modules (one set per
   cloud, plus the cloud-agnostic [`retool-helm`](./modules/retool-helm) module).
-- [`guides/`](./guides) — topic guides that apply across clouds 
+- [`guides/`](./guides) — topic guides covering all three clouds, with
+  cloud-specific detail called out where the stacks genuinely differ.
   - [Troubleshooting](./guides/troubleshooting.md)
-  - [Scaling](./guides/scaling.md) 
+  - [Scaling](./guides/scaling.md)
   - [Using a shared/existing Kubernetes cluster](./guides/shared-clusters.md)
   - [Upgrades (v0.x)](./guides/upgrade-v0.md)
 
@@ -59,10 +60,13 @@ a single `terraform apply`.
 > which you'd use instead of the from-scratch steps below.
 
 1. **Pick an example** under [`examples/`](./examples) for your cloud. The
-   `*_all_inclusive` examples deploy the standard stack; the
+   `*_all_inclusive` examples deploy the standard stack from scratch; the
    `*_all_inclusive_r2_beta` examples additionally enable the agent sandbox and
-   Remote Repository storage. Each example has its own `README.md` with
-   cloud-specific notes.
+   Remote Repository storage; the `*_shared_cluster` examples deploy into a
+   Kubernetes cluster you already run, which is also how you put more than one
+   Retool deployment in one cluster (see
+   [Using a shared/existing Kubernetes cluster](./guides/shared-clusters.md)).
+   Each example has its own `README.md` with cloud-specific notes.
 
 2. **Copy the example** into your own Terraform working directory (or work in
    place), then turn the provider stub into a real config:

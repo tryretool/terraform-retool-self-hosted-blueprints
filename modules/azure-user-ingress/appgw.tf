@@ -123,12 +123,11 @@ resource "azurerm_user_assigned_identity" "agic" {
 resource "azurerm_federated_identity_credential" "agic" {
   count = var.enable_agic ? 1 : 0
 
-  name                = "${var.prefix}-agic-federated"
-  resource_group_name = var.resource_group_name
-  parent_id           = azurerm_user_assigned_identity.agic[0].id
-  audience            = ["api://AzureADTokenExchange"]
-  issuer              = var.aks.oidc_issuer_url
-  subject             = "system:serviceaccount:${local.services_namespace}:ingress-azure"
+  name                      = "${var.prefix}-agic-federated"
+  user_assigned_identity_id = azurerm_user_assigned_identity.agic[0].id
+  audience                  = ["api://AzureADTokenExchange"]
+  issuer                    = var.aks.oidc_issuer_url
+  subject                   = "system:serviceaccount:${local.retool_namespace}:${local.agic_service_account_name}"
 }
 
 # AGIC needs Contributor on the AppGW to manage its configuration.
@@ -158,14 +157,20 @@ resource "azurerm_role_assignment" "agic_subnet_network_contributor" {
   principal_id         = azurerm_user_assigned_identity.agic[0].principal_id
 }
 
+# AGIC is bound 1:1 to an Application Gateway, so it stays per-deployment rather
+# than becoming a cluster singleton. That works because its only cluster-scoped
+# objects are a ClusterRole and ClusterRoleBinding named after the release (its
+# two CRDs ship in the chart's crds/ directory, which Helm never manages), and
+# because ingressClass, ingressClassResource and watchNamespace confine each
+# instance to its own class and namespace.
 resource "helm_release" "agic" {
   count = var.enable_agic ? 1 : 0
 
-  name       = "ingress-azure"
+  name       = "${var.prefix}-ingress-azure"
   repository = "oci://mcr.microsoft.com/azure-application-gateway/charts"
   chart      = "ingress-azure"
   version    = "1.9.7"
-  namespace  = local.services_namespace
+  namespace  = local.retool_namespace
   wait       = true
   timeout    = 600
 
@@ -184,9 +189,25 @@ resource "helm_release" "agic" {
       rbac = {
         enabled = true
       }
+      kubernetes = {
+        # Confine this controller to its own Ingresses. Without all three, two
+        # AGIC instances in one cluster fight over every Ingress in it.
+        ingressClass = local.ingress_class_name
+        ingressClassResource = {
+          enabled         = true
+          name            = local.ingress_class_name
+          default         = false
+          controllerValue = "azure/${local.ingress_class_name}"
+        }
+        watchNamespace = local.retool_namespace
+      }
+      serviceAccount = {
+        name = local.agic_service_account_name
+      }
     }),
     # AGIC's scheduling lives under the `kubernetes.*` values prefix (the
-    # top-level nodeSelector is legacy), so pod_scheduling is nested there.
+    # top-level nodeSelector is legacy), so pod_scheduling is nested there. It is
+    # a separate values document so Helm deep-merges it with the block above.
     yamlencode(local.has_pod_scheduling ? { kubernetes = local.pod_scheduling } : {}),
   ]
 
