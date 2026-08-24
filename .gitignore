@@ -16,6 +16,7 @@ crash.log
 # control as they are data points which are potentially sensitive and subject
 # to change depending on the environment.
 *.tfvars
+!marketplace/gcp/marketplace_test.tfvars
 
 # values.yaml
 kubeconfig
@@ -35,6 +36,7 @@ __pycache__/
 *.log
 *.tgz
 *.lock
+marketplace/gcp/*.zip
 
 **/certs/**
 

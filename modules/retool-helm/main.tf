@@ -141,7 +141,7 @@ locals {
 resource "helm_release" "retool" {
   name       = var.retool_helm_name
   repository = local.repository
-  chart      = "retool"
+  chart      = var.retool_helm_chart
   version    = var.retool_helm_chart_version
   namespace  = "default"
   # Full-stack deploys (workflows, code executor) can take longer than 5m for

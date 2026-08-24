@@ -1,0 +1,186 @@
+apiVersion: blueprints.cloud.google.com/v1alpha1
+kind: BlueprintMetadata
+metadata:
+  name: terraform-retool-self-hosted-blueprints
+  annotations:
+    config.kubernetes.io/local-config: "true"
+spec:
+  info:
+    title: Retool Blueprints (GCP Marketplace)
+    source:
+      repo: https://github.com/tryretool/terraform-retool-self-hosted-blueprints.git
+      sourceType: git
+      dir: /marketplace/gcp
+    actuationTool:
+      flavor: Terraform
+      version: ">= 1.5.7"
+    description: {}
+  content: {}
+  interfaces:
+    variables:
+      - name: project_id
+        description: GCP project that will host the deployment. Marketplace supplies this.
+        varType: string
+        required: true
+      - name: goog_cm_deployment_name
+        description: Marketplace deployment name. Auto-populated by the Marketplace UI and used to avoid resource name collisions.
+        varType: string
+        defaultValue: ""
+      - name: region
+        description: GCP region for the VPC, GKE cluster, and Cloud SQL.
+        varType: string
+        defaultValue: us-central1
+      - name: prefix
+        description: Short prefix for resource names (kept short for GCP 30-char SA IDs). Empty uses a truncated goog_cm_deployment_name.
+        varType: string
+        defaultValue: ""
+      - name: domain_name
+        description: Hostname that will serve Retool (e.g. retool.example.com). Delegate its NS records to the Cloud DNS zone this module creates.
+        varType: string
+        required: true
+      - name: license_key
+        description: Retool license key. Leave empty for free-tier mode.
+        varType: string
+        defaultValue: ""
+      - name: helm_chart_repo
+        description: OCI or HTTPS repo that hosts the Retool Helm chart.
+        varType: string
+        defaultValue: oci://us-docker.pkg.dev/retool-public/terraform-app-staging/retool-blueprints/charts
+      - name: helm_chart_name
+        description: Retool Helm chart name under helm_chart_repo.
+        varType: string
+        defaultValue: retool
+      - name: helm_chart_version
+        description: Chart tag. Producer Portal requires a semantic minor version (e.g. 4.0).
+        varType: string
+        defaultValue: "4.0"
+      - name: helm_release_name
+        description: Helm release name. Empty uses "retool".
+        varType: string
+        defaultValue: ""
+      - name: third_party_charts_repo
+        description: OCI repo for the External Secrets, Reloader, and ExternalDNS charts. Separate from helm_chart_repo so Marketplace's rewrite of the Retool chart does not retarget these.
+        varType: string
+        defaultValue: oci://us-docker.pkg.dev/retool-public/terraform-app-staging/retool-blueprints/charts
+      - name: image_repo
+        description: Retool backend image repository.
+        varType: string
+        defaultValue: us-docker.pkg.dev/retool-public/terraform-app-staging/retool-blueprints
+      - name: image_tag
+        description: Retool backend / code-executor image tag.
+        varType: string
+        defaultValue: "4.0"
+      - name: code_executor_image_repo
+        description: Code-executor image repository.
+        varType: string
+        defaultValue: us-docker.pkg.dev/retool-public/terraform-app-staging/retool-blueprints/code-executor-service
+      - name: code_executor_image_tag
+        description: Code-executor image tag.
+        varType: string
+        defaultValue: "4.0"
+      - name: js_executor_image_repo
+        description: JS-executor image repository.
+        varType: string
+        defaultValue: us-docker.pkg.dev/retool-public/terraform-app-staging/retool-blueprints/js-executor-service
+      - name: js_executor_image_tag
+        description: JS-executor image tag.
+        varType: string
+        defaultValue: "4.0"
+      - name: agent_sandbox_image_repo
+        description: Agent-sandbox image repository.
+        varType: string
+        defaultValue: us-docker.pkg.dev/retool-public/terraform-app-staging/retool-blueprints/agent-sandbox-service
+      - name: agent_sandbox_image_tag
+        description: Agent-sandbox image tag.
+        varType: string
+        defaultValue: "4.0"
+      - name: telemetry_image_repo
+        description: Telemetry image repository.
+        varType: string
+        defaultValue: us-docker.pkg.dev/retool-public/terraform-app-staging/retool-blueprints/telemetry
+      - name: telemetry_image_tag
+        description: Telemetry image tag.
+        varType: string
+        defaultValue: "4.0"
+      - name: external_secrets_image_repo
+        description: External Secrets Operator image repository.
+        varType: string
+        defaultValue: us-docker.pkg.dev/retool-public/terraform-app-staging/retool-blueprints/external-secrets
+      - name: external_secrets_image_tag
+        description: External Secrets Operator image tag.
+        varType: string
+        defaultValue: v2.8.0
+      - name: reloader_image_repo
+        description: Reloader image repository.
+        varType: string
+        defaultValue: us-docker.pkg.dev/retool-public/terraform-app-staging/retool-blueprints/reloader
+      - name: reloader_image_tag
+        description: Reloader image tag.
+        varType: string
+        defaultValue: v1.4.19
+      - name: external_dns_image_repo
+        description: ExternalDNS image repository.
+        varType: string
+        defaultValue: us-docker.pkg.dev/retool-public/terraform-app-staging/retool-blueprints/external-dns
+      - name: external_dns_image_tag
+        description: ExternalDNS image tag.
+        varType: string
+        defaultValue: v0.21.0
+      - name: busybox_image_repo
+        description: Busybox init image repository (agent-sandbox prepuller).
+        varType: string
+        defaultValue: us-docker.pkg.dev/retool-public/terraform-app-staging/retool-blueprints/busybox
+      - name: busybox_image_tag
+        description: Busybox init image tag.
+        varType: string
+        defaultValue: 1.37.0
+      - name: smarter_device_manager_image_repo
+        description: smarter-device-manager image repository.
+        varType: string
+        defaultValue: us-docker.pkg.dev/retool-public/terraform-app-staging/retool-blueprints/smarter-device-manager
+      - name: smarter_device_manager_image_tag
+        description: smarter-device-manager image tag.
+        varType: string
+        defaultValue: v1.20.12
+    outputs:
+      - name: static_ip_address
+        description: Reserved Gateway IP. external-dns creates the A record once the HTTPRoute is programmed.
+      - name: zone_name_servers
+        description: Delegate domain_name to these Cloud DNS name servers.
+  # Marketplace reads this when the customer clicks "Create new service account"
+  # and grants these roles to that SA before Infra Manager runs. Omit this and
+  # Create new produces a bare SA that the deploy preflight treats as missing.
+  # Re-add this block if you regenerate metadata with `cft blueprint metadata`.
+  requirements:
+    roles:
+      - level: Project
+        roles:
+          - roles/config.agent
+          - roles/editor
+          - roles/artifactregistry.reader
+          - roles/container.admin
+          - roles/iam.serviceAccountAdmin
+          - roles/iam.serviceAccountUser
+          - roles/resourcemanager.projectIamAdmin
+    services:
+      - compute.googleapis.com
+      - servicenetworking.googleapis.com
+      - sqladmin.googleapis.com
+      - container.googleapis.com
+      - secretmanager.googleapis.com
+      - dns.googleapis.com
+      - certificatemanager.googleapis.com
+      - artifactregistry.googleapis.com
+      - iam.googleapis.com
+      - cloudresourcemanager.googleapis.com
+      - serviceusage.googleapis.com
+      - config.googleapis.com
+    providerVersions:
+      - source: hashicorp/google
+        version: "~> 6.28"
+      - source: hashicorp/google-beta
+        version: "~> 6.28"
+      - source: hashicorp/helm
+        version: "~> 2.17"
+      - source: hashicorp/kubernetes
+        version: "~> 2.36"
