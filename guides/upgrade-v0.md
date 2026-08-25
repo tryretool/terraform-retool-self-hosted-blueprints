@@ -358,6 +358,30 @@ release name, IngressClass and watch namespace.
 | output `services_namespace` | Gone. |
 | output `cluster_issuer_name` | Still present, but now names a namespaced `Issuer` by default; the new `issuer_kind` output says which. |
 
+Upgrading a v0.3.x Azure deployment in place also needs these two edits to your
+root configuration:
+
+```hcl
+module "retool-services" {
+  # ...
+  # Retool ran in "default" before; the new default is "<prefix>-retool", and
+  # the namespace is ForceNew, so without these the Retool release is recreated.
+  retool_namespace = "default"
+  create_namespace = false
+}
+
+module "user-ingress" {
+  # ...
+  # New input. The retool namespace is now threaded from retool-services, so
+  # without it this module falls back to "<prefix>-retool" and puts the
+  # Certificate, Issuer and AGIC somewhere Retool isn't.
+  retool_services = module.retool-services.outputs
+}
+```
+
+Drop the two `retool-services` lines whenever you're ready to move Retool into
+its own namespace — that is a one-time recreate of the Retool release.
+
 #### Azure — the certificate issuer is now namespaced
 
 cert-manager is shared, but a `ClusterIssuer` named `letsencrypt-prod` is not:
