@@ -3,8 +3,8 @@
 #   cp vars.tf.example terraform.tfvars
 #
 # This file holds only the values that are *your* choices. Everything derivable
-# from the CloudFormation stack — VPC and subnet IDs, database configuration,
-# security group rules, secret ARNs, certificate ARN, image tag — is written to
+# from the CloudFormation stack — VPC and subnet IDs, database connection
+# details, secret ARNs, certificate ARN, image tag — is written to
 # imported.tfvars by the helper:
 #
 #   ./import_from_cloudformation.py import-tfvars --stack-name <name> --region <region>
@@ -67,31 +67,13 @@ cluster_version = "1.32"
 # Temporal
 # ---------------------------------------------------------------------------
 #
-# Set by imported.tfvars to "imported" when the helper finds a standalone
-# Temporal RDS instance, or "external" when it finds an Aurora cluster (which
-# the aws-database module cannot represent). Override to "none" to run Retool
-# without Workflows.
-#
-# temporal_db_mode = "none"
+# The temporal_db connection details come from imported.tfvars. Set
+# temporal_db = null to run Retool without Workflows.
 
 temporal = {
   # The Temporal Web UI, reachable via `kubectl port-forward`.
   enable_web_ui = false
 }
-
-# ---------------------------------------------------------------------------
-# CloudAuth (Amazon-internal only)
-# ---------------------------------------------------------------------------
-#
-# The helper reads these from the CloudFormation template's Mappings block and
-# writes them to imported.tfvars. Set here only to override.
-#
-# cloudauth = {
-#   vpc_endpoint_service_name = "com.amazonaws.vpce.us-west-2.vpce-svc-0000000000000000"
-#   fqen                      = "/svc1/CloudAuth/prod/us-west-2"
-#   subdomain                 = "oauth.cloudauth.a2z.com"
-#   api_gateway_account_ids   = ["012345678901"]
-# }
 
 # ---------------------------------------------------------------------------
 # Retool application

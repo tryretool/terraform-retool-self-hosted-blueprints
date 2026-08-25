@@ -1,4 +1,4 @@
-# Inputs for the CloudFormation → Terraform import stack.
+# Inputs for the CloudFormation → Terraform migration stack.
 #
 # These arrive from two files, kept separate so the machine-derived half can be
 # regenerated at any time without disturbing your own choices:
@@ -91,192 +91,74 @@ variable "manage_karpenter_subnet_tags" {
   default     = true
 }
 
-variable "tag_subnets_for_load_balancer_discovery" {
-  type        = bool
-  description = "Whether to add the kubernetes.io/role/elb and kubernetes.io/role/internal-elb tags to the public and private subnets. The user ALB in this stack names its subnets explicitly and does not need them, but they let the AWS Load Balancer Controller auto-discover subnets for any Ingress you create later."
-  default     = false
-}
-
 # ---------------------------------------------------------------------------
-# The imported Retool database
+# Existing databases (referenced, not managed)
 # ---------------------------------------------------------------------------
+#
+# These stay outside Terraform's control. This stack reads their connection
+# details and adds an ingress rule so the new EKS nodes can reach them; it never
+# modifies the databases themselves, and never touches the existing security
+# group rules the running ECS deployment depends on.
 
 variable "retool_db" {
   type = object({
-    identifier            = string
+    instance_identifier   = string
     credentials_secret_id = string
     password_property     = optional(string, "password")
-    security_group_name   = string
-    db_subnet_group_name  = string
-    parameter_group_name  = optional(string)
-
-    database_name   = optional(string, "hammerhead_production")
-    master_username = optional(string, "retool")
-    port            = optional(number, 5432)
-
-    engine_version        = string
-    instance_class        = string
-    allocated_storage     = number
-    max_allocated_storage = optional(number, 0)
-    storage_type          = optional(string, "gp2")
-    iops                  = optional(number)
-    storage_encrypted     = optional(bool, true)
-    multi_az              = optional(bool, false)
-    family                = string
-    major_engine_version  = string
-    deletion_protection   = optional(bool, false)
+    security_group_id     = optional(string)
   })
   description = <<-EOT
-    The existing Retool database, imported into Terraform. Every field must match
-    what the database actually is, or the first apply modifies it — run
-    `import_from_cloudformation.py import-tfvars` to generate them rather than
-    filling them in by hand.
+    The existing Retool database, which holds all your data and is neither
+    created nor modified by this stack.
 
-      identifier:            RDS DB instance identifier. Also the import ID.
-      credentials_secret_id: Secrets Manager secret holding the master
-                             credentials (CloudFormation's RetoolRDSSecret).
-                             The password stays managed by this secret, NOT by
-                             RDS — see main.tf.
-      security_group_name /
-      db_subnet_group_name:  exact current names. Both are fixed at creation, so
-                             a mismatch makes Terraform destroy and recreate.
-      parameter_group_name:  the group the database already uses. Leave null only
-                             if you want Terraform to attach a fresh one.
+      instance_identifier:   RDS DB instance identifier (not the endpoint).
+                             Host, port, database name and master username are
+                             read from it.
+      credentials_secret_id: Secrets Manager secret ID/ARN holding the master
+                             credentials — the CloudFormation stack's
+                             RetoolRDSSecret, whose value is
+                             {"username": "...", "password": "..."}.
+      password_property:     JSON property within that secret holding the
+                             password. Defaults to "password".
+      security_group_id:     Security group attached to the instance. When set,
+                             this stack adds an ingress rule allowing Postgres
+                             from the EKS nodes. Leave null if you manage that
+                             rule yourself.
   EOT
-}
-
-variable "retool_db_preserved_ingress_rules" {
-  type = map(object({
-    ip_protocol                  = string
-    from_port                    = optional(number)
-    to_port                      = optional(number)
-    cidr_ipv4                    = optional(string)
-    cidr_ipv6                    = optional(string)
-    referenced_security_group_id = optional(string)
-    prefix_list_id               = optional(string)
-    description                  = optional(string)
-  }))
-  description = <<-EOT
-    Ingress rules that already exist on the imported database security group,
-    keyed by their AWS security group rule ID (sgr-...). These are imported and
-    then left in place — they are what keeps the running ECS deployment able to
-    reach the database.
-
-    Once the CloudFormation deployment is decommissioned, delete an entry here
-    and Terraform removes exactly that rule.
-  EOT
-  default     = {}
-}
-
-variable "retool_db_preserved_egress_rules" {
-  type = map(object({
-    ip_protocol                  = string
-    from_port                    = optional(number)
-    to_port                      = optional(number)
-    cidr_ipv4                    = optional(string)
-    cidr_ipv6                    = optional(string)
-    referenced_security_group_id = optional(string)
-    prefix_list_id               = optional(string)
-    description                  = optional(string)
-  }))
-  description = "Egress rules that already exist on the imported database security group, keyed by rule ID. Includes the default allow-all rule AWS creates with every security group."
-  default     = {}
 }
 
 # ---------------------------------------------------------------------------
 # The Temporal database (Retool Workflows)
 # ---------------------------------------------------------------------------
 
-variable "temporal_db_mode" {
-  type        = string
-  description = <<-EOT
-    How the Temporal database is managed:
-
-      "imported": a standalone RDS instance, imported into Terraform the same way
-                  as the Retool database. Configure it with temporal_db.
-      "external": referenced but left where it is. Use this for an Aurora
-                  cluster, which cannot be represented by the aws-database
-                  module. Configure it with temporal_db_external.
-      "none":     no Temporal database, which disables Retool Workflows.
-  EOT
-  default     = "none"
-
-  validation {
-    condition     = contains(["imported", "external", "none"], var.temporal_db_mode)
-    error_message = "temporal_db_mode must be one of: imported, external, none."
-  }
-}
-
 variable "temporal_db" {
-  type = object({
-    identifier            = string
-    credentials_secret_id = string
-    password_property     = optional(string, "password")
-    security_group_name   = string
-    db_subnet_group_name  = string
-    parameter_group_name  = optional(string)
-
-    database_name   = optional(string, "temporal")
-    master_username = optional(string, "retool")
-    port            = optional(number, 5432)
-
-    engine_version        = string
-    instance_class        = string
-    allocated_storage     = number
-    max_allocated_storage = optional(number, 0)
-    storage_type          = optional(string, "gp2")
-    iops                  = optional(number)
-    storage_encrypted     = optional(bool, true)
-    multi_az              = optional(bool, false)
-    family                = string
-    major_engine_version  = string
-    deletion_protection   = optional(bool, false)
-  })
-  description = "The existing standalone Temporal database, imported into Terraform. Same shape and same rules as retool_db. Used only when temporal_db_mode is \"imported\"."
-  default     = null
-}
-
-variable "temporal_db_external" {
   type = object({
     host                  = string
     port                  = optional(number, 5432)
     username              = string
+    database              = optional(string, "temporal")
     credentials_secret_id = string
     password_property     = optional(string, "password")
     security_group_id     = optional(string)
   })
-  description = "Connection details for a Temporal database left outside Terraform — typically an Aurora cluster, which the aws-database module cannot represent. Used only when temporal_db_mode is \"external\". When security_group_id is set, this stack adds an ingress rule allowing Postgres from the EKS nodes."
+  description = <<-EOT
+    The existing Temporal database — the CloudFormation stack's Temporal RDS
+    instance or Aurora cluster. Referenced, never modified; the Retool Helm
+    chart runs the Temporal cluster itself and only needs somewhere to store its
+    state.
+
+      host / port:           writer endpoint of the existing instance or cluster.
+      username:              master username.
+      credentials_secret_id: Secrets Manager secret holding the password (the
+                             CloudFormation stack's RetoolTemporalRDSSecret).
+                             Synced into the cluster as a Kubernetes Secret; see
+                             temporal.tf.
+      security_group_id:     when set, this stack adds an ingress rule allowing
+                             Postgres from the EKS nodes.
+
+    Set to null to run Retool without Workflows.
+  EOT
   default     = null
-}
-
-variable "temporal_db_preserved_ingress_rules" {
-  type = map(object({
-    ip_protocol                  = string
-    from_port                    = optional(number)
-    to_port                      = optional(number)
-    cidr_ipv4                    = optional(string)
-    cidr_ipv6                    = optional(string)
-    referenced_security_group_id = optional(string)
-    prefix_list_id               = optional(string)
-    description                  = optional(string)
-  }))
-  description = "Ingress rules that already exist on the imported Temporal database security group, keyed by rule ID. See retool_db_preserved_ingress_rules."
-  default     = {}
-}
-
-variable "temporal_db_preserved_egress_rules" {
-  type = map(object({
-    ip_protocol                  = string
-    from_port                    = optional(number)
-    to_port                      = optional(number)
-    cidr_ipv4                    = optional(string)
-    cidr_ipv6                    = optional(string)
-    referenced_security_group_id = optional(string)
-    prefix_list_id               = optional(string)
-    description                  = optional(string)
-  }))
-  description = "Egress rules that already exist on the imported Temporal database security group, keyed by rule ID."
-  default     = {}
 }
 
 variable "temporal" {
@@ -397,21 +279,6 @@ variable "alb_oidc" {
     Terraform reads credentials_secret_id to configure the listener, so its value
     lands in Terraform state; use an encrypted, access-restricted backend.
   EOT
-  default     = null
-}
-
-# ---------------------------------------------------------------------------
-# CloudAuth (Amazon-internal)
-# ---------------------------------------------------------------------------
-
-variable "cloudauth" {
-  type = object({
-    vpc_endpoint_service_name = string
-    fqen                      = string
-    subdomain                 = optional(string, "oauth.cloudauth.a2z.com")
-    api_gateway_account_ids   = optional(list(string), [])
-  })
-  description = "Amazon-internal CloudAuth private integration. Creates an interface VPC endpoint, a private hosted zone, an IAM policy granting execute-api:Invoke, and an EKS Pod Identity association for the Retool pods. Leave null unless you are migrating an Amazon-internal deployment."
   default     = null
 }
 

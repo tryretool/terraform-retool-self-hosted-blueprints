@@ -2,8 +2,8 @@
 # one with the aws-vpc module.
 #
 # Downstream modules take a `vpc` object rather than a module reference, so all
-# that's needed is to assemble the same shape from data sources — plus the two
-# subnet tags the aws-vpc module would otherwise have applied.
+# that's needed is to assemble the same shape from data sources — plus the
+# subnet tag Karpenter needs.
 
 data "aws_vpc" "existing" {
   id = var.vpc_id
@@ -21,17 +21,6 @@ locals {
   # The aws-eks module truncates the prefix to 38 characters for the cluster
   # name, and Karpenter's discovery tag value must equal that cluster name.
   cluster_name = substr(var.prefix, 0, 38)
-
-  load_balancer_subnet_tags = var.tag_subnets_for_load_balancer_discovery ? merge(
-    { for id in var.public_subnet_ids : "${id}:kubernetes.io/role/elb" => {
-      subnet_id = id
-      key       = "kubernetes.io/role/elb"
-    } },
-    { for id in var.private_subnet_ids : "${id}:kubernetes.io/role/internal-elb" => {
-      subnet_id = id
-      key       = "kubernetes.io/role/internal-elb"
-    } },
-  ) : {}
 }
 
 # Karpenter's EC2NodeClass selects subnets by this tag (see
@@ -43,15 +32,4 @@ resource "aws_ec2_tag" "karpenter_discovery" {
   resource_id = each.value
   key         = "karpenter.sh/discovery"
   value       = local.cluster_name
-}
-
-# Optional: lets the AWS Load Balancer Controller auto-discover subnets for any
-# Ingress you create later. The user ALB in this stack names its subnets
-# explicitly, so this is not required for Retool itself.
-resource "aws_ec2_tag" "load_balancer_role" {
-  for_each = local.load_balancer_subnet_tags
-
-  resource_id = each.value.subnet_id
-  key         = each.value.key
-  value       = "1"
 }

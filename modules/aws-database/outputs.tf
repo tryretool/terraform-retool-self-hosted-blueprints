@@ -1,23 +1,17 @@
 locals {
   outputs = {
-    arn                   = module.rds_cluster.db_instance_arn
-    endpoint              = module.rds_cluster.db_instance_endpoint
-    address               = module.rds_cluster.db_instance_address
-    engine                = module.rds_cluster.db_instance_engine
-    id                    = module.rds_cluster.db_instance_identifier
-    name                  = module.rds_cluster.db_instance_name
-    username              = nonsensitive(module.rds_cluster.db_instance_username)
-    port                  = module.rds_cluster.db_instance_port
-    subnet_group_id       = module.rds_cluster.db_subnet_group_id
-    cloudwatch_log_groups = module.rds_cluster.db_instance_cloudwatch_log_groups
-    security_group_id     = module.main_rds_sg.security_group_id
-    # RDS only reports this for secrets it manages itself, so an adopted database
-    # with an externally-managed password supplies its secret ARN directly.
-    master_user_secret_arn = (
-      var.master_user_secret_arn != null
-      ? var.master_user_secret_arn
-      : module.rds_cluster.db_instance_master_user_secret_arn
-    )
+    arn                    = module.rds_cluster.db_instance_arn
+    endpoint               = module.rds_cluster.db_instance_endpoint
+    address                = module.rds_cluster.db_instance_address
+    engine                 = module.rds_cluster.db_instance_engine
+    id                     = module.rds_cluster.db_instance_identifier
+    name                   = module.rds_cluster.db_instance_name
+    username               = nonsensitive(module.rds_cluster.db_instance_username)
+    port                   = module.rds_cluster.db_instance_port
+    subnet_group_id        = module.rds_cluster.db_subnet_group_id
+    cloudwatch_log_groups  = module.rds_cluster.db_instance_cloudwatch_log_groups
+    security_group_id      = module.main_rds_sg.security_group_id
+    master_user_secret_arn = module.rds_cluster.db_instance_master_user_secret_arn
   }
 }
 

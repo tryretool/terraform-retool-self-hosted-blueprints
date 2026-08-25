@@ -18,29 +18,11 @@ output "kubeconfig_command" {
   value       = "aws eks update-kubeconfig --profile ${var.aws_profile} --region ${var.region} --name ${module.eks.outputs.name}"
 }
 
-output "imported_databases" {
-  description = "The databases now under Terraform's control, and the security groups whose rules are managed in imported-db-rules.tf."
-  value = {
-    retool = {
-      identifier        = module.db-main.outputs.id
-      address           = module.db-main.outputs.address
-      security_group_id = module.db-main.security_group_id
-    }
-    temporal = var.temporal_db_mode == "imported" ? {
-      identifier        = module.db-temporal[0].outputs.id
-      address           = module.db-temporal[0].outputs.address
-      security_group_id = module.db-temporal[0].security_group_id
-    } : null
-  }
-}
-
 output "modules" {
   description = "Structured outputs from every module in this stack."
   sensitive   = true # just to quiet the apply output
   value = {
     eks             = module.eks
-    db-main         = module.db-main
-    db-temporal     = module.db-temporal
     retool-services = module.retool-services
     user-ingress    = module.user-ingress
     retool          = module.retool

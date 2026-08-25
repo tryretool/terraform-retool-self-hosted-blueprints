@@ -6,21 +6,22 @@
 #     "click>=8.1",
 #     "questionary>=2.0",
 #     "rich>=13.7",
-#     "pyyaml>=6.0",
 # ]
 # ///
-"""Adopt a Retool CloudFormation deployment's databases into this Terraform stack.
+"""Derive this Terraform stack's configuration from a Retool CloudFormation deployment.
 
 Reads an existing `retool-onpremise` CloudFormation stack, traverses to the
-resources it references, and produces the two things needed to bring its
-databases under Terraform's control without interrupting the running deployment:
+resources it references, and writes out everything the Terraform stack needs to
+stand up alongside it:
 
-  describe-cf-stack   what's there, and whether it can be imported cleanly
+  describe-cf-stack   what's there, and anything that needs attention
   import-tfvars       imported.tfvars — every value derivable from the stack
-  import-state        terraform import for each resource, dry-run by default
 
-The Terraform addresses written here are specific to the
-aws_import_from_cloudformation example; run it from that directory.
+Nothing here modifies the CloudFormation deployment. The one action that writes
+to AWS — creating a derived secret — is offered explicitly and never implied.
+
+The variable names written here match the aws_import_from_cloudformation
+example; run it from that directory.
 """
 
 from __future__ import annotations
@@ -37,7 +38,6 @@ from typing import Any
 import boto3
 import click
 import questionary
-import yaml
 from botocore.exceptions import ClientError
 from rich.console import Console
 from rich.table import Table
@@ -64,129 +64,13 @@ CF_LICENSE_KEY_PROPERTY = "licenseKey"
 
 
 # ---------------------------------------------------------------------------
-# CloudFormation template parsing
-# ---------------------------------------------------------------------------
-
-
-class _CfnLoader(yaml.SafeLoader):
-    """YAML loader that tolerates CloudFormation's short-form tags.
-
-    Templates are full of `!Ref`, `!GetAtt`, `!Sub` and friends, which SafeLoader
-    rejects outright. Nothing here needs to resolve them — only the Mappings
-    block is read — so they collapse to a placeholder.
-    """
-
-
-def _ignore_unknown_tag(loader: yaml.Loader, tag_suffix: str, node: yaml.Node) -> Any:
-    if isinstance(node, yaml.ScalarNode):
-        return loader.construct_scalar(node)
-    if isinstance(node, yaml.SequenceNode):
-        return loader.construct_sequence(node)
-    return loader.construct_mapping(node)
-
-
-_CfnLoader.add_multi_constructor("!", _ignore_unknown_tag)
-
-
-def parse_template(body: str) -> dict[str, Any]:
-    """Parse a CloudFormation template body, JSON or YAML."""
-    try:
-        return json.loads(body)
-    except (json.JSONDecodeError, TypeError):
-        pass
-    try:
-        parsed = yaml.load(body, Loader=_CfnLoader)
-        return parsed if isinstance(parsed, dict) else {}
-    except yaml.YAMLError:
-        return {}
-
-
-# ---------------------------------------------------------------------------
 # Discovered facts
 # ---------------------------------------------------------------------------
 
 
 @dataclass
-class SecurityGroupRule:
-    """One rule on a security group, as AWS reports it.
-
-    Keyed by its own `sgr-` ID, which is also its Terraform import ID — the
-    reason these are modelled as `aws_vpc_security_group_{ingress,egress}_rule`
-    rather than the older composite-ID resource.
-    """
-
-    rule_id: str
-    is_egress: bool
-    ip_protocol: str
-    from_port: int | None
-    to_port: int | None
-    cidr_ipv4: str | None
-    cidr_ipv6: str | None
-    referenced_security_group_id: str | None
-    prefix_list_id: str | None
-    description: str | None
-
-    @classmethod
-    def from_api(cls, raw: dict[str, Any]) -> "SecurityGroupRule":
-        referenced = (raw.get("ReferencedGroupInfo") or {}).get("GroupId")
-        # AWS reports -1/-1 for all-traffic rules; Terraform wants them unset.
-        from_port = raw.get("FromPort")
-        to_port = raw.get("ToPort")
-        if raw.get("IpProtocol") == "-1":
-            from_port = to_port = None
-        return cls(
-            rule_id=raw["SecurityGroupRuleId"],
-            is_egress=raw.get("IsEgress", False),
-            ip_protocol=raw.get("IpProtocol", "-1"),
-            from_port=from_port,
-            to_port=to_port,
-            cidr_ipv4=raw.get("CidrIpv4"),
-            cidr_ipv6=raw.get("CidrIpv6"),
-            referenced_security_group_id=referenced,
-            prefix_list_id=raw.get("PrefixListId"),
-            description=raw.get("Description") or None,
-        )
-
-    def target(self) -> str:
-        """Human-readable source/destination, for the summary tables."""
-        for value in (
-            self.cidr_ipv4,
-            self.cidr_ipv6,
-            self.referenced_security_group_id,
-            self.prefix_list_id,
-        ):
-            if value:
-                return value
-        return "?"
-
-    def ports(self) -> str:
-        if self.ip_protocol == "-1":
-            return "all"
-        if self.from_port == self.to_port:
-            return str(self.from_port)
-        return f"{self.from_port}-{self.to_port}"
-
-    def to_tfvars(self) -> dict[str, Any]:
-        out: dict[str, Any] = {"ip_protocol": self.ip_protocol}
-        if self.from_port is not None:
-            out["from_port"] = self.from_port
-        if self.to_port is not None:
-            out["to_port"] = self.to_port
-        for key, value in (
-            ("cidr_ipv4", self.cidr_ipv4),
-            ("cidr_ipv6", self.cidr_ipv6),
-            ("referenced_security_group_id", self.referenced_security_group_id),
-            ("prefix_list_id", self.prefix_list_id),
-            ("description", self.description),
-        ):
-            if value:
-                out[key] = value
-        return out
-
-
-@dataclass
 class Database:
-    """An RDS database referenced by the stack, with everything import needs."""
+    """An RDS database referenced by the stack, as the Terraform stack needs it."""
 
     identifier: str
     kind: str  # "instance" or "aurora"
@@ -196,37 +80,15 @@ class Database:
     engine_version: str
     instance_class: str
     allocated_storage: int
-    max_allocated_storage: int
-    storage_type: str
-    iops: int | None
     storage_encrypted: bool
     multi_az: bool
     database_name: str | None
     master_username: str | None
     manages_master_password: bool
     rds_managed_secret_arn: str | None
-    deletion_protection: bool
-    parameter_group_name: str | None
     db_subnet_group_name: str | None
-    subnet_ids: list[str]
     security_group_ids: list[str]
-    rules: list[SecurityGroupRule] = field(default_factory=list)
     credentials_secret_arn: str | None = None
-    cluster_identifier: str | None = None
-
-    @property
-    def importable(self) -> bool:
-        """Aurora members are aws_rds_cluster_instance, which aws-database is not."""
-        return self.kind == "instance"
-
-    @property
-    def family(self) -> str:
-        major = self.engine_version.split(".")[0]
-        return f"{self.engine}{major}"
-
-    @property
-    def major_engine_version(self) -> str:
-        return self.engine_version.split(".")[0]
 
     @property
     def security_group_id(self) -> str | None:
@@ -263,7 +125,6 @@ class StackFacts:
     parameters: dict[str, str]
     resources: dict[str, str]  # logical ID -> physical ID
     resource_types: dict[str, str]  # logical ID -> AWS type
-    mappings: dict[str, Any]
     retool_db: Database | None = None
     temporal_db: Database | None = None
     secrets: dict[str, Secret] = field(default_factory=dict)
@@ -286,7 +147,6 @@ class Discoverer:
         self.region = region
         self.cfn = session.client("cloudformation", region_name=region)
         self.rds = session.client("rds", region_name=region)
-        self.ec2 = session.client("ec2", region_name=region)
         self.sm = session.client("secretsmanager", region_name=region)
 
     def run(self) -> StackFacts:
@@ -318,22 +178,12 @@ class Discoverer:
                 resources[logical] = res.get("PhysicalResourceId", "")
                 resource_types[logical] = res["ResourceType"]
 
-        mappings: dict[str, Any] = {}
-        try:
-            body = self.cfn.get_template(StackName=self.stack_name)["TemplateBody"]
-            if not isinstance(body, str):
-                body = json.dumps(body)
-            mappings = parse_template(body).get("Mappings") or {}
-        except ClientError:
-            pass  # Mappings are a bonus; CloudAuth config can be supplied by hand.
-
         return StackFacts(
             stack_name=self.stack_name,
             region=self.region,
             parameters=parameters,
             resources=resources,
             resource_types=resource_types,
-            mappings=mappings,
         )
 
     # -- databases ----------------------------------------------------------
@@ -353,7 +203,8 @@ class Discoverer:
             facts.retool_db = self._load_instance(facts.resources[retool_logical])
         else:
             facts.warnings.append(
-                "No Retool RDS instance found in the stack. Nothing to import for the main database."
+                "No Retool RDS instance found in the stack. There is nothing to point "
+                "the new deployment at."
             )
 
         temporal_logical = (
@@ -369,7 +220,7 @@ class Discoverer:
             facts.temporal_db = self._load_cluster_for(facts)
 
         # The Temporal database is sometimes created outside the stack. If the
-        # stack didn't name one, look for it in the same VPC.
+        # stack didn't name one, look for it in the same subnet group.
         if facts.temporal_db is None and facts.retool_db is not None:
             facts.temporal_db = self._search_temporal_instance(facts)
 
@@ -377,19 +228,12 @@ class Discoverer:
         if facts.retool_db is not None:
             facts.retool_db.credentials_secret_arn = facts.resources.get(
                 LOGICAL_RETOOL_DB_SECRET
-            )
+            ) or facts.retool_db.rds_managed_secret_arn
         if facts.temporal_db is not None:
-            facts.temporal_db.credentials_secret_arn = facts.resources.get(
-                LOGICAL_TEMPORAL_DB_SECRET
-            ) or (
-                facts.temporal_db.rds_managed_secret_arn
-                if facts.temporal_db.manages_master_password
-                else None
+            facts.temporal_db.credentials_secret_arn = (
+                facts.resources.get(LOGICAL_TEMPORAL_DB_SECRET)
+                or facts.temporal_db.rds_managed_secret_arn
             )
-
-        for db in (facts.retool_db, facts.temporal_db):
-            if db is not None:
-                db.rules = self._load_rules(db.security_group_ids)
 
     def _load_instance(self, identifier: str) -> Database | None:
         try:
@@ -402,7 +246,6 @@ class Discoverer:
 
     def _instance_from_api(self, raw: dict[str, Any]) -> Database:
         subnet_group = raw.get("DBSubnetGroup") or {}
-        param_groups = raw.get("DBParameterGroups") or []
         is_cluster_member = bool(raw.get("DBClusterIdentifier"))
         return Database(
             identifier=raw["DBInstanceIdentifier"],
@@ -413,29 +256,18 @@ class Discoverer:
             engine_version=raw.get("EngineVersion", ""),
             instance_class=raw.get("DBInstanceClass", ""),
             allocated_storage=raw.get("AllocatedStorage") or 0,
-            max_allocated_storage=raw.get("MaxAllocatedStorage") or 0,
-            storage_type=raw.get("StorageType") or "gp2",
-            iops=raw.get("Iops"),
             storage_encrypted=raw.get("StorageEncrypted", False),
             multi_az=raw.get("MultiAZ", False),
             database_name=raw.get("DBName"),
             master_username=raw.get("MasterUsername"),
             manages_master_password=bool(raw.get("MasterUserSecret")),
             rds_managed_secret_arn=(raw.get("MasterUserSecret") or {}).get("SecretArn"),
-            deletion_protection=raw.get("DeletionProtection", False),
-            parameter_group_name=(
-                param_groups[0].get("DBParameterGroupName") if param_groups else None
-            ),
             db_subnet_group_name=subnet_group.get("DBSubnetGroupName"),
-            subnet_ids=[
-                s["SubnetIdentifier"] for s in subnet_group.get("Subnets", []) or []
-            ],
             security_group_ids=[
                 sg["VpcSecurityGroupId"]
                 for sg in raw.get("VpcSecurityGroups", []) or []
                 if sg.get("Status") == "active"
             ],
-            cluster_identifier=raw.get("DBClusterIdentifier"),
         )
 
     def _load_cluster_for(self, facts: StackFacts) -> Database | None:
@@ -460,25 +292,18 @@ class Discoverer:
             engine_version=raw.get("EngineVersion", ""),
             instance_class="db.serverless",
             allocated_storage=0,
-            max_allocated_storage=0,
-            storage_type=raw.get("StorageType") or "aurora",
-            iops=None,
             storage_encrypted=raw.get("StorageEncrypted", False),
             multi_az=raw.get("MultiAZ", False),
             database_name=raw.get("DatabaseName"),
             master_username=raw.get("MasterUsername"),
             manages_master_password=bool(raw.get("MasterUserSecret")),
             rds_managed_secret_arn=(raw.get("MasterUserSecret") or {}).get("SecretArn"),
-            deletion_protection=raw.get("DeletionProtection", False),
-            parameter_group_name=raw.get("DBClusterParameterGroup"),
             db_subnet_group_name=raw.get("DBSubnetGroup"),
-            subnet_ids=[],
             security_group_ids=[
                 sg["VpcSecurityGroupId"]
                 for sg in raw.get("VpcSecurityGroups", []) or []
                 if sg.get("Status") == "active"
             ],
-            cluster_identifier=raw["DBClusterIdentifier"],
         )
 
     def _search_temporal_instance(self, facts: StackFacts) -> Database | None:
@@ -513,27 +338,6 @@ class Discoverer:
                 "if that is the wrong one."
             )
         return candidates[0]
-
-    def _load_rules(self, security_group_ids: list[str]) -> list[SecurityGroupRule]:
-        if not security_group_ids:
-            return []
-        rules: list[SecurityGroupRule] = []
-        paginator = self.ec2.get_paginator("describe_security_group_rules")
-        for page in paginator.paginate(
-            Filters=[{"Name": "group-id", "Values": security_group_ids}]
-        ):
-            for raw in page["SecurityGroupRules"]:
-                rules.append(SecurityGroupRule.from_api(raw))
-        return rules
-
-    def security_group_name(self, group_id: str) -> str | None:
-        try:
-            groups = self.ec2.describe_security_groups(GroupIds=[group_id])[
-                "SecurityGroups"
-            ]
-        except ClientError:
-            return None
-        return groups[0]["GroupName"] if groups else None
 
     # -- secrets ------------------------------------------------------------
 
@@ -596,102 +400,18 @@ class Discoverer:
 
 
 # ---------------------------------------------------------------------------
-# Import operations
-# ---------------------------------------------------------------------------
-
-
-@dataclass
-class ImportOp:
-    """One `terraform import`: a source in AWS and a target address in state.
-
-    Holding these as objects is what makes dry-run trivially honest — the same
-    list is what gets printed and what gets executed, so the preview cannot
-    drift from the action.
-    """
-
-    tf_address: str
-    physical_id: str
-    source: str
-    description: str
-
-    def command(self, var_files: list[str]) -> list[str]:
-        cmd = ["terraform", "import"]
-        for var_file in var_files:
-            cmd.append(f"-var-file={var_file}")
-        cmd += [self.tf_address, self.physical_id]
-        return cmd
-
-
-def build_import_ops(facts: StackFacts) -> list[ImportOp]:
-    ops: list[ImportOp] = []
-
-    for module, db, logical in (
-        ("db-main", facts.retool_db, LOGICAL_RETOOL_DB),
-        ("db-temporal", facts.temporal_db, LOGICAL_TEMPORAL_DB),
-    ):
-        if db is None or not db.importable:
-            continue
-
-        prefix = f"module.{module}" if module == "db-main" else f"module.{module}[0]"
-
-        ops.append(
-            ImportOp(
-                tf_address=f"{prefix}.module.rds_cluster.module.db_instance.aws_db_instance.this[0]",
-                physical_id=db.identifier,
-                source=f"{logical} / {db.identifier}",
-                description="RDS instance",
-            )
-        )
-
-        if db.db_subnet_group_name:
-            ops.append(
-                ImportOp(
-                    tf_address=f"{prefix}.module.rds_cluster.module.db_subnet_group.aws_db_subnet_group.this[0]",
-                    physical_id=db.db_subnet_group_name,
-                    source=f"subnet group of {db.identifier}",
-                    description="DB subnet group",
-                )
-            )
-
-        if db.security_group_id:
-            ops.append(
-                ImportOp(
-                    tf_address=f"{prefix}.module.main_rds_sg.aws_security_group.this[0]",
-                    physical_id=db.security_group_id,
-                    source=f"security group of {db.identifier}",
-                    description="Security group",
-                )
-            )
-
-        for rule in db.rules:
-            kind = "egress" if rule.is_egress else "ingress"
-            ops.append(
-                ImportOp(
-                    tf_address=f'aws_vpc_security_group_{kind}_rule.preserved["{rule.rule_id}"]',
-                    physical_id=rule.rule_id,
-                    source=f"{rule.ports()} {kind} from {rule.target()}",
-                    description=f"Existing {kind} rule",
-                )
-            )
-
-    return ops
-
-
-# ---------------------------------------------------------------------------
 # tfvars rendering
 # ---------------------------------------------------------------------------
 
-
-_BARE_IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_-]*$")
+_BARE_IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 def render_key(key: str) -> str:
     """Quote a map key unless it is a bare HCL identifier.
 
-    Rule IDs like `sgr-0abc` contain hyphens; unquoted, HCL reads them as
-    subtraction rather than a key.
+    A key containing a hyphen reads as subtraction if left unquoted.
     """
-    if _BARE_IDENTIFIER.match(key) and "-" not in key:
+    if _BARE_IDENTIFIER.match(key):
         return key
     escaped = key.replace("\\", "\\\\").replace('"', '\\"')
     return f'"{escaped}"'
@@ -739,39 +459,6 @@ def render_tfvars(values: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def db_to_tfvars(db: Database, security_group_name: str | None) -> dict[str, Any]:
-    return {
-        "identifier": db.identifier,
-        "credentials_secret_id": db.credentials_secret_arn,
-        "password_property": CF_GENERATED_SECRET_PROPERTY,
-        "security_group_name": security_group_name,
-        "db_subnet_group_name": db.db_subnet_group_name,
-        "parameter_group_name": db.parameter_group_name,
-        "database_name": db.database_name,
-        "master_username": db.master_username,
-        "port": db.port,
-        "engine_version": db.engine_version,
-        "instance_class": db.instance_class,
-        "allocated_storage": db.allocated_storage,
-        "max_allocated_storage": db.max_allocated_storage,
-        "storage_type": db.storage_type,
-        "iops": db.iops,
-        "storage_encrypted": db.storage_encrypted,
-        "multi_az": db.multi_az,
-        "family": db.family,
-        "major_engine_version": db.major_engine_version,
-        "deletion_protection": db.deletion_protection,
-    }
-
-
-def rules_to_tfvars(rules: list[SecurityGroupRule], egress: bool) -> dict[str, Any]:
-    return {
-        rule.rule_id: rule.to_tfvars()
-        for rule in rules
-        if rule.is_egress == egress
-    }
-
-
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -792,7 +479,7 @@ def rules_to_tfvars(rules: list[SecurityGroupRule], egress: bool) -> dict[str, A
 def cli(
     ctx: click.Context, stack_name: str, region: str, profile: str | None, workdir: str
 ) -> None:
-    """Adopt a Retool CloudFormation deployment's databases into Terraform."""
+    """Derive Terraform configuration from a Retool CloudFormation deployment."""
     ctx.ensure_object(dict)
     session = boto3.Session(profile_name=profile) if profile else boto3.Session()
     ctx.obj["discoverer"] = Discoverer(session, stack_name, region)
@@ -809,12 +496,10 @@ def _discover(ctx: click.Context) -> tuple[StackFacts, Discoverer]:
 @cli.command("describe-cf-stack")
 @click.pass_context
 def describe_cf_stack(ctx: click.Context) -> None:
-    """Summarize what the stack contains and whether it imports cleanly."""
-    facts, discoverer = _discover(ctx)
+    """Summarize what the stack contains."""
+    facts, _ = _discover(ctx)
 
-    console.print(
-        f"\n[bold]{facts.stack_name}[/bold] in [bold]{facts.region}[/bold]\n"
-    )
+    console.print(f"\n[bold]{facts.stack_name}[/bold] in [bold]{facts.region}[/bold]\n")
 
     if facts.parameters:
         table = Table(title="Stack parameters", title_justify="left", show_lines=False)
@@ -827,12 +512,17 @@ def describe_cf_stack(ctx: click.Context) -> None:
             table.add_row(key, value)
         console.print(table)
 
-    blockers: list[str] = []
+    notes: list[str] = []
 
     for label, db in (("Retool", facts.retool_db), ("Temporal", facts.temporal_db)):
         console.print()
         if db is None:
             console.print(f"[yellow]{label} database: not found[/yellow]")
+            if label == "Temporal":
+                notes.append(
+                    "No Temporal database found. import-tfvars will leave temporal_db "
+                    "unset, which disables Retool Workflows."
+                )
             continue
 
         table = Table(title=f"{label} database", title_justify="left")
@@ -841,61 +531,37 @@ def describe_cf_stack(ctx: click.Context) -> None:
         table.add_row("Identifier", db.identifier)
         table.add_row(
             "Kind",
-            "standalone RDS instance"
-            if db.kind == "instance"
-            else "[yellow]Aurora cluster[/yellow]",
+            "standalone RDS instance" if db.kind == "instance" else "Aurora cluster",
         )
         table.add_row("Endpoint", db.address or "-")
         table.add_row("Engine", f"{db.engine} {db.engine_version}")
         table.add_row("Instance class", db.instance_class)
-        table.add_row("Storage", f"{db.allocated_storage} GB {db.storage_type}")
-        table.add_row("Multi-AZ", str(db.multi_az))
-        table.add_row("Encrypted", str(db.storage_encrypted))
         table.add_row("Database name", db.database_name or "-")
         table.add_row("Master username", db.master_username or "-")
         table.add_row(
             "Master password",
-            "[yellow]RDS-managed[/yellow]"
+            "RDS-managed"
             if db.manages_master_password
             else "self-managed (Secrets Manager)",
         )
-        table.add_row("Credentials secret", db.credentials_secret_arn or "[red]not found[/red]")
-        table.add_row("Parameter group", db.parameter_group_name or "-")
+        table.add_row(
+            "Credentials secret", db.credentials_secret_arn or "[red]not found[/red]"
+        )
         table.add_row("Subnet group", db.db_subnet_group_name or "-")
         table.add_row("Security groups", ", ".join(db.security_group_ids) or "-")
         console.print(table)
 
-        if db.rules:
-            rules_table = Table(
-                title=f"{label} security group rules — all preserved on import",
-                title_justify="left",
+        if not db.credentials_secret_arn:
+            notes.append(
+                f"{label} database has no discoverable credentials secret. Set its "
+                "credentials_secret_id by hand, or the new deployment cannot "
+                "authenticate."
             )
-            rules_table.add_column("Rule ID", style="dim")
-            rules_table.add_column("Dir")
-            rules_table.add_column("Ports")
-            rules_table.add_column("Source/dest", overflow="fold")
-            rules_table.add_column("Description", overflow="fold")
-            for rule in sorted(db.rules, key=lambda r: (r.is_egress, r.rule_id)):
-                rules_table.add_row(
-                    rule.rule_id,
-                    "egress" if rule.is_egress else "ingress",
-                    rule.ports(),
-                    rule.target(),
-                    rule.description or "-",
-                )
-            console.print(rules_table)
-
-        if not db.importable:
-            blockers.append(
-                f"{label} database is an Aurora cluster. The aws-database module builds a "
-                "standalone RDS instance, so it cannot be imported. import-tfvars will "
-                'emit it as temporal_db_mode = "external" instead, leaving it where it is.'
-            )
-        if db.manages_master_password:
-            blockers.append(
-                f"{label} database has an RDS-managed master password. This example expects a "
-                "self-managed one so the running ECS deployment keeps its credentials; review "
-                "before importing."
+        if not db.security_group_ids:
+            notes.append(
+                f"{label} database has no active security group. This stack adds an "
+                "ingress rule for the EKS nodes to one; without it you must open "
+                "access yourself."
             )
 
     if facts.secrets:
@@ -915,126 +581,21 @@ def describe_cf_stack(ctx: click.Context) -> None:
             table.add_row(key, secret.name, shape)
         console.print(table)
 
-    if facts.mappings:
-        console.print()
-        console.print("[bold]Template mappings[/bold] (CloudAuth configuration)")
-        console.print_json(json.dumps(facts.mappings))
+    if "encryption_key" not in facts.secrets:
+        notes.append(
+            "No encryption key secret found. It MUST be carried over — every "
+            "credential stored in the Retool database is encrypted with it."
+        )
 
     console.print()
-    if facts.warnings or blockers:
-        for item in facts.warnings:
-            console.print(f"[yellow]![/yellow] {item}")
-        for item in blockers:
+    if facts.warnings or notes:
+        for item in facts.warnings + notes:
             console.print(f"[yellow]![/yellow] {item}")
     else:
-        console.print("[green]No blockers found.[/green]")
+        console.print("[green]Nothing needing attention.[/green]")
 
     console.print(
-        "\nNext: [bold]import-tfvars[/bold] to write "
-        f"{TFVARS_FILENAME}, then [bold]import-state[/bold] to import.\n"
-    )
-
-
-@cli.command("import-state")
-@click.option(
-    "--apply",
-    "do_apply",
-    is_flag=True,
-    default=False,
-    help="Actually run terraform import. Without this the run is read-only.",
-)
-@click.option(
-    "--var-file",
-    "var_files",
-    multiple=True,
-    default=(TFVARS_FILENAME, "terraform.tfvars"),
-    show_default=True,
-    help="Var files passed to terraform import; repeatable.",
-)
-@click.pass_context
-def import_state(
-    ctx: click.Context, do_apply: bool, var_files: tuple[str, ...]
-) -> None:
-    """Import the stack's databases into Terraform state."""
-    facts, _ = _discover(ctx)
-    workdir: str = ctx.obj["workdir"]
-
-    ops = build_import_ops(facts)
-    if not ops:
-        raise click.ClickException(
-            "Nothing to import. Run describe-cf-stack to see what was found."
-        )
-
-    existing = _terraform_state_list(workdir)
-    pending = [op for op in ops if op.tf_address not in existing]
-    skipped = len(ops) - len(pending)
-
-    table = Table(
-        title=f"{'Importing' if do_apply else 'Would import'} {len(pending)} resource(s)",
-        title_justify="left",
-    )
-    table.add_column("Source (AWS)", style="cyan", overflow="fold")
-    table.add_column("ID", overflow="fold")
-    table.add_column("Target (Terraform address)", overflow="fold")
-    for op in pending:
-        table.add_row(op.source, op.physical_id, op.tf_address)
-    console.print(table)
-
-    if skipped:
-        console.print(f"[dim]{skipped} already in state; skipping.[/dim]")
-
-    if facts.temporal_db is not None and not facts.temporal_db.importable:
-        console.print(
-            "\n[yellow]![/yellow] The Temporal database is an Aurora cluster and cannot be "
-            "imported into the aws-database module.\n"
-            '    Use temporal_db_mode = "external" — import-tfvars writes that for you — '
-            "which leaves it\n    in place and connects Retool to it as an external database."
-        )
-
-    if not pending:
-        console.print("\n[green]Nothing left to import.[/green]")
-        return
-
-    if not do_apply:
-        console.print(
-            "\n[dim]Read-only run. Re-run with --apply to perform these imports.[/dim]"
-        )
-        return
-
-    missing = [v for v in var_files if not (_path(workdir, v)).exists()]
-    if missing:
-        raise click.ClickException(
-            f"Missing var file(s): {', '.join(missing)}. Run import-tfvars first, "
-            "and copy vars.tf.example to terraform.tfvars."
-        )
-
-    if not questionary.confirm(
-        f"Run terraform import for {len(pending)} resource(s) in {workdir}?",
-        default=False,
-    ).ask():
-        console.print("Aborted.")
-        return
-
-    failures = 0
-    for op in pending:
-        console.print(f"[cyan]import[/cyan] {op.tf_address}")
-        result = subprocess.run(
-            op.command(list(var_files)), cwd=workdir, text=True, capture_output=True
-        )
-        if result.returncode != 0:
-            failures += 1
-            err_console.print(f"[red]failed:[/red] {op.tf_address}")
-            err_console.print(result.stderr.strip())
-    if failures:
-        raise click.ClickException(
-            f"{failures} import(s) failed. Fix the cause and re-run — imports already "
-            "done are skipped."
-        )
-
-    console.print(
-        "\n[green]Imports complete.[/green] Now run terraform plan and confirm it shows "
-        "no replacement\nor deletion of the databases, subnet groups, security groups, "
-        "or any preserved rule."
+        f"\nNext: [bold]import-tfvars[/bold] to write {TFVARS_FILENAME}.\n"
     )
 
 
@@ -1064,7 +625,7 @@ def import_tfvars(
     """Write imported.tfvars from the CloudFormation stack."""
     facts, discoverer = _discover(ctx)
     workdir: str = ctx.obj["workdir"]
-    out_path = _path(workdir, output)
+    out_path = Path(workdir) / output
 
     values: dict[str, Any] = {}
 
@@ -1072,7 +633,9 @@ def import_tfvars(
     if vpc_id := facts.param("VpcId"):
         values["vpc_id"] = vpc_id
     if subnets := facts.param("SubnetId"):
-        values["private_subnet_ids"] = [s.strip() for s in subnets.split(",") if s.strip()]
+        values["private_subnet_ids"] = [
+            s.strip() for s in subnets.split(",") if s.strip()
+        ]
     if lb_subnets := facts.param("LoadBalancerSubnetId"):
         values["public_subnet_ids"] = [
             s.strip() for s in lb_subnets.split(",") if s.strip()
@@ -1113,55 +676,30 @@ def import_tfvars(
             "Run describe-cf-stack to see what was discovered."
         )
 
-    retool_sg_name = (
-        discoverer.security_group_name(facts.retool_db.security_group_id)
-        if facts.retool_db.security_group_id
-        else None
-    )
-    values["retool_db"] = db_to_tfvars(facts.retool_db, retool_sg_name)
-    values["retool_db_preserved_ingress_rules"] = rules_to_tfvars(
-        facts.retool_db.rules, egress=False
-    )
-    values["retool_db_preserved_egress_rules"] = rules_to_tfvars(
-        facts.retool_db.rules, egress=True
-    )
+    values["retool_db"] = {
+        "instance_identifier": facts.retool_db.identifier,
+        "credentials_secret_id": facts.retool_db.credentials_secret_arn,
+        "password_property": CF_GENERATED_SECRET_PROPERTY,
+        "security_group_id": facts.retool_db.security_group_id,
+    }
 
-    temporal = facts.temporal_db
-    if temporal is None:
-        values["temporal_db_mode"] = "none"
-    elif temporal.importable:
-        temporal_sg_name = (
-            discoverer.security_group_name(temporal.security_group_id)
-            if temporal.security_group_id
-            else None
-        )
-        values["temporal_db_mode"] = "imported"
-        values["temporal_db"] = db_to_tfvars(temporal, temporal_sg_name)
-        values["temporal_db_preserved_ingress_rules"] = rules_to_tfvars(
-            temporal.rules, egress=False
-        )
-        values["temporal_db_preserved_egress_rules"] = rules_to_tfvars(
-            temporal.rules, egress=True
-        )
-    else:
-        values["temporal_db_mode"] = "external"
-        values["temporal_db_external"] = {
-            "host": temporal.address,
-            "port": temporal.port,
-            "username": temporal.master_username,
-            "credentials_secret_id": temporal.credentials_secret_arn,
+    if facts.temporal_db is not None:
+        values["temporal_db"] = {
+            "host": facts.temporal_db.address,
+            "port": facts.temporal_db.port,
+            "username": facts.temporal_db.master_username,
+            "database": facts.temporal_db.database_name or "temporal",
+            "credentials_secret_id": facts.temporal_db.credentials_secret_arn,
             "password_property": CF_GENERATED_SECRET_PROPERTY,
-            "security_group_id": temporal.security_group_id,
+            "security_group_id": facts.temporal_db.security_group_id,
         }
+    else:
+        values["temporal_db"] = None
 
     # -- secrets ---------------------------------------------------------
     values.update(
         _secret_values(facts, discoverer, prefix=prefix, assume_yes=assume_yes)
     )
-
-    # -- CloudAuth -------------------------------------------------------
-    if cloudauth := _cloudauth_values(facts):
-        values["cloudauth"] = cloudauth
 
     # -- ALB OIDC --------------------------------------------------------
     if alb_oidc := _alb_oidc_values(facts):
@@ -1178,6 +716,7 @@ def import_tfvars(
             return
 
     out_path.write_text(rendered)
+    _terraform_fmt(out_path)
     console.print(f"[green]Wrote {out_path}[/green] ({len(values)} values)")
     console.print(
         "\nReview it, then copy vars.tf.example to terraform.tfvars for the values that "
@@ -1229,13 +768,17 @@ def _secret_values(
                 "derived secret\nholding just the raw value can be created, if you "
                 "prefer that shape."
             )
-            derived_name = f"retool/{prefix}/{var_name.replace('_secret', '').replace('_', '-')}"
+            derived_name = (
+                f"retool/{prefix}/{var_name.replace('_secret', '').replace('_', '-')}"
+            )
             if questionary.confirm(
                 f"Create derived secret {derived_name}?", default=False
             ).ask():
                 value = discoverer.secret_field(secret.arn, prop)
                 if value is None:
-                    console.print("[yellow]Could not read the value; leaving as is.[/yellow]")
+                    console.print(
+                        "[yellow]Could not read the value; leaving as is.[/yellow]"
+                    )
                 else:
                     try:
                         arn = discoverer.create_secret(
@@ -1253,27 +796,21 @@ def _secret_values(
     return out
 
 
-def _cloudauth_values(facts: StackFacts) -> dict[str, Any] | None:
-    """Pull the CloudAuth configuration out of the template's Mappings block."""
-    endpoints = facts.mappings.get("CloudAuthVpcEndpointServices") or {}
-    fqens = facts.mappings.get("CloudAuthSuperStarFQENs") or {}
-    constants = facts.mappings.get("Constants") or {}
+def _terraform_fmt(path: Path) -> None:
+    """Canonicalize the rendered file with `terraform fmt`, if it's available.
 
-    service = (endpoints.get(facts.region) or {}).get("vpces")
-    fqen = (fqens.get(facts.region) or {}).get("fqen")
-    if not service or not fqen:
-        return None
-
-    out: dict[str, Any] = {
-        "vpc_endpoint_service_name": service,
-        "fqen": fqen,
-    }
-    if subdomain := (constants.get("cloudauth") or {}).get("subdomain"):
-        out["subdomain"] = subdomain
-    # The execute-api account IDs live in an IAM policy in the template, not in
-    # Mappings; the operator supplies them.
-    out["api_gateway_account_ids"] = []
-    return out
+    The renderer emits valid HCL but doesn't reproduce Terraform's alignment of
+    consecutive assignments. Rather than reimplement that, hand it to the tool
+    that defines it. Best-effort: the file is already correct without this.
+    """
+    if shutil.which("terraform") is None:
+        return
+    subprocess.run(
+        ["terraform", "fmt", path.name],
+        cwd=path.parent,
+        capture_output=True,
+        text=True,
+    )
 
 
 def _alb_oidc_values(facts: StackFacts) -> dict[str, Any] | None:
@@ -1289,28 +826,6 @@ def _alb_oidc_values(facts: StackFacts) -> dict[str, Any] | None:
         "user_info_endpoint": f"{base}/api/oauth2/v1/userinfo",
         "credentials_secret_id": secret_arn,
     }
-
-
-# ---------------------------------------------------------------------------
-# Terraform helpers
-# ---------------------------------------------------------------------------
-
-
-def _path(workdir: str, name: str) -> Path:
-    return Path(workdir) / name
-
-
-def _terraform_state_list(workdir: str) -> set[str]:
-    """Addresses already in state, so imports can be re-run safely."""
-    if shutil.which("terraform") is None:
-        raise click.ClickException("terraform not found on PATH.")
-    result = subprocess.run(
-        ["terraform", "state", "list"], cwd=workdir, text=True, capture_output=True
-    )
-    if result.returncode != 0:
-        # No state yet is the normal case on a first run.
-        return set()
-    return {line.strip() for line in result.stdout.splitlines() if line.strip()}
 
 
 def main() -> None:

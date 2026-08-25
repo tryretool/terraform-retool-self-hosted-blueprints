@@ -1,53 +1,26 @@
 # Self-hosted Temporal, required by Retool Workflows.
 #
-# The CloudFormation stack ran Temporal as five separate ECS services. On
-# Kubernetes the Retool Helm chart runs the whole Temporal cluster itself through
-# its bundled retool-temporal-services-helm subchart, so only the database
-# carries over — either imported into module.db-temporal, or referenced in place
-# when it is an Aurora cluster the aws-database module cannot represent.
+# The CloudFormation stack ran Temporal as five separate ECS services against its
+# own database. On Kubernetes the Retool Helm chart runs the whole Temporal
+# cluster itself through its bundled retool-temporal-services-helm subchart, so
+# only the database carries over — referenced in place, whether it is a plain
+# RDS instance or an Aurora cluster.
 #
 # The chart wires WORKFLOW_TEMPORAL_CLUSTER_FRONTEND_HOST automatically when the
 # subchart is enabled, so no service discovery config is needed (the
 # CloudFormation stack's Cloud Map namespace has no equivalent here).
 
 locals {
-  temporal_enabled = var.temporal_db_mode != "none"
-
-  # Connection details, from whichever source is in play.
-  temporal_connection = (
-    var.temporal_db_mode == "imported" ? {
-      host     = module.db-temporal[0].outputs.address
-      port     = module.db-temporal[0].outputs.port
-      username = module.db-temporal[0].outputs.username
-      database = var.temporal_db.database_name
-      } : var.temporal_db_mode == "external" ? {
-      host     = var.temporal_db_external.host
-      port     = var.temporal_db_external.port
-      username = var.temporal_db_external.username
-      database = "temporal"
-    } : null
-  )
-
-  temporal_credentials_secret_id = (
-    var.temporal_db_mode == "imported" ? var.temporal_db.credentials_secret_id
-    : var.temporal_db_mode == "external" ? var.temporal_db_external.credentials_secret_id
-    : null
-  )
-
-  temporal_password_property = (
-    var.temporal_db_mode == "imported" ? var.temporal_db.password_property
-    : var.temporal_db_mode == "external" ? var.temporal_db_external.password_property
-    : null
-  )
+  temporal_enabled = var.temporal_db != null
 
   # Kubernetes Secret the Temporal subchart reads the database password from.
   temporal_db_secret_name = "temporal-db-credentials"
   temporal_db_secret_key  = "password"
 
   temporal_sql_common = local.temporal_enabled ? {
-    host           = local.temporal_connection.host
-    port           = local.temporal_connection.port
-    user           = local.temporal_connection.username
+    host           = var.temporal_db.host
+    port           = var.temporal_db.port
+    user           = var.temporal_db.username
     existingSecret = local.temporal_db_secret_name
     secretKey      = local.temporal_db_secret_key
     tls = {
@@ -72,7 +45,7 @@ locals {
           persistence = {
             default = {
               sql = merge(local.temporal_sql_common, {
-                database = local.temporal_connection.database
+                database = var.temporal_db.database
               })
             }
             visibility = {
@@ -122,8 +95,8 @@ resource "kubectl_manifest" "temporal_db_credentials" {
       data = [{
         secretKey = local.temporal_db_secret_key
         remoteRef = {
-          key      = local.temporal_credentials_secret_id
-          property = local.temporal_password_property
+          key      = var.temporal_db.credentials_secret_id
+          property = var.temporal_db.password_property
         }
       }]
     }

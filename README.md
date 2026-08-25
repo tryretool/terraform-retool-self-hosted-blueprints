@@ -51,20 +51,12 @@ a single `terraform apply`.
 
    Already running Retool on AWS ECS/Fargate via the
    [`retool-onpremise`](https://github.com/tryretool/retool-onpremise)
-   CloudFormation templates? Start from one of the migration examples instead.
-   Both keep your existing VPC and database, run the new deployment alongside
-   the old one, and cut over by moving DNS; they differ in who ends up owning
-   the databases:
-
-   - [`aws_migrate_from_cloudformation`](./examples/aws_migrate_from_cloudformation)
-     — the databases stay CloudFormation-managed and Terraform only reads them.
-     The smallest change.
-   - [`aws_import_from_cloudformation`](./examples/aws_import_from_cloudformation)
-     — the databases are imported into Terraform state so CloudFormation can be
-     deleted entirely. Ships a helper that discovers the configuration and
-     performs the imports.
-
-   Both are configured with variables rather than a `locals` block.
+   CloudFormation templates? Start from
+   [`aws_import_from_cloudformation`](./examples/aws_import_from_cloudformation)
+   instead — it keeps your existing VPC and databases, runs the new deployment
+   alongside the old one, and cuts over by moving DNS. It ships a helper that
+   reads your CloudFormation stack and writes most of the configuration for you,
+   and is configured with variables rather than a `locals` block.
 
 2. **Copy the example** into your own Terraform working directory (or work in
    place), then turn the provider stub into a real config:
@@ -78,7 +70,7 @@ a single `terraform apply`.
 
 3. **Edit the `locals` block** at the top of `main.tf` — set `prefix`,
    your cloud project/subscription, `region`, and `domain_name`. (The
-   `aws_migrate_from_cloudformation` example instead uses variables: copy
+   `aws_import_from_cloudformation` example instead uses variables: copy
    `vars.tf.example` to `terraform.tfvars` and edit that.)
 
 4. **Deploy:**

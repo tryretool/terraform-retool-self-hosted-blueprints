@@ -1,17 +1,16 @@
-# Retool on EKS, adopting the databases from an existing CloudFormation
-# ECS/Fargate stack.
+# Retool on EKS, alongside an existing CloudFormation ECS/Fargate stack.
 #
-# Where aws_migrate_from_cloudformation only *reads* the databases and leaves
-# them under CloudFormation's control, this example **imports** them into
-# Terraform state, so the CloudFormation stack can eventually be deleted without
-# taking them along.
+# This stack creates no VPC and no databases — both are adopted from the
+# CloudFormation deployment (see existing-network.tf and existing-databases.tf).
+# What it does create is the EKS cluster, the supporting cluster services, the
+# Retool Helm release, and a new user-facing load balancer to cut over to.
 #
-# The requirement throughout is that the running ECS deployment keeps working:
-# both deployments share one database, and the cutover is a DNS switch at the
-# end. Three module settings exist for exactly that — see the comments on
-# module.db-main below.
+# Both deployments run side by side, sharing one database, until you move DNS.
 #
-# Run import_from_cloudformation.py before the first apply; see README.md.
+# Configuration comes from two var files. Run import_from_cloudformation.py to
+# generate the first; see README.md.
+#
+#   terraform apply -var-file=imported.tfvars -var-file=terraform.tfvars
 #
 # NOTE: module sources are local paths so this example plans against the modules
 # in this repository. When copying it into your own working directory, switch
@@ -37,99 +36,6 @@ module "eks" {
   depends_on = [aws_ec2_tag.karpenter_discovery]
 }
 
-# The imported Retool database. Nothing here creates anything: every value is
-# what the database already is, so that `terraform apply` after the import is a
-# no-op against it.
-module "db-main" {
-  source = "../../modules/aws-database"
-
-  prefix     = var.prefix
-  db_purpose = "main"
-  identifier = var.retool_db.identifier
-  tags       = var.tags
-
-  vpc = local.vpc
-  eks = module.eks.outputs
-
-  # Leave the password where CloudFormation put it. If RDS took over managing it,
-  # it would generate a new one and the running ECS tasks would lose access to
-  # the database immediately.
-  manage_master_user_password = false
-  master_user_secret_arn      = var.retool_db.credentials_secret_id
-
-  # Both names are fixed at creation. Passing the existing names is what stops
-  # Terraform from destroying and recreating these resources.
-  security_group_name  = var.retool_db.security_group_name
-  db_subnet_group_name = var.retool_db.db_subnet_group_name
-
-  # The security group's existing rules are imported and managed in
-  # imported-db-rules.tf instead, including the EKS ingress this module would
-  # otherwise add. Letting the module manage them would delete every rule it
-  # doesn't know about — which is what keeps ECS connected.
-  manage_security_group_rules = false
-
-  create_db_parameter_group = var.retool_db.parameter_group_name == null
-  parameter_group_name      = var.retool_db.parameter_group_name
-
-  database_name   = var.retool_db.database_name
-  master_username = var.retool_db.master_username
-  port            = var.retool_db.port
-
-  engine_version        = var.retool_db.engine_version
-  instance_class        = var.retool_db.instance_class
-  allocated_storage     = var.retool_db.allocated_storage
-  max_allocated_storage = var.retool_db.max_allocated_storage
-  storage_type          = var.retool_db.storage_type
-  iops                  = var.retool_db.iops
-  storage_encrypted     = var.retool_db.storage_encrypted
-  multi_az              = var.retool_db.multi_az
-  family                = var.retool_db.family
-  major_engine_version  = var.retool_db.major_engine_version
-  deletion_protection   = var.retool_db.deletion_protection
-}
-
-# The imported Temporal database, when it is a standalone RDS instance. An
-# Aurora cluster cannot be represented by this module — set
-# temporal_db_mode = "external" for that and configure temporal_db_external.
-module "db-temporal" {
-  source = "../../modules/aws-database"
-  count  = var.temporal_db_mode == "imported" ? 1 : 0
-
-  prefix     = var.prefix
-  db_purpose = "temporal"
-  identifier = var.temporal_db.identifier
-  tags       = var.tags
-
-  vpc = local.vpc
-  eks = module.eks.outputs
-
-  manage_master_user_password = false
-  master_user_secret_arn      = var.temporal_db.credentials_secret_id
-
-  security_group_name         = var.temporal_db.security_group_name
-  db_subnet_group_name        = var.temporal_db.db_subnet_group_name
-  manage_security_group_rules = false
-
-  create_db_parameter_group = var.temporal_db.parameter_group_name == null
-  parameter_group_name      = var.temporal_db.parameter_group_name
-
-  database_name   = var.temporal_db.database_name
-  master_username = var.temporal_db.master_username
-  port            = var.temporal_db.port
-
-  engine_version        = var.temporal_db.engine_version
-  instance_class        = var.temporal_db.instance_class
-  allocated_storage     = var.temporal_db.allocated_storage
-  max_allocated_storage = var.temporal_db.max_allocated_storage
-  storage_type          = var.temporal_db.storage_type
-  iops                  = var.temporal_db.iops
-  storage_encrypted     = var.temporal_db.storage_encrypted
-  multi_az              = var.temporal_db.multi_az
-  family                = var.temporal_db.family
-  major_engine_version  = var.temporal_db.major_engine_version
-  deletion_protection   = var.temporal_db.deletion_protection
-}
-
 module "retool-services" {
   source = "../../modules/aws-retool-services"
 
@@ -137,7 +43,7 @@ module "retool-services" {
   region = var.region
   vpc    = local.vpc
   eks    = module.eks.outputs
-  db     = module.db-main.outputs
+  db     = local.db
   tags   = var.tags
 
   db_password_secret_property = var.retool_db.password_property
@@ -156,7 +62,7 @@ module "retool-services" {
 
   # Lets External Secrets Operator read the Temporal database credentials, which
   # live outside the retool/{prefix}/* namespace. See temporal.tf.
-  extra_secret_read_arns = compact([local.temporal_credentials_secret_id])
+  extra_secret_read_arns = compact([try(var.temporal_db.credentials_secret_id, null)])
 
   enable_agent_sandbox = var.enable_agent_sandbox
   enable_rr_s3         = var.enable_rr_s3
@@ -170,7 +76,7 @@ module "retool" {
   retool_helm_name          = "retool"
   retool_helm_chart_version = var.retool_helm_chart_version
 
-  db              = module.db-main.outputs
+  db              = local.db
   retool_services = module.retool-services.outputs
   domain_name     = var.domain_name
 
@@ -185,7 +91,6 @@ module "retool" {
   retool_helm_extra_values = concat(
     local.app_values,
     local.temporal_values,
-    local.cloudauth_values,
     var.retool_helm_extra_values,
   )
 
@@ -211,7 +116,7 @@ module "user-ingress" {
   # and only create a Route53 zone if neither a certificate nor an existing zone
   # was supplied — the usual case is that both are managed elsewhere.
   #
-  # The CloudFormation stack's own load balancer is deliberately NOT imported:
+  # The CloudFormation stack's own load balancer is deliberately left alone:
   # this one runs alongside it, and moving DNS between them is the cutover.
   acm_certificate_arn = var.acm_certificate_arn
   create_hosted_zone  = var.acm_certificate_arn == null && var.hosted_zone_id == null

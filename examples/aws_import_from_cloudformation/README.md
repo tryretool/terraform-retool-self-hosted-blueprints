@@ -1,95 +1,73 @@
-# Importing the CloudFormation ECS/Fargate deployment's databases into Terraform
+# Migrating from the CloudFormation ECS/Fargate stack to EKS
 
 For deployments running Retool on ECS/Fargate via
 [`retool-onpremise`](https://github.com/tryretool/retool-onpremise)'s
-CloudFormation templates, moving to Terraform + EKS **and taking the databases
-with them**.
+CloudFormation templates.
 
-This is the second of two migration paths:
+Unlike the [`aws_all_inclusive`](../aws_all_inclusive) examples, this stack
+creates **no VPC and no databases**. It points at the ones your CloudFormation
+deployment already runs — the Retool database in particular holds every app,
+query, resource and user you have, and is read but never modified. What this
+stack builds beside them is the EKS cluster, the supporting cluster services,
+the Retool Helm release, and a new load balancer to cut over to.
 
-| | [`aws_migrate_from_cloudformation`](../aws_migrate_from_cloudformation) | **this example** |
+Both deployments run side by side, sharing one database, until you switch DNS.
+So you can validate the new one before committing to it, and roll back by
+switching DNS back.
+
+A helper script reads your CloudFormation stack and writes most of the
+configuration for you.
+
+See the [repository README](../../README.md) for general prerequisites.
+
+## What changes, and what doesn't
+
+| | CloudFormation (ECS) | This stack (EKS) |
 | --- | --- | --- |
-| Retool & Temporal databases | stay CloudFormation-managed; Terraform only reads them | **imported into Terraform state** |
-| Deleting the CloudFormation stack | must retain the databases first | the databases are already Terraform's |
-| Setup | fill in `terraform.tfvars` by hand | a helper discovers everything and performs the imports |
+| VPC, subnets | stack *parameters*, not resources | **referenced as-is** |
+| Retool database | created by the stack | **referenced as-is** |
+| Temporal database | created by the stack | **referenced as-is** |
+| Encryption key, JWT secret | created by the stack | **referenced as-is** |
+| Compute | Fargate tasks per service | EKS + Karpenter, pods per service |
+| Temporal cluster | 5 ECS services | Helm subchart in-cluster |
+| Code executor | standalone ECS service | bundled in the chart |
+| Service discovery | Cloud Map (`*.retoolsvc`) | Kubernetes Service DNS |
+| Secrets delivery | `{{resolve:secretsmanager}}` at deploy | External Secrets Operator, continuously |
+| Load balancer | created by the stack | **new one, created here** |
 
-Both run the new deployment alongside the old one and cut over by moving DNS.
-Pick this one if you want CloudFormation gone entirely; pick the other if you
-want the smallest possible change.
+Nothing is imported into Terraform state, and nothing is taken away from
+CloudFormation. The only changes this stack makes to existing resources are two
+additive ones: a Karpenter discovery tag on the private subnets, and an ingress
+rule on each database security group so the new EKS nodes can connect. Existing
+rules are untouched, so the ECS deployment keeps its access throughout.
 
-## What is and isn't imported
-
-**Imported:** both RDS instances, their DB subnet groups, their security groups,
-and every rule on those security groups.
-
-**Not imported:**
-
-- **The VPC and subnets.** In these templates `VpcId` and `SubnetId` are stack
-  *parameters*, not stack resources — the network was never
-  CloudFormation-managed, so there is nothing to reclaim. It stays referenced by
-  ID, exactly as in the other example.
-- **The load balancer.** This stack creates its own and runs it alongside the
-  old one; moving DNS between them is the cutover, and is what makes rollback a
-  DNS change rather than a rebuild.
-- **The Retool secrets.** Referenced in place. Terraform reads them, so nothing
-  is duplicated, but their lifecycle stays outside this stack.
-
-## Two things that would otherwise break the running deployment
-
-Both are handled by this example; they're described here because they explain
-why the configuration looks the way it does, and because they matter if you
-adapt it.
-
-### The master password
-
-The `aws-database` module normally has **RDS manage the master password** in
-Secrets Manager. Applied to an imported database whose password came from
-CloudFormation, RDS would generate a **new** password — and the running ECS
-tasks, still reading the old `RetoolRDSSecret`, would lose access to the
-database immediately.
-
-So `main.tf` sets `manage_master_user_password = false` and points
-`master_user_secret_arn` at the CloudFormation secret. The password does not
-change, and both deployments keep working. Handing the password to RDS is
-something you can do later, once ECS is gone.
-
-### Names are fixed at creation
-
-A security group's name and a DB subnet group's name cannot be changed in place.
-The module normally generates them from the deployment prefix; if that doesn't
-match the imported resource's actual name, Terraform **destroys and recreates**
-it — and recreating a security group drops every rule on it, cutting ECS off.
-
-So `security_group_name` and `db_subnet_group_name` are pinned to the real
-names. The helper discovers them; don't hand-edit them.
-
-Relatedly, the module is told **not** to manage rules on those groups
-(`manage_security_group_rules = false`), because it would delete every rule it
-didn't know about. Every existing rule is instead declared in
-`imported-db-rules.tf` and imported individually — see [Security group
-rules](#security-group-rules) below.
+> [!IMPORTANT]
+> The **encryption key must be carried over**. Every credential stored in the
+> Retool database is encrypted with it; deploying with a fresh key leaves every
+> saved resource credential undecryptable. `encryption_key_secret` is a required
+> input for exactly this reason.
 
 ## Prerequisites
 
-Beyond the [repository-wide](../../README.md) ones:
+Beyond the repository-wide ones:
 
 - [`uv`](https://docs.astral.sh/uv/getting-started/installation/), to run the
   helper. It resolves the helper's dependencies on first run; there is nothing
   to install.
-- Credentials that can read CloudFormation, RDS, EC2, and Secrets Manager, and
-  that can `terraform import`.
+- Credentials that can read CloudFormation, RDS, and Secrets Manager.
 - Your existing private subnets need **outbound internet access** — a NAT
   gateway, or VPC endpoints for ECR and S3 plus egress to `charts.retool.com`.
-  EKS nodes cannot pull images without it.
+  EKS nodes cannot pull images without it. If your CloudFormation stack ran its
+  tasks in public subnets with `AssignPublicIp: ENABLED`, plan for this.
 - Subnets in **at least two availability zones**, for both the cluster and the
   load balancer.
 
 > [!WARNING]
-> The subnet tags this stack adds live on resources CloudFormation may consider
-> its own. If your subnets are declared in a template that specifies their tags
-> exhaustively, a later stack update can revert them, leaving Karpenter unable
-> to find subnets. Set `manage_karpenter_subnet_tags = false` and apply the
-> `karpenter.sh/discovery` tag (valued to the EKS cluster name) from the
+> The Karpenter subnet tag this stack adds lives on a resource CloudFormation may
+> consider its own. If your subnets are declared in a template that specifies
+> their tags exhaustively, a later stack update can revert the tag, leaving
+> Karpenter unable to find subnets. Set `manage_karpenter_subnet_tags = false`
+> and apply `karpenter.sh/discovery` (valued to the EKS cluster name) from the
 > template instead.
 
 ## Step 1 — look at what you have
@@ -100,19 +78,10 @@ Beyond the [repository-wide](../../README.md) ones:
   describe-cf-stack
 ```
 
-This is read-only. It prints the stack's parameters, both databases with
-everything import cares about, every security group rule that will be preserved,
-the shape of each secret, and the CloudAuth mappings — then a list of anything
-that blocks a clean import.
-
-Read the **Master password** row for each database. It should say
-`self-managed (Secrets Manager)`. If it says `RDS-managed`, this example's
-configuration doesn't match your deployment; stop and reconsider.
-
-If the Temporal database is an **Aurora cluster**, it's reported as one. Aurora
-cannot be imported into `aws-database`, which builds a standalone RDS instance —
-the helper writes `temporal_db_mode = "external"` instead, leaving it in place
-and connecting Retool to it. Everything else still imports.
+Read-only. It prints the stack's parameters, both databases with their
+connection details and credentials secrets, the shape of each secret, and then
+anything needing attention — a missing encryption key, a database with no
+discoverable credentials secret, more than one Temporal candidate.
 
 ## Step 2 — generate the configuration
 
@@ -130,9 +99,12 @@ cp vars.tf.example terraform.tfvars
 > the directory, and `provider.example.tf` matches — keeping both would declare
 > each provider twice.
 
-That writes `imported.tfvars`: everything derivable from the stack. Edit
-`terraform.tfvars` for what's yours — `prefix`, `region`, `aws_profile`. The two
-files layer, imported first:
+That writes `imported.tfvars`: everything derivable from the stack — VPC and
+subnet IDs, both databases, the secret ARNs, the certificate ARN, the image tag,
+replica counts, and the ALB OIDC endpoints if your stack uses them. Edit
+`terraform.tfvars` for what's yours: `prefix`, `region`, `aws_profile`.
+
+The two files layer, imported first:
 
 ```sh
 terraform apply -var-file=imported.tfvars -var-file=terraform.tfvars
@@ -147,7 +119,7 @@ No change is needed — Terraform reads a named property just as well, and that'
 what the helper writes by default. It will *offer* to create a derived
 raw-string secret instead; declining changes nothing.
 
-## Step 3 — stand up the cluster
+## Step 3 — deploy
 
 ```sh
 terraform init
@@ -155,63 +127,22 @@ terraform plan  -var-file=imported.tfvars -var-file=terraform.tfvars
 terraform apply -var-file=imported.tfvars -var-file=terraform.tfvars
 ```
 
-The first plan will show the databases being **created**, because they aren't in
-state yet. That's expected and is what the next step fixes — but it means you
-should **import before applying**, not after. If you'd rather build the cluster
-first, apply with `-target=module.eks` and come back.
+Read the plan before applying. Against your existing infrastructure it should
+show **only** additive changes: the subnet tags, and one ingress rule per
+database security group. No VPC, no RDS instance, and no modification to either.
 
-## Step 4 — import
-
-Dry run first. This is the default; the command is read-only without `--apply`:
-
-```sh
-./import_from_cloudformation.py \
-  --stack-name <your-stack> --region <region> \
-  import-state
-```
-
-It prints every import as a source/target pair — the AWS resource, its ID, and
-the Terraform address it lands at. Nothing is executed. When it looks right:
-
-```sh
-./import_from_cloudformation.py \
-  --stack-name <your-stack> --region <region> \
-  import-state --apply
-```
-
-Addresses already in state are skipped, so this is re-runnable after a failure.
-
-## Step 5 — the acceptance test
-
-```sh
-terraform plan -var-file=imported.tfvars -var-file=terraform.tfvars
-```
-
-This plan is the real check. It must show **no replacement and no deletion** of:
-
-- either RDS instance,
-- either DB subnet group,
-- either security group,
-- any preserved security group rule.
-
-and **no change to master password management**. Additions are fine — the EKS
-cluster, the new load balancer, the EKS-node ingress rule. A replacement or a
-deletion means a value in `imported.tfvars` doesn't match reality; fix that
-rather than applying.
-
-Once it's clean, apply, then point `kubectl` at the cluster:
+Then point `kubectl` at the new cluster:
 
 ```sh
 eval "$(terraform output -raw kubeconfig_command)"
 kubectl get pods
 ```
 
-## Step 6 — validate, then cut over
+## Step 4 — validate before cutting over
 
-Both deployments now read and write the same database, so anything you do in one
-is immediately visible in the other. Reach the new one directly — its
-certificate is issued for `domain_name`, not for the load balancer's own name,
-so send the right hostname to its address:
+The new deployment is live on its own load balancer while the CloudFormation one
+still serves your users. Its certificate is issued for `domain_name`, not for
+the load balancer's own name, so send the right hostname to its address:
 
 ```sh
 curl --resolve "<domain_name>:443:$(dig +short "$(terraform output -raw alb_dns_name)" | head -1)" \
@@ -220,38 +151,39 @@ curl --resolve "<domain_name>:443:$(dig +short "$(terraform output -raw alb_dns_
 
 Browse it the same way by adding that IP and `domain_name` to your hosts file.
 
-When you're satisfied, point `domain_name` at `alb_dns_name`. Switch it back if
-anything looks wrong.
+Both deployments read and write the same database, so anything you do in one is
+immediately visible in the other.
 
-## Step 7 — decommission
+## Step 5 — cut over
 
-Delete the CloudFormation stack. The databases are Terraform's now, so they
-won't go with it — but check first:
+Point `domain_name` at the new load balancer:
 
-- The instances and subnet groups are in Terraform state (`terraform state list`).
-- CloudFormation no longer believes it owns them. Deleting a stack whose
-  template still declares an RDS instance will attempt to delete that instance
-  regardless of what Terraform thinks. **Set `DeletionPolicy: Retain` on the
-  database resources and update the stack before deleting it**, or remove them
-  from the template first.
+- If DNS is managed elsewhere (the usual case), update the record to
+  `alb_dns_name`, or an alias to it.
+- If you set `hosted_zone_id`, this stack already manages the alias records —
+  nothing to do.
 
-Then clean up the rules that only existed for ECS: delete their entries from
-`retool_db_preserved_ingress_rules` in `imported.tfvars` and apply. Terraform
-removes exactly those rules, leaving the EKS-node access this stack manages.
+Watch the new deployment, and switch DNS back if anything looks wrong.
+
+## Step 6 — decommission
+
+Once you're confident, delete the CloudFormation stack. **Before you do**, make
+sure it will not take your data with it — the databases are still
+CloudFormation's:
+
+- Set `DeletionPolicy: Retain` (or the equivalent stack policy) on the RDS
+  resources and every secret this stack references, and update the stack, or
+- take a final snapshot and detach the resources from the stack first.
+
+The `RetoolRDSSecret` in the upstream template already carries
+`DeletionPolicy: Retain`; the RDS instances and the encryption key secret do not.
+
+Afterwards the databases and secrets are unmanaged — no longer CloudFormation's,
+and not Terraform's either. Adopting them into Terraform is a separate exercise;
+this example deliberately does not attempt it, so that nothing it does can
+disturb the running deployment.
 
 ## Reference
-
-### Security group rules
-
-`imported-db-rules.tf` declares every pre-existing rule as its own
-`aws_vpc_security_group_ingress_rule` / `egress_rule`, keyed by the rule's AWS ID
-(`sgr-…`), which is also its import ID.
-
-That's deliberate. The older `aws_security_group_rule` — which the security-group
-module inside `aws-database` uses — is addressed by list index and imported by a
-constructed composite ID that's ambiguous for all-traffic rules. Keying on the
-AWS rule ID removes both problems, and gives each rule an independent lifecycle:
-delete one entry, Terraform removes one rule.
 
 ### The helper
 
@@ -261,24 +193,53 @@ delete one entry, Terraform removes one rule.
 --profile      AWS CLI profile
 --chdir        Terraform working directory       (default: .)
 
-describe-cf-stack   read-only summary and readiness check
+describe-cf-stack   read-only summary of the stack
 import-tfvars       write imported.tfvars        (--prefix, --output, --yes)
-import-state        terraform import             (--apply to execute)
 ```
 
-It reads the stack's parameters, resources, and template `Mappings`, then
-traverses via the AWS APIs to what the stack only references — RDS attributes,
-subnet groups, security group rules, secret shapes — and locates a Temporal
-database even when it was created outside the stack. Import operations are
-modelled as explicit source/target pairs, so the dry-run output is the same list
-that executes.
+It reads the stack's parameters and resources, then traverses via the AWS APIs
+to what the stack only references — RDS connection details, subnet groups,
+security groups, secret shapes — and locates a Temporal database even when it
+was created outside the stack, scoping the search to the Retool database's
+subnet group so unrelated databases are never picked up.
+
+The one action that writes to AWS — creating a derived raw-string secret — is
+offered explicitly and never implied.
+
+### Temporal
+
+The CloudFormation stack ran Temporal as five ECS services. The Retool Helm chart
+runs the whole Temporal cluster itself via its bundled
+`retool-temporal-services-helm` subchart, so only the database carries over,
+whether it's a plain RDS instance or an Aurora cluster — see `temporal.tf`. The
+chart wires the frontend host automatically; the Cloud Map namespace has no
+equivalent and is not ported.
+
+Setting `temporal_db = null` disables Retool Workflows entirely.
+
+### Edge authentication
+
+`alb_oidc` reproduces the CloudFormation stack's `authenticate-oidc` listener
+action: users complete an OIDC flow at the load balancer before any request
+reaches Retool. This is separate from Retool's own authentication.
+
+Terraform reads the client credentials to configure the listener, so they land
+in Terraform state — use an encrypted, access-restricted
+[backend](https://developer.hashicorp.com/terraform/language/backend).
+
+### Sizing
+
+The CloudFormation stack sized each ECS service with Fargate task CPU/memory.
+Here, `replica_counts` sets pod counts and Karpenter provisions nodes to fit.
+Resource requests and limits stay at the chart defaults; tune them with the
+[scaling guide](../../guides/scaling.md) rather than transcribing Fargate task
+sizes directly.
 
 ### Things that don't carry over
 
 CloudWatch `awslogs` drivers, Container Insights, and ECS Exec are ECS-specific.
 Their EKS equivalents are cluster logging and `enabled_cloudwatch_logs_exports`
-on RDS, configured separately. Cloud Map service discovery is replaced by
-Kubernetes Service DNS.
+on RDS, configured separately.
 
 ### Things you gain
 
