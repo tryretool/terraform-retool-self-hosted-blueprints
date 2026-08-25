@@ -114,7 +114,7 @@ resource "kubernetes_service_account_v1" "eso" {
 # Always created so a platform-provided ESO reconciles it in shared clusters.
 resource "kubectl_manifest" "secret_store" {
   yaml_body = yamlencode({
-    apiVersion = "external-secrets.io/v1beta1"
+    apiVersion = "external-secrets.io/v1"
     kind       = local.secret_store_kind
     metadata = {
       name      = local.secret_store_name
@@ -146,7 +146,7 @@ resource "kubectl_manifest" "external_secret" {
   for_each = var.create_external_secrets ? { for s in local.external_secrets : s.name => s } : {}
 
   yaml_body = yamlencode({
-    apiVersion = "external-secrets.io/v1beta1"
+    apiVersion = "external-secrets.io/v1"
     kind       = "ExternalSecret"
     metadata = {
       name      = each.value.name
@@ -174,7 +174,7 @@ resource "kubectl_manifest" "external_secret_extra_env_vars" {
   count = var.create_external_secrets ? 1 : 0
 
   yaml_body = yamlencode({
-    apiVersion = "external-secrets.io/v1beta1"
+    apiVersion = "external-secrets.io/v1"
     kind       = "ExternalSecret"
     metadata = {
       name      = "extra-env-vars"
@@ -207,7 +207,7 @@ resource "kubectl_manifest" "external_secret_license_key" {
   count = var.create_external_secrets && local.license_key_remote_ref != null ? 1 : 0
 
   yaml_body = yamlencode({
-    apiVersion = "external-secrets.io/v1beta1"
+    apiVersion = "external-secrets.io/v1"
     kind       = "ExternalSecret"
     metadata = {
       name      = "license-key"
@@ -242,7 +242,7 @@ resource "kubectl_manifest" "external_secret_agent_sandbox" {
   count = var.create_external_secrets && var.enable_agent_sandbox ? 1 : 0
 
   yaml_body = yamlencode({
-    apiVersion = "external-secrets.io/v1beta1"
+    apiVersion = "external-secrets.io/v1"
     kind       = "ExternalSecret"
     metadata = {
       name      = "agent-sandbox"
@@ -278,7 +278,7 @@ resource "kubectl_manifest" "external_secret_rr_blob" {
   count = var.create_external_secrets && var.enable_rr_blob ? 1 : 0
 
   yaml_body = yamlencode({
-    apiVersion = "external-secrets.io/v1beta1"
+    apiVersion = "external-secrets.io/v1"
     kind       = "ExternalSecret"
     metadata = {
       name      = "rr-blob-credentials"
