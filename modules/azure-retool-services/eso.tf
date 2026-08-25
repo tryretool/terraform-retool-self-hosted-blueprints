@@ -92,9 +92,13 @@ resource "kubernetes_service_account_v1" "eso" {
     name      = local.eso_service_account_name
     namespace = local.retool_namespace
 
+    # Only the client id. ESO resolves the tenant from
+    # spec.provider.azurekv.tenantId on the SecretStore below, and errors with
+    # "multiple tenantID found" if an azure.workload.identity/tenant-id
+    # annotation supplies it a second time. The client id has no such
+    # alternative — ESO reads it only from here.
     annotations = {
       "azure.workload.identity/client-id" = azurerm_user_assigned_identity.eso.client_id
-      "azure.workload.identity/tenant-id" = data.azurerm_client_config.current.tenant_id
     }
   }
 
