@@ -42,8 +42,10 @@ from botocore.exceptions import ClientError
 from rich.console import Console
 from rich.table import Table
 
-console = Console()
-err_console = Console(stderr=True)
+# emoji=False because ARNs contain ":secret:", which rich would otherwise
+# render as ㊙ — corrupting every ARN printed.
+console = Console(emoji=False)
+err_console = Console(stderr=True, emoji=False)
 
 TFVARS_FILENAME = "imported.tfvars"
 
@@ -89,6 +91,7 @@ class Database:
     db_subnet_group_name: str | None
     security_group_ids: list[str]
     credentials_secret_arn: str | None = None
+    cluster_identifier: str | None = None
 
     @property
     def security_group_id(self) -> str | None:
@@ -214,6 +217,13 @@ class Discoverer:
         )
         if temporal_logical:
             facts.temporal_db = self._load_instance(facts.resources[temporal_logical])
+            # An Aurora member instance has its own endpoint, but connections
+            # belong on the cluster's writer endpoint — that one follows
+            # failover and survives the instance being replaced.
+            if facts.temporal_db and facts.temporal_db.cluster_identifier:
+                cluster = self._load_cluster(facts.temporal_db.cluster_identifier)
+                if cluster:
+                    facts.temporal_db = cluster
         elif LOGICAL_TEMPORAL_CLUSTER in facts.resources or self._logical_ids_of_type(
             facts, "AWS::RDS::DBCluster"
         ):
@@ -268,6 +278,7 @@ class Discoverer:
                 for sg in raw.get("VpcSecurityGroups", []) or []
                 if sg.get("Status") == "active"
             ],
+            cluster_identifier=raw.get("DBClusterIdentifier"),
         )
 
     def _load_cluster_for(self, facts: StackFacts) -> Database | None:
@@ -277,6 +288,9 @@ class Discoverer:
             cluster_id = facts.resources.get(clusters[0]) if clusters else None
         if not cluster_id:
             return None
+        return self._load_cluster(cluster_id)
+
+    def _load_cluster(self, cluster_id: str) -> Database | None:
         try:
             raw = self.rds.describe_db_clusters(DBClusterIdentifier=cluster_id)[
                 "DBClusters"
@@ -304,6 +318,7 @@ class Discoverer:
                 for sg in raw.get("VpcSecurityGroups", []) or []
                 if sg.get("Status") == "active"
             ],
+            cluster_identifier=raw["DBClusterIdentifier"],
         )
 
     def _search_temporal_instance(self, facts: StackFacts) -> Database | None:

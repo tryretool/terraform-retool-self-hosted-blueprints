@@ -7,6 +7,11 @@ locals {
   # Target group name: max 32 characters; alphanumeric and hyphens only.
   tg_name = length(local.name_slug) <= 27 ? "${local.name_slug}-tg" : "${substr(local.name_slug, 0, 27)}-tg"
 
+  # Whether this module manages DNS at all. Must be decidable from configuration
+  # alone: it gates resource counts, and the id of a zone we are about to create
+  # is not known until apply.
+  manage_dns = var.create_hosted_zone || var.hosted_zone_id != null
+
   # The zone this module writes records into: the one it created, or an existing
   # one the caller nominated. Null means DNS is managed entirely outside this
   # stack and we write no records at all.
@@ -66,7 +71,7 @@ resource "aws_acm_certificate" "cert" {
     create_before_destroy = true
 
     precondition {
-      condition     = local.zone_id != null
+      condition     = local.manage_dns
       error_message = "aws-user-ingress cannot validate a certificate for ${var.domain_name} without a hosted zone. Either leave create_hosted_zone = true, set hosted_zone_id to an existing zone, or supply acm_certificate_arn to bring your own certificate."
     }
   }
@@ -267,7 +272,7 @@ resource "kubectl_manifest" "target_group_binding" {
 }
 
 resource "aws_route53_record" "alb_alias" {
-  count = local.zone_id != null ? 1 : 0
+  count = local.manage_dns ? 1 : 0
 
   zone_id = local.zone_id
   name    = var.domain_name
@@ -281,7 +286,7 @@ resource "aws_route53_record" "alb_alias" {
 }
 
 resource "aws_route53_record" "alb_alias_wildcard" {
-  count = local.zone_id != null ? 1 : 0
+  count = local.manage_dns ? 1 : 0
 
   zone_id = local.zone_id
   name    = "*.${var.domain_name}"

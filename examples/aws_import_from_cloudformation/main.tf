@@ -31,9 +31,12 @@ module "eks" {
   cluster_encryption_kms_key_arn = var.cluster_encryption_kms_key_arn
   additional_access_entries      = var.eks_additional_access_entries
 
-  # Karpenter selects subnets by tag, so the existing subnets must carry the
-  # discovery tag before any node can be provisioned.
-  depends_on = [aws_ec2_tag.karpenter_discovery]
+  # NOTE: deliberately no depends_on here. A module-level depends_on defers every
+  # data source inside the module to apply time, and this module's
+  # aws_partition / aws_caller_identity lookups feed a count in its node-group
+  # submodule — so the first plan fails with "Invalid count argument". The
+  # Karpenter subnet tags are instead sequenced ahead of module.retool-services,
+  # which is where the first pods needing Karpenter capacity appear.
 }
 
 module "retool-services" {
@@ -67,7 +70,9 @@ module "retool-services" {
   enable_agent_sandbox = var.enable_agent_sandbox
   enable_rr_s3         = var.enable_rr_s3
 
-  depends_on = [module.eks]
+  # Karpenter selects subnets by tag. These are the first workloads that need
+  # capacity it provisions, so the tags have to exist by now.
+  depends_on = [module.eks, aws_ec2_tag.karpenter_discovery]
 }
 
 module "retool" {
