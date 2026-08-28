@@ -32,25 +32,37 @@ locals {
 # tasks. Retool pods reach Postgres from the EKS node security group, so it
 # needs a rule of its own. This is additive — the existing ECS ingress rules are
 # untouched, so both deployments can talk to the database during the cutover.
-resource "aws_vpc_security_group_ingress_rule" "retool_db_from_eks_nodes" {
-  count = var.retool_db.security_group_id != null ? 1 : 0
+#
+# Keyed by security group and port rather than by database: the Retool
+# templates put both databases behind a single RDSSecurityGroup, and AWS rejects
+# a duplicate rule. One entry per distinct (group, port) pair covers a shared
+# group, separate groups, and separate ports alike.
+locals {
+  # merge() rather than a for-expression: it collapses duplicate keys, whereas a
+  # for-expression building a map errors on them.
+  db_ingress_rules = merge(
+    var.retool_db.security_group_id != null ? {
+      "${var.retool_db.security_group_id}:${data.aws_db_instance.retool.port}" = {
+        security_group_id = var.retool_db.security_group_id
+        port              = data.aws_db_instance.retool.port
+      }
+    } : {},
+    try(var.temporal_db.security_group_id, null) != null ? {
+      "${var.temporal_db.security_group_id}:${var.temporal_db.port}" = {
+        security_group_id = var.temporal_db.security_group_id
+        port              = var.temporal_db.port
+      }
+    } : {},
+  )
+}
 
-  security_group_id            = var.retool_db.security_group_id
+resource "aws_vpc_security_group_ingress_rule" "db_from_eks_nodes" {
+  for_each = local.db_ingress_rules
+
+  security_group_id            = each.value.security_group_id
   description                  = "Postgres from ${local.cluster_name} EKS nodes"
   referenced_security_group_id = module.eks.outputs.node_security_group_id
   ip_protocol                  = "tcp"
-  from_port                    = data.aws_db_instance.retool.port
-  to_port                      = data.aws_db_instance.retool.port
-}
-
-# Same for the Temporal database, when there is one.
-resource "aws_vpc_security_group_ingress_rule" "temporal_db_from_eks_nodes" {
-  count = local.temporal_enabled && var.temporal_db.security_group_id != null ? 1 : 0
-
-  security_group_id            = var.temporal_db.security_group_id
-  description                  = "Postgres from ${local.cluster_name} EKS nodes (Temporal)"
-  referenced_security_group_id = module.eks.outputs.node_security_group_id
-  ip_protocol                  = "tcp"
-  from_port                    = var.temporal_db.port
-  to_port                      = var.temporal_db.port
+  from_port                    = each.value.port
+  to_port                      = each.value.port
 }
