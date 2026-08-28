@@ -246,7 +246,7 @@ locals {
             "values"   = []
           }),
           merge({
-            "key" = "node.kubernetes.io/instance-family"
+            "key" = "karpenter.k8s.aws/instance-family"
             }, var.default_allowed_instance_families != null ? {
             "operator" = "In"
             "values"   = var.default_allowed_instance_families
@@ -254,6 +254,14 @@ locals {
             "operator" = "Exists"
             "values"   = []
           }),
+          # Retool publishes amd64-only images (the backend and the Temporal
+          # image the workflows subchart runs). Without this, Karpenter is free
+          # to pick arm64 and those pods crash with "exec format error".
+          {
+            key      = "kubernetes.io/arch"
+            operator = "In"
+            values   = var.default_allowed_architectures
+          },
           {
             key      = "topology.kubernetes.io/zone"
             operator = "In"

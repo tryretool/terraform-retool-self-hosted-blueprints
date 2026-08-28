@@ -11,7 +11,7 @@ variable "region" {
 
 variable "vpc" {
   type = object({
-    vpc_id = string
+    vpc_id             = string
     private_subnet_ids = list(string)
   })
   description = <<EOD
@@ -87,6 +87,12 @@ variable "default_allowed_instance_families" {
   type        = list(string)
   default     = ["m8i", "m8a", "r8i", "r8a", "m7i", "m7a", "r7i", "r7a"]
   description = "The EC2 instance families Karpenter can use to support EKS cluster workloads. If null, instances will only be restricted by type."
+}
+
+variable "default_allowed_architectures" {
+  type        = list(string)
+  default     = ["amd64"]
+  description = "CPU architectures Karpenter may provision for the default NodePool. Retool publishes amd64-only images, so widening this will schedule pods onto nodes they cannot run on."
 }
 
 variable "karpenter_default_nodeclass_ami_selector_terms" {
