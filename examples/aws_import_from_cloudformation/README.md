@@ -47,141 +47,15 @@ rules are untouched, so the ECS deployment keeps its access throughout.
 > saved resource credential undecryptable. `encryption_key_secret` is a required
 > input for exactly this reason.
 
-## Prerequisites
+## Running a migration
 
-Beyond the repository-wide ones:
+The step-by-step procedure lives in **[MIGRATION.md](./MIGRATION.md)** — a terse
+runbook covering prerequisites, the helper, apply, verification, DNS cutover and
+decommissioning. It was verified end to end against a live CloudFormation
+deployment.
 
-- [`uv`](https://docs.astral.sh/uv/getting-started/installation/), to run the
-  helper. It resolves the helper's dependencies on first run; there is nothing
-  to install.
-- Credentials that can read CloudFormation, RDS, and Secrets Manager.
-- Your existing private subnets need **outbound internet access** — a NAT
-  gateway, or VPC endpoints for ECR and S3 plus egress to `charts.retool.com`.
-  EKS nodes cannot pull images without it. If your CloudFormation stack ran its
-  tasks in public subnets with `AssignPublicIp: ENABLED`, plan for this.
-- Subnets in **at least two availability zones**, for both the cluster and the
-  load balancer.
-
-> [!WARNING]
-> The Karpenter subnet tag this stack adds lives on a resource CloudFormation may
-> consider its own. If your subnets are declared in a template that specifies
-> their tags exhaustively, a later stack update can revert the tag, leaving
-> Karpenter unable to find subnets. Set `manage_karpenter_subnet_tags = false`
-> and apply `karpenter.sh/discovery` (valued to the EKS cluster name) from the
-> template instead.
-
-## Step 1 — look at what you have
-
-```sh
-./import_from_cloudformation.py \
-  --stack-name <your-stack> --region <region> \
-  describe-cf-stack
-```
-
-Read-only. It prints the stack's parameters, both databases with their
-connection details and credentials secrets, the shape of each secret, and then
-anything needing attention — a missing encryption key, a database with no
-discoverable credentials secret, more than one Temporal candidate.
-
-## Step 2 — generate the configuration
-
-```sh
-mv provider.example.tf provider.tf
-cp vars.tf.example terraform.tfvars
-
-./import_from_cloudformation.py \
-  --stack-name <your-stack> --region <region> \
-  import-tfvars --prefix retool-prod
-```
-
-> [!NOTE]
-> Use `mv`, not `cp`, for the provider file. Terraform loads every `*.tf` file in
-> the directory, and `provider.example.tf` matches — keeping both would declare
-> each provider twice.
-
-That writes `imported.tfvars`: everything derivable from the stack — VPC and
-subnet IDs, both databases, the secret ARNs, the certificate ARN, the image tag,
-replica counts, and the ALB OIDC endpoints if your stack uses them. Edit
-`terraform.tfvars` for what's yours: `prefix`, `region`, `aws_profile`.
-
-The two files layer, imported first:
-
-```sh
-terraform apply -var-file=imported.tfvars -var-file=terraform.tfvars
-```
-
-`imported.tfvars` is deliberately comment-free and safe to regenerate; keep your
-own edits in `terraform.tfvars`, where they win.
-
-**Secret shapes.** CloudFormation's `GenerateSecretString` stores JSON, nesting
-the value under a key like `password`, while a bare string is more natural here.
-No change is needed — Terraform reads a named property just as well, and that's
-what the helper writes by default. It will *offer* to create a derived
-raw-string secret instead; declining changes nothing.
-
-## Step 3 — deploy
-
-```sh
-terraform init
-terraform plan  -var-file=imported.tfvars -var-file=terraform.tfvars
-terraform apply -var-file=imported.tfvars -var-file=terraform.tfvars
-```
-
-Read the plan before applying. Against your existing infrastructure it should
-show **only** additive changes: the subnet tags, and one ingress rule per
-database security group. No VPC, no RDS instance, and no modification to either.
-
-Then point `kubectl` at the new cluster:
-
-```sh
-eval "$(terraform output -raw kubeconfig_command)"
-kubectl get pods
-```
-
-## Step 4 — validate before cutting over
-
-The new deployment is live on its own load balancer while the CloudFormation one
-still serves your users. Its certificate is issued for `domain_name`, not for
-the load balancer's own name, so send the right hostname to its address:
-
-```sh
-curl --resolve "<domain_name>:443:$(dig +short "$(terraform output -raw alb_dns_name)" | head -1)" \
-  "https://<domain_name>/api/checkHealth"
-```
-
-Browse it the same way by adding that IP and `domain_name` to your hosts file.
-
-Both deployments read and write the same database, so anything you do in one is
-immediately visible in the other.
-
-## Step 5 — cut over
-
-Point `domain_name` at the new load balancer:
-
-- If DNS is managed elsewhere (the usual case), update the record to
-  `alb_dns_name`, or an alias to it.
-- If you set `hosted_zone_id`, this stack already manages the alias records —
-  nothing to do.
-
-Watch the new deployment, and switch DNS back if anything looks wrong.
-
-## Step 6 — decommission
-
-Once you're confident, delete the CloudFormation stack. **Before you do**, make
-sure it will not take your data with it — the databases are still
-CloudFormation's:
-
-- Set `DeletionPolicy: Retain` (or the equivalent stack policy) on the RDS
-  resources and every secret this stack references, and update the stack, or
-- take a final snapshot and detach the resources from the stack first.
-
-The `RetoolRDSSecret` in the upstream template already carries
-`DeletionPolicy: Retain`; the RDS instances and the encryption key secret do not.
-
-Afterwards the databases and secrets are unmanaged — no longer CloudFormation's,
-and not Terraform's either. Adopting them into Terraform is a separate exercise;
-this example deliberately does not attempt it, so that nothing it does can
-disturb the running deployment.
+The rest of this document is reference material: what the example does, and the
+decisions behind it.
 
 ## Reference
 
