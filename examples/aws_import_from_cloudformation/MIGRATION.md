@@ -14,16 +14,16 @@ CloudFormation. The only changes to existing resources are additive:
 > database is encrypted with it; a new key makes them all undecryptable. The
 > helper carries it across — do not override `encryption_key_secret`.
 
-Verified end to end 2026-08-27 against Retool 4.0.9-stable on Postgres 16.14
-with Temporal on Aurora PostgreSQL 14.23. Step 7 (DNS cutover) was not
-exercised; everything before it was. The Terraform steps were run through
-terragrunt with the same two var files — substitute your own wrapper freely.
-
 ---
 
 ## 0. Prerequisites
 
-`terraform` ≥ 1.11 (or `terragrunt`), `kubectl`, `helm`, `uv`, `aws`.
+Installed locally:
+* `terraform` ≥ 1.11 (or `terragrunt`)
+* `kubectl`
+* `helm`
+* `uv`
+* `aws` cli
 
 Credentials that can read CloudFormation/RDS/EC2/SecretsManager and create EKS,
 IAM, ELB and Secrets Manager resources.
@@ -36,24 +36,18 @@ parameters:
   subnets, override `private_subnet_ids` with NAT'd private ones instead.
 - `LoadBalancerSubnetId` → the new ALB. Public, **≥2 AZs**.
 
-If the stack uses any of these, note them now — the helper carries the first two
-across, the third is deliberately dropped:
-
-| Stack parameter / resource | Outcome |
-| --- | --- |
-| `CertificateARN` | → `acm_certificate_arn`, attached to the new ALB |
-| `AlbOAuthARN` + `FederateEnvironment` | → `alb_oidc`, reproducing the ALB's OIDC action |
-| `CloudAuthVpcEndpoint`, `CloudAuthHostedZone`, `AuthServerDns` | **not migrated** — they stay with the CF stack; the EKS pods do not use them |
 
 ## 1. Copy the example
+
+Create a copy of this example directory, as it will serve as a Terraform module which will configure and provision all the new AWS resources.
 
 ```sh
 cp -r examples/aws_import_from_cloudformation/ <working-dir>/ && cd <working-dir>
 mv provider.example.tf provider.tf
 ```
 
-`mv`, not `cp` — Terraform loads every `*.tf`, so keeping both declares each
-provider twice.
+It is also recommended to open `provider.tf` and modify it as needed to use the
+appropriate AWS credentials, as well as to use a [suitable state backend such as S3](https://developer.hashicorp.com/terraform/language/backend/s3).
 
 In `main.tf`, point the module sources at the published modules:
 
@@ -70,8 +64,7 @@ version = "~> 0.4"
   describe-cf-stack
 ```
 
-Read-only. Confirm: both databases found, each with a credentials secret; every
-secret's shape detected; closing line reports nothing needing attention.
+This is a read-only operation which will print out the relevant parameters and resource attributes discovered in your existing CloudFormation stack. Confirm it succeeds and contains the values you expect to be migrated over.
 
 ## 3. Generate configuration
 
@@ -83,30 +76,40 @@ secret's shape detected; closing line reports nothing needing attention.
 cp vars.tf.example terraform.tfvars
 ```
 
-`imported.tfvars` holds everything derived from the stack and is safe to
-regenerate. Put your own values in `terraform.tfvars`, which is applied second
-and wins:
+The command above generates a local file `imported.tfvars` which will hold all
+the configuration derived from the existing CF stack. It is safe to re-run as
+needed. Review `imported.tfvars` before applying — in particular that
+`private_subnet_ids` are NAT'd private subnets (see step 0).
+
+Put your own manual/custom configuration values in `terraform.tfvars` so it doesn't get wiped out. A minimal `terraform.tfvars` will look like the below.
 
 ```hcl
-prefix      = "retool-eks"   # distinct from the CF stack name
 region      = "us-west-2"
+# put your local aws profile name here
 aws_profile = "<profile>"
+
+# select a name prefix that will be used to name all the new AWS resources. 
+# this name should be:
+# - distinct from the CF stack name
+# - permanent, as it cannot be easily changed after resource provisioning
+# - contain your company name, to avoid global S3 bucket name collisions
+# - unique within the target AWS account
+prefix      = "retool-eks"
 
 # false only if the CF stack has no ACM cert and serves plain HTTP
 enable_https = true
 ```
 
-Review `imported.tfvars` before applying — in particular that
-`private_subnet_ids` are NAT'd private subnets (see step 0).
+A full variable reference for this example module can be found in
+[`variables.tf`](./variables.tf). Also, any additional customizations can be
+made to any submodule in [`main.tf`](./main.tf) inline if you consult that
+submodule's [own reference](../../modules/).
 
 If the stack had no `CertificateARN`, `acm_certificate_arn` will be absent and
 this stack **creates a public Route53 hosted zone** for the domain in order to
 mint its own certificate. When DNS lives elsewhere, set `hosted_zone_id` to the
 existing zone (records are written there instead) or supply
 `acm_certificate_arn` — otherwise you get a second, undelegated zone.
-
-The helper offers to create a derived raw-string secret for the encryption key.
-Declining changes nothing; Terraform reads the CloudFormation secret in place.
 
 ## 4. Apply
 
@@ -121,7 +124,7 @@ terraform apply -var-file=imported.tfvars -var-file=terraform.tfvars
 ingress rules listed at the top. Anything else means a value in
 `imported.tfvars` does not match reality.
 
-Takes ~25 min, mostly EKS and the Helm release.
+A full initial apply usually takes ~30–60 min, mostly waiting on EKS cluster creation, RDS DB creation, and the Retool Helm release.
 
 ## 5. Verify the cluster
 

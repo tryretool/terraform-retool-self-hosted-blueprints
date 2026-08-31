@@ -43,20 +43,23 @@ a single `terraform apply`.
 
 ## Getting started
 
+> [!NOTE] 
+> Already running Retool on AWS ECS/Fargate via the
+> [`retool-onpremise`](https://github.com/tryretool/retool-onpremise)
+> CloudFormation templates? Start from
+> [`aws_import_from_cloudformation`](./examples/aws_import_from_cloudformation)
+> instead — it keeps your existing VPC and databases, runs the new deployment
+> alongside the old one, and cuts over by moving DNS. It also includes a helper
+> script that reads your CloudFormation stack and writes most of the
+> configuration for you. That example includes its own migration steps at
+> [`aws_import_from_cloudformation/MIGRATION.md`](./examples/aws_import_from_cloudformation/MIGRATION.md)
+> which you'd use instead of the from-scratch steps below.
+
 1. **Pick an example** under [`examples/`](./examples) for your cloud. The
    `*_all_inclusive` examples deploy the standard stack; the
    `*_all_inclusive_r2_beta` examples additionally enable the agent sandbox and
    Remote Repository storage. Each example has its own `README.md` with
    cloud-specific notes.
-
-   Already running Retool on AWS ECS/Fargate via the
-   [`retool-onpremise`](https://github.com/tryretool/retool-onpremise)
-   CloudFormation templates? Start from
-   [`aws_import_from_cloudformation`](./examples/aws_import_from_cloudformation)
-   instead — it keeps your existing VPC and databases, runs the new deployment
-   alongside the old one, and cuts over by moving DNS. It ships a helper that
-   reads your CloudFormation stack and writes most of the configuration for you,
-   and is configured with variables rather than a `locals` block.
 
 2. **Copy the example** into your own Terraform working directory (or work in
    place), then turn the provider stub into a real config:
@@ -64,9 +67,6 @@ a single `terraform apply`.
    ```sh
    mv provider.example.tf provider.tf
    ```
-
-   Use `mv`, not `cp`: Terraform loads every `*.tf` file in the directory, and
-   `provider.example.tf` matches, so keeping both declares each provider twice.
 
 3. **Edit the `locals` block** at the top of `main.tf` — set `prefix`,
    your cloud project/subscription, `region`, and `domain_name`. (The

@@ -1,22 +1,24 @@
 # Migrating from the CloudFormation ECS/Fargate stack to EKS
 
-For deployments running Retool on ECS/Fargate via
-[`retool-onpremise`](https://github.com/tryretool/retool-onpremise)'s
-CloudFormation templates.
+This example is intended for use by deployments running Retool on ECS/Fargate
+via [`retool-onpremise`](https://github.com/tryretool/retool-onpremise)'s
+CloudFormation templates that you wish to migrate to run on EKS via these
+blueprint modules.
 
 Unlike the [`aws_all_inclusive`](../aws_all_inclusive) examples, this stack
 creates **no VPC and no databases**. It points at the ones your CloudFormation
-deployment already runs — the Retool database in particular holds every app,
-query, resource and user you have, and is read but never modified. What this
-stack builds beside them is the EKS cluster, the supporting cluster services,
-the Retool Helm release, and a new load balancer to cut over to.
+deployment already runs — the Retool backing database in particular holds every
+app, query, resource and user you have, and is read but never modified. What
+this stack builds beside them is the EKS cluster, the supporting cluster
+services, a new set of Retool containers running in EKS via Helm, and a new load balancer to cut over to.
 
 Both deployments run side by side, sharing one database, until you switch DNS.
 So you can validate the new one before committing to it, and roll back by
 switching DNS back.
 
-A helper script reads your CloudFormation stack and writes most of the
-configuration for you.
+An included helper script
+([`./import_from_cloudformation.py`](./import_from_cloudformation.py)) reads
+your CloudFormation stack and writes most of the necessary Terraform configuration for you.
 
 See the [repository README](../../README.md) for general prerequisites.
 
@@ -28,18 +30,18 @@ See the [repository README](../../README.md) for general prerequisites.
 | Retool database | created by the stack | **referenced as-is** |
 | Temporal database | created by the stack | **referenced as-is** |
 | Encryption key, JWT secret | created by the stack | **referenced as-is** |
-| Compute | Fargate tasks per service | EKS + Karpenter, pods per service |
-| Temporal cluster | 5 ECS services | Helm subchart in-cluster |
+| Compute | Fargate tasks per Retool service | EKS + Karpenter, pods per Retool service |
 | Code executor | standalone ECS service | bundled in the chart |
-| Service discovery | Cloud Map (`*.retoolsvc`) | Kubernetes Service DNS |
-| Secrets delivery | `{{resolve:secretsmanager}}` at deploy | External Secrets Operator, continuously |
+| Secrets storage | AWS Secrets Manager, synced at CloudFormation deploy | AWS Secrets manager, synced continuously |
 | Load balancer | created by the stack | **new one, created here** |
+| Local Temporal cluster (optional, uncommon) | 5 ECS services | Helm subchart in-cluster |
 
 Nothing is imported into Terraform state, and nothing is taken away from
 CloudFormation. The only changes this stack makes to existing resources are two
-additive ones: a Karpenter discovery tag on the private subnets, and an ingress
-rule on each database security group so the new EKS nodes can connect. Existing
-rules are untouched, so the ECS deployment keeps its access throughout.
+additive ones: a new Karpenter discovery tag on the VPC private subnets, and a
+new ingress rule on each database security group so the new EKS nodes can
+connect. Existing rules are untouched, so the ECS deployment keeps its access
+throughout.
 
 > [!IMPORTANT]
 > The **encryption key must be carried over**. Every credential stored in the
@@ -59,10 +61,10 @@ decisions behind it.
 
 ## Reference
 
-### The helper
+### The `import_from_cloudformation.py` helper
 
 ```
---stack-name   CloudFormation stack name        (required)
+--stack-name   CloudFormation stack name         (required)
 --region       AWS region                        (required)
 --profile      AWS CLI profile
 --chdir        Terraform working directory       (default: .)
