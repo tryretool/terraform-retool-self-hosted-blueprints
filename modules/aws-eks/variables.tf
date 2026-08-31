@@ -11,7 +11,7 @@ variable "region" {
 
 variable "vpc" {
   type = object({
-    vpc_id = string
+    vpc_id             = string
     private_subnet_ids = list(string)
   })
   description = <<EOD
@@ -31,6 +31,12 @@ variable "endpoint_public_access" {
   type        = bool
   default     = true
   description = "Whether the EKS API server endpoint is publicly accessible. Set false for private-only clusters."
+}
+
+variable "cluster_encryption_kms_key_arn" {
+  type        = string
+  default     = null
+  description = "ARN of an existing KMS key to encrypt EKS secrets with. If null, this module creates a key for the cluster. Supply a value when your organization mandates a specific CMK — the key cannot be changed after the cluster is created."
 }
 
 variable "enable_cluster_creator_admin_permissions" {
@@ -81,6 +87,12 @@ variable "default_allowed_instance_families" {
   type        = list(string)
   default     = ["m8i", "m8a", "r8i", "r8a", "m7i", "m7a", "r7i", "r7a"]
   description = "The EC2 instance families Karpenter can use to support EKS cluster workloads. If null, instances will only be restricted by type."
+}
+
+variable "default_allowed_architectures" {
+  type        = list(string)
+  default     = ["amd64"]
+  description = "CPU architectures Karpenter may provision for the default NodePool. Retool publishes amd64-only images, so widening this will schedule pods onto nodes they cannot run on."
 }
 
 variable "karpenter_default_nodeclass_ami_selector_terms" {

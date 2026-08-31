@@ -6,11 +6,26 @@ locals {
 
   access_entries = merge(local.default_access_entries, var.additional_access_entries)
   all_tags       = merge(var.default_tags, var.tags)
+
+  cluster_encryption_kms_key_arn = coalesce(
+    var.cluster_encryption_kms_key_arn,
+    one(aws_kms_key.eks[*].arn),
+  )
 }
 
 resource "aws_kms_key" "eks" {
+  count       = var.cluster_encryption_kms_key_arn == null ? 1 : 0
   description = "Key for ${local.cluster_name} EKS cluster"
   tags        = local.all_tags
+}
+
+# This key became conditional in v0.4. Keeps existing deployments from planning a
+# destroy/create when their state still records it at its pre-count address —
+# which would be especially bad here, since the EKS secret encryption key cannot
+# be changed after the cluster is created.
+moved {
+  from = aws_kms_key.eks
+  to   = aws_kms_key.eks[0]
 }
 
 module "eks" {
@@ -27,7 +42,7 @@ module "eks" {
 
   create_kms_key = false
   encryption_config = {
-    provider_key_arn = aws_kms_key.eks.arn
+    provider_key_arn = local.cluster_encryption_kms_key_arn
     resources        = ["secrets"]
   }
 

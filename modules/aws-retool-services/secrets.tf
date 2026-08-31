@@ -5,6 +5,7 @@ resource "random_password" "encryption_key" {
 }
 
 resource "random_password" "jwt_secret" {
+  count   = var.jwt_secret_secret_path == null ? 1 : 0
   length  = 48
   special = false
 }
@@ -26,14 +27,35 @@ resource "aws_secretsmanager_secret_version" "encryption_key" {
 }
 
 resource "aws_secretsmanager_secret" "jwt_secret" {
-  name = "retool/${var.prefix}/jwt-secret"
-  tags = local.all_tags
+  count = var.jwt_secret_secret_path == null ? 1 : 0
+  name  = "retool/${var.prefix}/jwt-secret"
+  tags  = local.all_tags
 }
 
 resource "aws_secretsmanager_secret_version" "jwt_secret" {
-  secret_id                = aws_secretsmanager_secret.jwt_secret.id
-  secret_string_wo         = random_password.jwt_secret.result
+  count                    = var.jwt_secret_secret_path == null ? 1 : 0
+  secret_id                = aws_secretsmanager_secret.jwt_secret[0].id
+  secret_string_wo         = random_password.jwt_secret[0].result
   secret_string_wo_version = var.jwt_secret_wo_version
+}
+
+# The generated JWT secret became conditional in v0.4 (jwt_secret_secret_path
+# lets you supply an existing one instead). These keep existing deployments from
+# planning a destroy/create — which would rotate the secret and sign every user
+# out — when their state still records these at their pre-count addresses.
+moved {
+  from = random_password.jwt_secret
+  to   = random_password.jwt_secret[0]
+}
+
+moved {
+  from = aws_secretsmanager_secret.jwt_secret
+  to   = aws_secretsmanager_secret.jwt_secret[0]
+}
+
+moved {
+  from = aws_secretsmanager_secret_version.jwt_secret
+  to   = aws_secretsmanager_secret_version.jwt_secret[0]
 }
 
 resource "aws_secretsmanager_secret" "extra_env_vars" {

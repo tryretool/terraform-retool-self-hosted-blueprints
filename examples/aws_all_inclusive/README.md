@@ -10,7 +10,7 @@ Terraform basics.
 ## Quick start
 
 ```sh
-cp provider.example.tf provider.tf
+mv provider.example.tf provider.tf
 # edit the locals block in main.tf: prefix, aws_profile, region, domain_name
 aws sso login --profile <your-profile>   # or otherwise authenticate
 terraform init
