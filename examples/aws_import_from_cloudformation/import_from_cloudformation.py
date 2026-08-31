@@ -15,7 +15,7 @@ resources it references, and writes out everything the Terraform stack needs to
 stand up alongside it:
 
   describe-cf-stack   what's there, and anything that needs attention
-  import-tfvars       imported.tfvars — every value derivable from the stack
+  import-tfvars       imported.auto.tfvars — every value derivable from the stack
 
 Nothing here modifies the CloudFormation deployment. The one action that writes
 to AWS — creating a derived secret — is offered explicitly and never implied.
@@ -47,7 +47,10 @@ from rich.table import Table
 console = Console(emoji=False)
 err_console = Console(stderr=True, emoji=False)
 
-TFVARS_FILENAME = "imported.tfvars"
+# *.auto.tfvars is loaded automatically by Terraform, so no -var-file flag is
+# needed on any command. Files load in lexical order, so anything the operator
+# puts in overrides.auto.tfvars wins over what is generated here.
+TFVARS_FILENAME = "imported.auto.tfvars"
 
 # CloudFormation logical IDs used by the Retool templates. The stacks are
 # routinely forked, so every lookup falls back to discovery by resource type.
@@ -349,7 +352,7 @@ class Discoverer:
             facts.warnings.append(
                 "Found more than one candidate Temporal database "
                 f"({', '.join(c.identifier for c in candidates)}); using "
-                f"{candidates[0].identifier}. Override temporal_db in terraform.tfvars "
+                f"{candidates[0].identifier}. Override temporal_db in overrides.auto.tfvars "
                 "if that is the wrong one."
             )
         return candidates[0]
@@ -637,7 +640,7 @@ def describe_cf_stack(ctx: click.Context) -> None:
 def import_tfvars(
     ctx: click.Context, output: str, prefix: str | None, assume_yes: bool
 ) -> None:
-    """Write imported.tfvars from the CloudFormation stack."""
+    """Write imported.auto.tfvars from the CloudFormation stack."""
     facts, discoverer = _discover(ctx)
     workdir: str = ctx.obj["workdir"]
     out_path = Path(workdir) / output
@@ -734,9 +737,10 @@ def import_tfvars(
     _terraform_fmt(out_path)
     console.print(f"[green]Wrote {out_path}[/green] ({len(values)} values)")
     console.print(
-        "\nReview it, then copy vars.tf.example to terraform.tfvars for the values that "
-        "are your\nown choices (prefix, region, profile). Apply with both:\n"
-        f"\n  terraform apply -var-file={output} -var-file=terraform.tfvars\n"
+        "\nReview it, then copy vars.tf.example to overrides.auto.tfvars for the "
+        "values that are\nyour own choices (prefix, region, profile). Both are loaded "
+        "automatically:\n"
+        "\n  terraform plan\n  terraform apply\n"
     )
 
 

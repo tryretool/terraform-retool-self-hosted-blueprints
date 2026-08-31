@@ -7,20 +7,14 @@
 #
 # Both deployments run side by side, sharing one database, until you move DNS.
 #
-# Configuration comes from two var files. Run import_from_cloudformation.py to
-# generate the first; see README.md.
+# Configuration comes from imported.auto.tfvars (values derived from the
+# CloudFormation stack) and overrides.auto.tfvars (your own choices). Terraform
+# loads both automatically. See MIGRATION.md.
 #
-#   terraform apply -var-file=imported.tfvars -var-file=terraform.tfvars
-#
-# NOTE: module sources are local paths so this example plans against the modules
-# in this repository. When copying it into your own working directory, switch
-# them to the published registry modules:
-#
-#   source  = "tryretool/self-hosted-blueprints/retool//modules/aws-eks"
-#   version = "~> 0.4"
 
 module "eks" {
-  source = "../../modules/aws-eks"
+  source  = "tryretool/self-hosted-blueprints/retool//modules/aws-eks"
+  version = "~> 0.4"
 
   prefix = var.prefix
   region = var.region
@@ -40,7 +34,8 @@ module "eks" {
 }
 
 module "retool-services" {
-  source = "../../modules/aws-retool-services"
+  source  = "tryretool/self-hosted-blueprints/retool//modules/aws-retool-services"
+  version = "~> 0.4"
 
   prefix = var.prefix
   region = var.region
@@ -76,7 +71,8 @@ module "retool-services" {
 }
 
 module "retool" {
-  source = "../../modules/retool-helm"
+  source  = "tryretool/self-hosted-blueprints/retool//modules/retool-helm"
+  version = "~> 0.4"
 
   retool_helm_name          = "retool"
   retool_helm_chart_version = var.retool_helm_chart_version
@@ -90,8 +86,7 @@ module "retool" {
   # drives the scheme in BASE_DOMAIN, so it has to track the ingress listener.
   https_enabled = var.enable_https
 
-  # Workflows needs a Temporal cluster, which needs a Temporal database.
-  workflows_enabled = local.temporal_enabled
+  workflows_enabled = var.workflows_enabled
 
   retool_helm_extra_values = concat(
     local.app_values,
@@ -109,7 +104,8 @@ module "retool" {
 }
 
 module "user-ingress" {
-  source = "../../modules/aws-user-ingress"
+  source  = "tryretool/self-hosted-blueprints/retool//modules/aws-user-ingress"
+  version = "~> 0.4"
 
   domain_name           = var.domain_name
   enable_https_listener = var.enable_https

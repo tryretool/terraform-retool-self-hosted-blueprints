@@ -1,23 +1,25 @@
-# Self-hosted Temporal, required by Retool Workflows.
+# Configuration for the Temporal cluster the Helm chart can run in-cluster, via
+# its bundled retool-temporal-services-helm subchart.
 #
-# The CloudFormation stack ran Temporal as five separate ECS services against its
-# own database. On Kubernetes the Retool Helm chart runs the whole Temporal
-# cluster itself through its bundled retool-temporal-services-helm subchart, so
-# only the database carries over — referenced in place, whether it is a plain
-# RDS instance or an Aurora cluster.
+# This is gated on var.temporal_db alone: supply a database and the subchart is
+# configured to use it, leave it null and nothing here is rendered. Workflows
+# themselves are controlled separately by var.workflows_enabled — they need a
+# Temporal cluster, but not necessarily one backed by a database this stack
+# knows about. To point Retool at a Temporal you run elsewhere (Temporal Cloud,
+# say, or an existing cluster), leave temporal_db null and set the chart's
+# `temporal.*` values through retool_helm_extra_values.
 #
-# The chart wires WORKFLOW_TEMPORAL_CLUSTER_FRONTEND_HOST automatically when the
-# subchart is enabled, so no service discovery config is needed (the
-# CloudFormation stack's Cloud Map namespace has no equivalent here).
+# Temporal creates its `temporal` and `temporal_visibility` databases itself on
+# first start.
 
 locals {
-  temporal_enabled = var.temporal_db != null
+  temporal_subchart_enabled = var.temporal_db != null
 
   # Kubernetes Secret the Temporal subchart reads the database password from.
   temporal_db_secret_name = "temporal-db-credentials"
   temporal_db_secret_key  = "password"
 
-  temporal_sql_common = local.temporal_enabled ? {
+  temporal_sql_common = local.temporal_subchart_enabled ? {
     host           = var.temporal_db.host
     port           = var.temporal_db.port
     user           = var.temporal_db.username
@@ -33,7 +35,7 @@ locals {
     }
   } : null
 
-  temporal_values = local.temporal_enabled ? [yamlencode({
+  temporal_values = local.temporal_subchart_enabled ? [yamlencode({
     "retool-temporal-services-helm" = {
       enabled = true
       server = {
@@ -66,13 +68,13 @@ locals {
   })] : []
 }
 
-# Syncs the Temporal database password from Secrets Manager into the cluster.
-# The retool-services module creates the equivalent for the main Retool database
-# but knows nothing about this second one, so it is declared here — with the
-# secret's ARN passed to that module via extra_secret_read_arns so External
-# Secrets Operator is permitted to read it.
+# Syncs the Temporal database's password from Secrets Manager. The
+# retool-services module creates the equivalent for the main Retool database but
+# knows nothing about this one, so it is declared here — with the secret's ARN
+# passed to that module via extra_secret_read_arns so External Secrets Operator
+# is permitted to read it.
 resource "kubectl_manifest" "temporal_db_credentials" {
-  count = local.temporal_enabled ? 1 : 0
+  count = local.temporal_subchart_enabled ? 1 : 0
 
   yaml_body = yamlencode({
     apiVersion = "external-secrets.io/v1beta1"

@@ -3,11 +3,14 @@
 # These arrive from two files, kept separate so the machine-derived half can be
 # regenerated at any time without disturbing your own choices:
 #
-#   imported.tfvars    written by import_from_cloudformation.py — everything
-#                      discoverable from the CloudFormation stack
-#   terraform.tfvars   your choices; start from vars.tf.example
+#   imported.auto.tfvars    everything discoverable from the CloudFormation
+#                           stack (write it by hand, or use
+#                           import_from_cloudformation.py)
+#   overrides.auto.tfvars   your choices; start from vars.tf.example
 #
-#   terraform apply -var-file=imported.tfvars -var-file=terraform.tfvars
+# Terraform loads *.auto.tfvars automatically, in lexical order — so
+# overrides.auto.tfvars is applied after, and wins on any overlap. No -var-file
+# flags are needed on any command.
 
 # ---------------------------------------------------------------------------
 # Deployment identity
@@ -131,6 +134,12 @@ variable "retool_db" {
 # The Temporal database (Retool Workflows)
 # ---------------------------------------------------------------------------
 
+variable "workflows_enabled" {
+  type        = bool
+  description = "Whether to run Retool Workflows. Passed straight through to the retool-helm module; independent of temporal_db, which only configures the Temporal cluster the chart can run in-cluster."
+  default     = true
+}
+
 variable "temporal_db" {
   type = object({
     host                  = string
@@ -142,21 +151,24 @@ variable "temporal_db" {
     security_group_id     = optional(string)
   })
   description = <<-EOT
-    The existing Temporal database — the CloudFormation stack's Temporal RDS
-    instance or Aurora cluster. Referenced, never modified; the Retool Helm
-    chart runs the Temporal cluster itself and only needs somewhere to store its
-    state.
+    A database for the Temporal cluster the Helm chart can run in-cluster. If
+    your CloudFormation stack provisioned one the helper carries it over; most
+    stacks have none, and the helper then leaves this null.
+
+    Setting it is what enables the chart's bundled Temporal subchart and points
+    it at this database. Leaving it null renders no Temporal configuration at
+    all — point Retool at a Temporal you run elsewhere (Temporal Cloud, an
+    existing cluster) by setting the chart's `temporal.*` values through
+    retool_helm_extra_values.
+
+    Independent of workflows_enabled: Workflows need a Temporal cluster, but not
+    necessarily one backed by a database this stack knows about.
 
       host / port:           writer endpoint of the existing instance or cluster.
       username:              master username.
-      credentials_secret_id: Secrets Manager secret holding the password (the
-                             CloudFormation stack's RetoolTemporalRDSSecret).
-                             Synced into the cluster as a Kubernetes Secret; see
-                             temporal.tf.
+      credentials_secret_id: Secrets Manager secret holding the password.
       security_group_id:     when set, this stack adds an ingress rule allowing
                              Postgres from the EKS nodes.
-
-    Set to null to run Retool without Workflows.
   EOT
   default     = null
 }
@@ -170,7 +182,7 @@ variable "temporal" {
     image_tag           = optional(string, "retool-temporal-1.1.6")
     enable_web_ui       = optional(bool, false)
   })
-  description = "Settings for the self-hosted Temporal cluster the Retool Helm chart runs. The database it connects to comes from temporal_db or temporal_db_external; these are the knobs that aren't part of the database itself."
+  description = "Settings for the Temporal cluster the Helm chart runs in-cluster. Only used when temporal_db is set, which is what enables that subchart."
   default     = {}
 }
 

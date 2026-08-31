@@ -28,7 +28,6 @@ See the [repository README](../../README.md) for general prerequisites.
 | --- | --- | --- |
 | VPC, subnets | stack *parameters*, not resources | **referenced as-is** |
 | Retool database | created by the stack | **referenced as-is** |
-| Temporal database | created by the stack | **referenced as-is** |
 | Encryption key, JWT secret | created by the stack | **referenced as-is** |
 | Compute | Fargate tasks per Retool service | EKS + Karpenter, pods per Retool service |
 | Code executor | standalone ECS service | bundled in the chart |
@@ -84,19 +83,28 @@ offered explicitly and never implied.
 
 ### Temporal
 
-The CloudFormation stack ran Temporal as five ECS services. The Retool Helm chart
-runs the whole Temporal cluster itself via its bundled
-`retool-temporal-services-helm` subchart, so only the database carries over,
-whether it's a plain RDS instance or an Aurora cluster — see `temporal.tf`. The
-chart wires the frontend host automatically; the Cloud Map namespace has no
-equivalent and is not ported.
+`workflows_enabled` (default true) and `temporal_db` are independent. Workflows
+need a Temporal cluster, but not necessarily one this stack provisions a
+database for.
 
-Setting `temporal_db = null` disables Retool Workflows entirely.
+Setting `temporal_db` enables the chart's bundled
+`retool-temporal-services-helm` subchart and points it at that database — a
+plain RDS instance or an Aurora cluster, carried over by the helper if your
+CloudFormation stack had one. Leaving it null renders no Temporal configuration;
+point Retool at a Temporal you run elsewhere via the chart's `temporal.*` values
+through `retool_helm_extra_values`. See `temporal.tf`.
+
+The chart wires the Temporal frontend host automatically; the Cloud Map
+namespace has no equivalent and is not ported.
+
+> [!IMPORTANT]
+> If the CloudFormation deployment runs Workflows, enable them in only one
+> deployment at a time — see step 6 of [MIGRATION.md](./MIGRATION.md).
 
 ### Edge authentication
 
-`alb_oidc` reproduces the CloudFormation stack's `authenticate-oidc` listener
-action: users complete an OIDC flow at the load balancer before any request
+Only applies if your stack has it. `alb_oidc` reproduces the CloudFormation
+stack's `authenticate-oidc` listener action: users complete an OIDC flow at the load balancer before any request
 reaches Retool. This is separate from Retool's own authentication.
 
 Terraform reads the client credentials to configure the listener, so they land

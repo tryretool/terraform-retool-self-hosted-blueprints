@@ -1,17 +1,18 @@
-# Copy this file to terraform.tfvars and fill it in.
+# Copy this file to overrides.auto.tfvars and fill it in.
 #
-#   cp vars.tf.example terraform.tfvars
+#   cp vars.tf.example overrides.auto.tfvars
 #
 # This file holds only the values that are *your* choices. Everything derivable
 # from the CloudFormation stack — VPC and subnet IDs, database connection
-# details, secret ARNs, certificate ARN, image tag — is written to
-# imported.tfvars by the helper:
+# details, secret ARNs, certificate ARN, image tag — belongs in
+# imported.auto.tfvars, which you can write by hand or generate:
 #
 #   ./import_from_cloudformation.py import-tfvars --stack-name <name> --region <region>
 #
-# Apply with both, imported first so your choices win on any overlap:
+# Terraform loads both automatically, in lexical order, so anything set here
+# wins over the generated file. No -var-file flags needed:
 #
-#   terraform apply -var-file=imported.tfvars -var-file=terraform.tfvars
+#   terraform plan && terraform apply
 #
 # See variables.tf for the full description of every input.
 
@@ -55,7 +56,7 @@ cluster_version = "1.32"
 # DNS
 # ---------------------------------------------------------------------------
 #
-# domain_name and acm_certificate_arn come from imported.tfvars (BaseDomain and
+# domain_name and acm_certificate_arn come from imported.auto.tfvars (BaseDomain and
 # CertificateARN). Set hosted_zone_id only if you want this stack to manage the
 # alias records for domain_name in a Route53 zone you already own. Leave it
 # unset when DNS is managed elsewhere — you then point domain_name at the
@@ -67,8 +68,11 @@ cluster_version = "1.32"
 # Temporal
 # ---------------------------------------------------------------------------
 #
-# The temporal_db connection details come from imported.tfvars. Set
-# temporal_db = null to run Retool without Workflows.
+# Workflows run by default, independently of Temporal. The chart runs Temporal
+# in-cluster only when imported.auto.tfvars supplies a temporal_db; otherwise
+# point Retool at a Temporal you run elsewhere via retool_helm_extra_values.
+#
+# workflows_enabled = false
 
 temporal = {
   # The Temporal Web UI, reachable via `kubectl port-forward`.
@@ -79,7 +83,7 @@ temporal = {
 # Retool application
 # ---------------------------------------------------------------------------
 #
-# retool_image_tag and replica_counts come from imported.tfvars (RetoolImage and
+# retool_image_tag and replica_counts come from imported.auto.tfvars (RetoolImage and
 # the Desired*Count parameters). Override here when you want to change them.
 
 retool_helm_chart_version = "6.11.6"
