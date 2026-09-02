@@ -6,67 +6,28 @@ e.g. an existing EKS/GKE/AKS cluster shared with other workloads. All three
 clouds support this.
 
 Working starting points:
-[`examples/aws_shared_cluster`](../examples/aws_shared_cluster),
-[`examples/gcp_shared_cluster`](../examples/gcp_shared_cluster),
-[`examples/azure_shared_cluster`](../examples/azure_shared_cluster).
+- [`examples/aws_shared_cluster`](../examples/aws_shared_cluster)
+- [`examples/gcp_shared_cluster`](../examples/gcp_shared_cluster)
+- [`examples/azure_shared_cluster`](../examples/azure_shared_cluster)
 
 The mechanics are the same on all three clouds and the variable names are
 common unless noted; where a cloud genuinely differs, it gets its own block.
 `<cloud>` below stands for `aws`, `gcp` or `azure`, and the cluster module means
 `aws-eks`, `gcp-gke` or `azure-aks`.
 
-## What changes in a shared cluster
+## Deploying Retool into an existing Kubernetes cluster
 
-### 1. One namespace for the deployment, conventional ones for the operators
-
-The Retool deployment gets a single dedicated namespace. The cluster-wide
-operators keep their conventional namespaces, because there is only ever one of
-each per cluster.
-
-| Namespace | Contents |
-|---|---|
-| `<prefix>-retool` | the Retool Helm release, its ExternalSecrets, the namespaced ESO `SecretStore`, the RR credentials Secret, and whatever routes traffic to it |
-| `external-secrets`, `cert-manager`, `reloader` | the cluster-wide operators — one copy per cluster, installed by the cluster module |
-| `kube-system` | the cloud's own cluster addons |
-
-`<cloud>-retool-services` computes `retool_namespace` once and exports it, so
-`retool-helm` and `<cloud>-user-ingress` use the same namespace without
-diverging or duplicating config.
-
-To deploy into a namespace your platform team pre-created, override
-`retool_namespace` and set `create_namespace = false` so Terraform doesn't try
-to own it.
-
-What lands in `<prefix>-retool` alongside Retool differs by cloud: on AWS a
-`TargetGroupBinding`, on GCP a Gateway API `Gateway` plus its `HTTPRoute`, and on
-Azure an `Ingress`, its `Certificate` and the AGIC instance that reconciles it.
-
-### 2. The cluster-wide operators are singletons
-
-Some operators cannot be deployed once per Retool instance. Each owns
-cluster-scoped objects — CRDs, `ValidatingWebhookConfiguration`s and
-`ClusterRole`s whose names are fixed by the chart — so a second release collides
-with the first on every one of them. They are installed **once per cluster** by
-the cluster module.
+The `<cloud>-retool-services`, and `<cloud>-user-ingress` modules each depend on some operators to be already running in the cluster. To use those modules with an existing Kubernetes cluster, you'll need to also use the relevant Kubernetes module (i.e. `aws-eks`, `gcp-gke`, or `azure-aks`) with an `existing_cluster = {...}` input to deploy whichever operators your cluster doesn't already have.
 
 | Operator | AWS | GCP | Azure |
 |---|---|---|---|
 | External Secrets Operator | ✅ | ✅ | ✅ |
 | reloader | ✅ | ✅ | ✅ |
-| cert-manager | ✅ | — (Google Certificate Manager issues certs) | ✅ |
+| cert-manager | ✅ | — | ✅ |
 | AWS Load Balancer Controller | ✅ | — | — |
 
-Not everything that looks like an operator is a singleton. `external-dns` on GCP
-and AGIC on Azure own no CRDs and no fixed-name webhooks, so each Retool
-deployment runs its own, scoped to its own DNS zone or IngressClass. They stay
-in `<cloud>-user-ingress`.
-
-To get the singletons onto a cluster you did not create, instantiate the cluster
-module with `existing_cluster`. It creates no network, no node pools and no
-cluster:
-
 <details>
-<summary>AWS</summary>
+<summary>Preparing an AWS EKS cluster</summary>
 
 ```hcl
 module "eks" {
@@ -81,14 +42,14 @@ module "eks" {
   }
 
   # Karpenter is wired to the controller node group this module creates
-  # alongside a new cluster, so it cannot run against an adopted one.
+  # with a new cluster, so it cannot run against an adopted one.
   enable_karpenter = false
 }
 ```
 </details>
 
 <details>
-<summary>GCP</summary>
+<summary>Preparing a GCP GKE cluster</summary>
 
 ```hcl
 module "gke" {
@@ -110,7 +71,7 @@ enabled if you use `gcp-user-ingress`. Both are checked at plan time.
 </details>
 
 <details>
-<summary>Azure</summary>
+<summary>Preparing an Azure AKS cluster</summary>
 
 ```hcl
 module "aks" {
@@ -133,19 +94,31 @@ against that issuer.
 
 Every addon and chart the cluster module installs has an enable toggle,
 all defaulting `true`, so a cluster that already runs one can be adopted without
-a second copy fighting over it. Common to all three clouds:
-`enable_external_secrets`, `enable_reloader`, `install_crds`. Then
-`enable_cert_manager` on AWS and Azure; `enable_alb_controller`,
-`enable_karpenter`, `enable_metrics_server`, `enable_ebs_csi_driver` and the four
-core-addon toggles on AWS.
+a second copy fighting over it. 
 
-> [!IMPORTANT]
-> **Exactly one Terraform state per cluster may own these.** For a second Retool
-> deployment in the same cluster, do not instantiate the cluster module again —
-> deploy only `<cloud>-retool-services`, `retool-helm` and
-> `<cloud>-user-ingress` with a different prefix.
+| Variable | AWS (`aws-eks`) | GCP (`gcp-gke`) | Azure (`azure-aks`) |
+| --- | :-: | :-: | :-: |
+| `enable_external_secrets` | ✅ | ✅ | ✅ |
+| `enable_reloader` | ✅ | ✅ | ✅ |
+| `install_crds` | ✅ | ✅ | ✅ |
+| `enable_cert_manager` | ✅ | — | ✅ |
+| `enable_alb_controller` | ✅ | — | — |
+| `enable_karpenter` | ✅ | — | — |
+| `enable_metrics_server` | ✅ | — | — |
+| `enable_ebs_csi_driver` | ✅ | — | — |
+| `enable_coredns_addon` | ✅ | — | — |
+| `enable_kube_proxy_addon` | ✅ | — | — |
+| `enable_vpc_cni_addon` | ✅ | — | — |
+| `enable_pod_identity_agent` | ✅ | — | — |
 
-### 3. Secrets stay isolated per deployment
+> [!WARNING]
+> For any cloud, but especially for AWS EKS, other blueprints modules might
+> throw errors or might not work properly if the operators are configured any
+> differently than they would be if managed by the cluster blueprints module
+> (i.e. `aws-eks`). Please refer to [module source code](../modules/) for full
+> configuration details to make your own assessment.
+
+### Secrets store authorization
 
 There is one External Secrets Operator for the whole cluster, but each Retool
 deployment keeps its own cloud identity, so one deployment can never read
@@ -208,105 +181,172 @@ service account, or grant its identity the same Key Vault access policy.
 `SecretStore` and `ExternalSecret` objects are created at all, independently of
 who runs the operator.
 
-### 4. Things that behave cluster-wide
+## Deploying multiple Retool instances in one Kubernetes cluster
 
-**reloader** watches every namespace and, with `reloader_auto_reload_all`
-(default `true`), restarts any workload whose referenced ConfigMap or Secret
-changes — not just Retool's. Set it to `false` on the cluster module in a shared
-cluster where that is unacceptable; Retool's own chart annotates its workloads
-with `reloader.stakater.com/*`, so it keeps working either way.
+Multiple Retool instances can coexist in one Kubernetes cluster using these blueprints modules. At a high level, some cluster-level operators will be deployed as singletons to static namespaces, and other resources will be deployed into a Retool instance namespace, once per instance.
 
-Ingress differs enough per cloud to be worth stating separately.
+This diagram illustrates what a cluster would contain with 2 separate Retool instances, a `dev` and a `prod`.
 
-<details>
-<summary>AWS</summary>
+```mermaid
+flowchart
+    subgraph cluster[Kubernetes cluster]
+        subgraph ns-sys[system namespaces]
+            direction RL
+            eso[External Secret Operator]
+            cert-manager
+            reloader
+            etc[...Etc.]
+        end
+        subgraph ns-retool1[Retool dev namespace]
+            direction RL
+            subgraph retool-services1[module <cloud>-retool-services]
+                secrets1[secrets]@{shape: documents}
+                iam1[IAM roles & associations]@{shape: docs}
+            end
+            subgraph retool-helm1[module retool-helm]
+                retool1[retool pods]@{shape: procs}
+                retool1 --> secrets1
+            end
+            subgraph user-ingress1[module <cloud>-user-ingress]
+                ingress1[Ingress]@{shape: hex}
+                cert1[certificate]
+            end
+            ingress1 --> retool1
+        end
+        subgraph ns-retool2[Retool prod namespace]
+            direction RL
+            subgraph retool-services2[module <cloud>-retool-services]
+                secrets2[secrets]@{shape: documents}
+                iam2[IAM roles & associations]@{shape: docs}
+            end
+            subgraph retool-helm2[module retool-helm]
+                retool2[retool pods]@{shape: procs}
+                retool2 --> secrets2
+            end
+            subgraph user-ingress2[module <cloud>-user-ingress]
+                ingress2[Ingress]@{shape: hex}
+                cert2[certificate]
+            end
+            ingress2 --> retool2
+            end
+        direction LR
+        ns-sys -.- ns-retool1
+        ns-sys -.- ns-retool2
+    end
+```
 
-The ALB controller's IngressClass is the chart default, `alb`, and is not marked
-the cluster-default class. Set `make_default_ingress_class = true` on `aws-eks`
-only if you want it to be. Retool routes via a `TargetGroupBinding` and does not
-need a default class.
-</details>
+To deploy multiple Retool instances into a single Kubernetes cluster, some
+Terraform modules will be instantiated once total (i.e. `Shared: Yes` below), and some modules will be instantiated once per Retool instance (i.e. `Shared: No` below).
 
-<details>
-<summary>GCP</summary>
+| Module | Shared | Notes |
+|---|---|---|
+| `aws-vpc`/`gcp-vpc`/`azure-vnet` | Yes | |
+| `aws-eks`/`gcp-gke`/`azure-aks` | Yes | |
+| `<cloud>-database` | Optional | See [sharing a Postgres DB instance](#sharing-a-postgres-db-instance) below |
+| `<cloud>-retool-services` | No | |
+| `<cloud>-user-ingress` | No | |
+| `retool-helm` | No | |
 
-There is no in-cluster ingress controller: the GKE Gateway controller runs in
-the control plane. Each deployment gets its own `Gateway` in its own namespace,
-and therefore its own load balancer and static IP.
+To properly configure the Terraform modules in a shared-cluster setting, you will need to specify unique module names and `prefix` parameters for each per-Retool-instance module, as well as ensure cross-module output references use the correct module dependency.
 
-`external-dns` runs per deployment, named `<prefix>-external-dns` so its
-cluster-scoped RBAC does not collide, and confined to its own DNS zone
-(`--zone-id-filter`) and namespace. Set `enable_external_dns = false` to publish
-records yourself.
-</details>
+The configuration below is an example illustrating one common scenario that
+accounts for all of the above. Here, we are pretending to be a company named
+`acme` and we are creating 2 separate Retool instances, `myretool-dev` and
+`myretool-prod`, to live in a shared AWS EKS cluster and each use a separate RDS
+Postgres database. These code snippets only show the parts that are relevant to
+making the shared-cluster setup work.
 
-<details>
-<summary>Azure</summary>
-
-AGIC binds 1:1 to an Application Gateway, so each deployment runs its own,
-released as `<prefix>-ingress-azure` and confined by `ingressClass`,
-`ingressClassResource` and `watchNamespace` to its own class and namespace. Its
-IngressClass defaults to `<prefix>-agic`; override with `ingress_class_name`, or
-set `enable_agic = false` and point that variable at an ingress controller you
-already run.
-
-cert-manager is shared, but the certificate is not. Each deployment creates a
-namespaced `Issuer` (`<prefix>-letsencrypt`) whose Azure DNS solver names its own
-managed identity, and grants that identity DNS Zone Contributor on its own zone
-only. Set `cluster_issuer_name` to consume a `ClusterIssuer` your platform
-already runs instead.
-</details>
-
-## Pinning pods to node pools
-
-A shared cluster often has dedicated node pools for different workloads,
-labelled and/or tainted so only intended workloads land there. For Retool's pods
-to schedule onto such a pool, they need a matching `nodeSelector` and/or
-`tolerations`.
-
-Every module that deploys pods via Helm exposes two variables for this: the
-cluster module (`aws-eks` / `gcp-gke` / `azure-aks`, for the cluster-wide
-operators), `retool-helm` (Retool itself), and `gcp-user-ingress` /
-`azure-user-ingress` (external-dns and AGIC). `aws-user-ingress` deploys no pods
-and has neither variable.
-
-- `pod_node_selector` (`map(string)`, default `{}`)
-- `pod_tolerations` (list of Kubernetes toleration objects, default `[]`)
-
-They apply to **every** pod the module's charts create. Set the same values on
-each module you deploy so the whole stack lands on the pool:
-
-```hcl
+**shared.tf**
+```terraform
 locals {
   # ...
-  pod_node_selector = { "retool.com/pool" = "retool" }
-  pod_tolerations = [{
-    key      = "dedicated"
-    operator = "Equal"
-    value    = "retool"
-    effect   = "NoSchedule"
-  }]
+  prefix_global = "acme-myretool"
+}
+
+module "vpc" {
+  # ...
+  prefix = local.prefix_global
 }
 
 module "eks" {
   # ...
-  pod_node_selector = local.pod_node_selector
-  pod_tolerations   = local.pod_tolerations
-}
-
-module "retool" {
-  # ...
-  pod_node_selector = local.pod_node_selector
-  pod_tolerations   = local.pod_tolerations
+  prefix = local.prefix_global
 }
 ```
 
-Leave them unset (the default) to keep the charts' own defaults. Note that when
-set, `pod_node_selector` replaces a chart's built-in `nodeSelector` default
-where one exists (e.g. cert-manager defaults to `kubernetes.io/os: linux`);
-include any such keys you still need in your map.
+**myretool-dev.tf**
+```terraform
+locals { 
+  dev = {
+    prefix = "${local.prefix_global}-dev"
+    domain_name = "myretool-dev.acme.org"
+  }
+}
 
-## Shared vs. per-instance Postgres database
+module "db-main-dev" {
+  # ...
+  prefix = local.dev.prefix
+}
+
+module "retool-services-dev" {
+  # ...
+  prefix = local.dev.prefix
+  
+  eks = module.eks.outputs
+  db = module.db-main-dev.outputs
+}
+
+module "retool-dev" {
+  # ...
+  domain_name = local.dev.domain_name
+  retool_services = module.retool-services-dev.outputs
+  db = module.db-main-dev.outputs
+}
+
+module "user-ingress-dev" {
+  # ...
+  domain_name = local.dev.domain_name
+}
+```
+
+**myretool-prod.tf**
+```terraform
+locals {
+  prod = {
+    prefix = "${local.prefix_global}-prod"
+    domain_name = "myretool.acme.org"
+  }
+}
+
+module "db-main-prod" {
+  # ...
+  prefix = local.prod.prefix
+}
+
+module "retool-services-prod" {
+  # ...
+  prefix = local.prod.prefix
+  
+  eks = module.eks.outputs
+  db = module.db-main-prod.outputs
+}
+
+module "retool-prod" {
+  # ...
+  domain_name = local.dev.domain_name
+  retool_services = module.retool-services-prod.outputs
+  db = module.db-main-prod.outputs
+}
+
+module "user-ingress-prod" {
+  # ...
+  domain_name = local.prod.domain_name
+}
+```
+
+### Sharing a Postgres DB instance
+
+#### Tradeoffs
 
 When deploying multiple Retool instances into a single Kubernetes cluster, you
 have the choice of sharing a single Postgres DB for all Retool instances, or
@@ -323,15 +363,16 @@ below.
 Besides the above tradeoffs, running multiple Retool instances off a single
 Postgres DB instance is fully supported if adequately setup.
 
-### Configuration for shared Postgres DB host
+#### Configuration
 
 For the sake of illustration, say your goal is to create 2 separate Retool
 instances, a "dev" and "prod" pair, and you want them to share a Kubernetes
-cluster and a Postgres DB host to minimize costs.
+cluster and a Postgres DB instance to minimize costs.
 
 To accomplish this, you'll need to follow these steps, explained in detail below:
 
-1. Create 2 databases within your Postgres DB host, 1 for each Retool instance
+1. Create 2 databases within your Postgres DB instance, 1 for each Retool
+   instance
 2. Arrange your Terraform code so that each Retool instance uses the same
    Postgres host and connection credentials but only uses its corresponding
    database within the host.
@@ -362,8 +403,8 @@ variable like `db = module.db-main.outputs`. This `db` input contains structured
 connection settings that tell the downstream `<cloud>-retool-services` and
 `retool-helm` modules where to find and how to connect to their database.
 
-In the case of multiple Retool instances sharing a single Postgres host, we need
-to have each Retool instance use mostly the same shared connection settings
+In the case of multiple Retool instances sharing a single Postgres instance, we
+need to have each Retool instance use mostly the same shared connection settings
 (i.e. host, port, username, password stored in the CSP's secure secret store),
 but with an override for database name. We can accomplish that with a config
 arranged like below.
@@ -416,3 +457,63 @@ module "retool-dev" {
 > `<cloud>-user-ingress` module would be duplicated for each Retool instance,
 > like `retool-dev` shown here, and would use a per-instance domain name, but it
 > does not need a `db` input.
+
+
+## Other considerations
+
+### Namespace selection
+
+Each Retool instance gets a single dedicated namespace, and all per-Retool-instance Kubernetes resources live in that namespace. By default, the `<cloud>-retool-services` module creates that namespace and uses the name `<prefix>-retool`. 
+
+To use a different name, you can specify `retool_namespace = "..."` on the `<cloud>-retool-services` module. The specified namespace gets passed down to `retool-helm` and `<cloud>-user-ingress` modules via module outputs, so you only need to specify it once.
+
+If your cluster already has the namespace you want to use, you can tell `<cloud>-retool-services` to use it via a combination of `retool_namespace = "..."` and `create_namespace = false`.
+
+### Pinning pods to node pools
+
+A shared cluster often has dedicated node pools for different workloads,
+labelled and/or tainted so only intended workloads land there. For Retool's pods
+to schedule onto such a pool, they need a matching `nodeSelector` and/or
+`tolerations`.
+
+Every module that deploys pods via Helm exposes two variables for this: the
+cluster module (`aws-eks` / `gcp-gke` / `azure-aks`, for the cluster-wide
+operators), `retool-helm` (Retool itself), and `gcp-user-ingress` /
+`azure-user-ingress` (external-dns and AGIC). `aws-user-ingress` deploys no pods
+and has neither variable.
+
+- `pod_node_selector` (`map(string)`, default `{}`)
+- `pod_tolerations` (list of Kubernetes toleration objects, default `[]`)
+
+They apply to **every** pod the module's charts create. Set the same values on
+each module you deploy so the whole stack lands on the pool:
+
+```hcl
+locals {
+  # ...
+  pod_node_selector = { "retool.com/pool" = "retool" }
+  pod_tolerations = [{
+    key      = "dedicated"
+    operator = "Equal"
+    value    = "retool"
+    effect   = "NoSchedule"
+  }]
+}
+
+module "eks" {
+  # ...
+  pod_node_selector = local.pod_node_selector
+  pod_tolerations   = local.pod_tolerations
+}
+
+module "retool" {
+  # ...
+  pod_node_selector = local.pod_node_selector
+  pod_tolerations   = local.pod_tolerations
+}
+```
+
+Leave them unset (the default) to keep the charts' own defaults. Note that when
+set, `pod_node_selector` replaces a chart's built-in `nodeSelector` default
+where one exists (e.g. cert-manager defaults to `kubernetes.io/os: linux`);
+include any such keys you still need in your map.
