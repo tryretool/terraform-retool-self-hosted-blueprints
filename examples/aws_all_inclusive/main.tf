@@ -12,14 +12,14 @@ locals {
 
 module "vpc" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/aws-vpc"
-  version = "~> 0.3"
+  version = "~> 0.4"
 
   prefix = local.prefix
 }
 
 module "eks" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/aws-eks"
-  version = "~> 0.3"
+  version = "~> 0.4"
 
   prefix = local.prefix
   region = local.region
@@ -28,7 +28,7 @@ module "eks" {
 
 module "db-main" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/aws-database"
-  version = "~> 0.3"
+  version = "~> 0.4"
 
   prefix     = local.prefix
   db_purpose = "main"
@@ -44,14 +44,13 @@ module "db-main" {
 
 module "retool-services" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/aws-retool-services"
-  version = "~> 0.3"
+  version = "~> 0.4"
 
   prefix = local.prefix
   region = local.region
-  vpc    = module.vpc.outputs
   eks    = module.eks.outputs
   db     = module.db-main.outputs
-  
+
   license_key = "MY-LICENSE-KEY"
 
   depends_on = [module.eks]
@@ -59,15 +58,15 @@ module "retool-services" {
 
 module "retool" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/retool-helm"
-  version = "~> 0.3"
+  version = "~> 0.4"
 
   retool_helm_name          = "retool"
   retool_helm_chart_version = "6.11.15"
 
-  db                        = module.db-main.outputs
-  retool_services           = module.retool-services.outputs
-  domain_name               = local.domain_name
-  https_enabled             = local.enable_user_ingress_https
+  db              = module.db-main.outputs
+  retool_services = module.retool-services.outputs
+  domain_name     = local.domain_name
+  https_enabled   = local.enable_user_ingress_https
 
   retool_helm_extra_values = [yamlencode({
     image = {
@@ -83,10 +82,13 @@ module "retool" {
 
 module "user-ingress" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/aws-user-ingress"
-  version = "~> 0.3"
+  version = "~> 0.4"
 
   domain_name           = local.domain_name
   enable_https_listener = local.enable_user_ingress_https
+
+  # Place the TargetGroupBinding in the same namespace as the Retool Service.
+  retool_services = module.retool-services.outputs
 
   vpc = module.vpc.outputs
   eks = module.eks.outputs

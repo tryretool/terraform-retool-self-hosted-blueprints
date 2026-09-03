@@ -15,7 +15,7 @@ locals {
 
 module "vnet" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/azure-vnet"
-  version = "~> 0.3"
+  version = "~> 0.4"
 
   prefix              = local.prefix
   resource_group_name = local.resource_group_name
@@ -24,7 +24,7 @@ module "vnet" {
 
 module "aks" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/azure-aks"
-  version = "~> 0.3"
+  version = "~> 0.4"
 
   prefix              = local.prefix
   resource_group_name = local.resource_group_name
@@ -36,7 +36,7 @@ module "aks" {
 
 module "db-main" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/azure-database"
-  version = "~> 0.3"
+  version = "~> 0.4"
 
   prefix              = local.prefix
   resource_group_name = local.resource_group_name
@@ -49,7 +49,7 @@ module "db-main" {
 
 module "retool-services" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/azure-retool-services"
-  version = "~> 0.3"
+  version = "~> 0.4"
 
   prefix              = local.prefix
   resource_group_name = local.resource_group_name
@@ -66,7 +66,7 @@ module "retool-services" {
 
 module "user-ingress" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/azure-user-ingress"
-  version = "~> 0.3"
+  version = "~> 0.4"
 
   prefix              = local.prefix
   resource_group_name = local.resource_group_name
@@ -76,15 +76,17 @@ module "user-ingress" {
   aks                 = module.aks.outputs
   enable_https        = local.enable_https
 
+  retool_services = module.retool-services.outputs
+
   depends_on = [module.aks, module.retool-services]
 }
 
 module "retool" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/retool-helm"
-  version = "~> 0.3"
+  version = "~> 0.4"
 
-  retool_helm_name                         = "retool"
-  retool_helm_chart_version                = "6.11.15"
+  retool_helm_name          = "retool"
+  retool_helm_chart_version = "6.11.15"
 
   db              = module.db-main.outputs
   retool_services = module.retool-services.outputs

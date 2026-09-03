@@ -1,14 +1,14 @@
 ## `aws-retool-services` module
 
-This is a Terraform module which adds provides extensions to an EKS Kubernetes cluster and other supporting services and configurations recommended for running Retool self-hosted in EKS.
+This is a Terraform module providing the per-deployment supporting services and configurations recommended for running Retool self-hosted in EKS. Everything it creates belongs to one Retool deployment, so it can be instantiated several times against a single cluster.
 
-* Installs [AWS Load Balancer Controller](https://kubernetes-sigs.github.io/aws-load-balancer-controller/latest/)
-  * Includes a default IngressClass and a suitable Service Account with necessary IAM permissions
-* Installs [Metrics Server](https://github.com/kubernetes-sigs/metrics-server)
-* Installs [External Secrets Operator](https://external-secrets.io/latest/)
-  * Includes a suitable Service Account with necessary IAM permissions
-* Creates an S3 bucket for use as git storage backend for Retool apps
-* Installs ESO `ExternalSecret` resources for required Retool secrets so AWS SecretsManager remains the source of truth.
+* Creates the `<prefix>-retool` namespace the Retool deployment lives in, and exports its name so `retool-helm` and `aws-user-ingress` use the same one
+* Provisions the Retool secrets in AWS Secrets Manager — encryption key, JWT secret, extra env vars, and optionally the license key and the agent sandbox bundle — using write-only values so their contents never reach Terraform state
+* Creates the `<prefix>-eso` IAM role granting read access to just this deployment's secrets, which the cluster's shared External Secrets Operator assumes
+* Installs a namespaced ESO `SecretStore` and the `ExternalSecret` resources for the required Retool secrets, so AWS Secrets Manager remains the source of truth
+* Optionally creates an S3 bucket and credentials for use as the git storage backend for Retool apps
+
+The cluster-wide operators — the External Secrets Operator, cert-manager, the AWS Load Balancer Controller, reloader and metrics-server — are cluster singletons installed once per cluster by [`aws-eks`](../aws-eks), not by this module.
 
 ### Reusing secrets from an existing deployment
 

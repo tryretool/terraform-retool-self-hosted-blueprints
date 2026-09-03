@@ -1,24 +1,36 @@
+# Everything this module exports, enumerated explicitly. local.cluster resolves
+# each cluster attribute from either the cluster we created or the one we
+# adopted (see existing-cluster.tf); the rest are this module's own resources.
+#
+# The shape mirrors the AWS EKS module's cluster output for the fields the
+# Kubernetes and Helm providers need, so provider.example.tf is recognizable.
 locals {
   outputs = {
-    name     = google_container_cluster.gke.name
-    location = google_container_cluster.gke.location
+    name     = local.cluster.name
+    location = local.cluster.location
 
-    # Used to configure kubernetes/helm provider — same key names as EKS module output.
-    endpoint                   = google_container_cluster.gke.endpoint
-    certificate_authority_data = google_container_cluster.gke.master_auth[0].cluster_ca_certificate
+    endpoint                   = local.cluster.endpoint
+    certificate_authority_data = local.cluster.certificate_authority_data
 
     # GCP equivalent of the OIDC issuer URL. Used to bind k8s service accounts
     # to GCP service accounts via Workload Identity annotations.
-    workload_identity_pool = "${var.project_id}.svc.id.goog"
+    workload_identity_pool = local.cluster.workload_identity_pool
 
     # The node service account email. Callers that need to grant GCP API access to
-    # application pods via Workload Identity will reference this.
-    node_service_account_email = google_service_account.gke_nodes.email
+    # application pods via Workload Identity will reference this. Null for an
+    # adopted cluster, whose node pools this module does not own.
+    node_service_account_email = local.cluster.node_service_account_email
+
+    # Where the cluster's shared External Secrets Operator runs. Each Retool
+    # deployment creates its own service account and GCP service account, and
+    # names them on its namespaced SecretStore, so the controller reads only
+    # what that deployment granted it.
+    external_secrets_enabled         = var.enable_external_secrets
+    external_secrets_namespace       = local.external_secrets.namespace
+    external_secrets_service_account = local.external_secrets.service_account_name
   }
 }
 
-# The cluster output shape mirrors the AWS EKS module's cluster output for the
-# fields used by Kubernetes and Helm providers, so provider.example.tf is recognizable.
 output "cluster" {
   description = "GKE cluster details"
   value       = local.outputs

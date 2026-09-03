@@ -2,7 +2,7 @@
 
 resource "aws_s3_bucket" "rr" {
   count  = var.enable_rr_s3 ? 1 : 0
-  bucket = "retool-${var.prefix}-rr"
+  bucket = coalesce(var.rr_s3_bucket_name, "retool-${var.prefix}-rr")
   tags   = local.all_tags
 }
 
@@ -73,4 +73,6 @@ resource "kubernetes_secret_v1" "rr_s3" {
     RR_DEFAULT_S3_ACCESS_KEY_ID     = aws_iam_access_key.rr[0].id
     RR_DEFAULT_S3_SECRET_ACCESS_KEY = aws_iam_access_key.rr[0].secret
   }
+
+  depends_on = [kubernetes_namespace_v1.retool]
 }

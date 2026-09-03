@@ -1,4 +1,8 @@
 locals {
+  # Namespace of the Retool Service the TargetGroupBinding registers, sourced
+  # from the retool-services outputs (falls back to "default").
+  retool_service_namespace = coalesce(try(var.retool_services.retool_namespace, null), "default")
+
   name_slug = replace(var.domain_name, ".", "-")
 
   # Application load balancer names: max 32 characters; alphanumeric and hyphens only.
@@ -68,8 +72,6 @@ resource "aws_acm_certificate" "cert" {
   validation_method = "DNS"
 
   lifecycle {
-    create_before_destroy = true
-
     precondition {
       condition     = local.manage_dns
       error_message = "aws-user-ingress cannot validate a certificate for ${var.domain_name} without a hosted zone. Either leave create_hosted_zone = true, set hosted_zone_id to an existing zone, or supply acm_certificate_arn to bring your own certificate."
@@ -163,10 +165,6 @@ resource "aws_lb_target_group" "alb_target_group" {
     interval            = 30
     matcher             = "200"
   }
-
-  lifecycle {
-    create_before_destroy = true
-  }
 }
 
 resource "aws_lb_listener" "https" {
@@ -252,7 +250,7 @@ resource "kubectl_manifest" "target_group_binding" {
     kind       = "TargetGroupBinding"
     metadata = {
       name      = local.tg_name
-      namespace = var.retool_service_namespace
+      namespace = local.retool_service_namespace
     }
     spec = {
       targetGroupARN = aws_lb_target_group.alb_target_group.arn

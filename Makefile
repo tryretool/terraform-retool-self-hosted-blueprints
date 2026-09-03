@@ -76,6 +76,6 @@ release: ## Full release pipeline. Must be on main and use BUMP=(patch|minor|maj
 	  $(MAKE) changelog-sync; \
 		git add CHANGELOG.md; \
 		git commit --amend --no-edit; \
-	  git tag $$target_version; \
+	  git tag -f $$target_version; \
 	  echo git push origin main $$target_version; \
 	  echo gh release create $$target_version -t "$$target_version" --generate-notes

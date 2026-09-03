@@ -7,7 +7,7 @@ locals {
 
 module "vpc" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/gcp-vpc"
-  version = "~> 0.3"
+  version = "~> 0.4"
 
   prefix     = local.prefix
   project_id = local.project_id
@@ -16,7 +16,7 @@ module "vpc" {
 
 module "gke" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/gcp-gke"
-  version = "~> 0.3"
+  version = "~> 0.4"
 
   prefix     = local.prefix
   project_id = local.project_id
@@ -28,7 +28,7 @@ module "gke" {
 
 module "db-main" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/gcp-database"
-  version = "~> 0.3"
+  version = "~> 0.4"
 
   prefix     = local.prefix
   project_id = local.project_id
@@ -48,7 +48,7 @@ module "db-main" {
 
 module "retool-services" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/gcp-retool-services"
-  version = "~> 0.3"
+  version = "~> 0.4"
 
   prefix     = local.prefix
   project_id = local.project_id
@@ -61,19 +61,21 @@ module "retool-services" {
 
 module "user-ingress" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/gcp-user-ingress"
-  version = "~> 0.3"
+  version = "~> 0.4"
 
   prefix      = local.prefix
   project_id  = local.project_id
   region      = local.region
   domain_name = local.domain_name
 
+  retool_services = module.retool-services.outputs
+
   depends_on = [module.gke, module.retool-services]
 }
 
 module "retool" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/retool-helm"
-  version = "~> 0.3"
+  version = "~> 0.4"
 
   retool_helm_name          = "retool"
   retool_helm_chart_version = "6.11.15"

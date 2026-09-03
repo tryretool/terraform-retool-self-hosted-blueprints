@@ -1,11 +1,19 @@
 locals {
-  eso = {
-    name                 = "external-secrets"
-    namespace            = "external-secrets"
-    service_account_name = "external-secrets"
-  }
+  # Namespaced SecretStore (lives in the retool namespace alongside the
+  # ExternalSecrets that reference it), rather than a cluster-global
+  # ClusterSecretStore whose fixed name would collide in a shared cluster.
+  secret_store_kind = "SecretStore"
+  secret_store_name = "retool-secretstore"
 
-  retool_namespace       = "default"
+  # The External Secrets Operator runs once per cluster and is not deployed by
+  # this module. Whichever controller reconciles this deployment's SecretStore
+  # assumes the role below to read the secrets; it is named here so the role
+  # will trust it.
+  eso_trusted_principals = distinct(compact(concat(
+    [try(var.eks.eso_controller_role_arn, null)],
+    var.eso_controller_role_arns,
+  )))
+
   encryption_key_sm_path = "retool/${var.prefix}/encryption-key"
 
   # Secrets Manager path/ARN for the license key, sourced from either the managed
@@ -94,6 +102,14 @@ locals {
 
 data "aws_caller_identity" "current" {}
 
+# Read access to just this deployment's secrets. The cluster's shared External
+# Secrets Operator assumes it — selected per-deployment by spec.provider.aws.role
+# on the SecretStore below — so one Retool deployment can never read another's
+# secrets even though a single controller serves them all.
+#
+# Same-account assumption needs only this trust policy; IAM unions identity- and
+# resource-based grants within an account. Across accounts, the controller's role
+# also needs an identity policy allowing sts:AssumeRole on this ARN.
 resource "aws_iam_role" "eso" {
   name = "${var.prefix}-eso"
   tags = local.all_tags
@@ -102,10 +118,20 @@ resource "aws_iam_role" "eso" {
     Version = "2012-10-17"
     Statement = [{
       Effect    = "Allow"
-      Principal = { Service = "pods.eks.amazonaws.com" }
+      Principal = { AWS = local.eso_trusted_principals }
       Action    = ["sts:AssumeRole", "sts:TagSession"]
     }]
   })
+
+  lifecycle {
+    # An empty Principal list is a MalformedPolicyDocument at apply time, whether
+    # or not this deployment creates the SecretStore, so require one
+    # unconditionally and fail at plan with something actionable instead.
+    precondition {
+      condition     = length(local.eso_trusted_principals) > 0
+      error_message = "No External Secrets Operator controller to trust. Pass eks = module.eks.outputs from an aws-eks instance with enable_external_secrets = true, or set eso_controller_role_arns to the IAM role ARN(s) of the controller that will reconcile this deployment's SecretStore."
+    }
+  }
 }
 
 resource "aws_iam_policy" "eso" {
@@ -134,53 +160,39 @@ resource "aws_iam_role_policy_attachment" "eso" {
   policy_arn = aws_iam_policy.eso.arn
 }
 
-resource "aws_eks_pod_identity_association" "eso" {
-  cluster_name    = var.eks.name
-  namespace       = local.eso.namespace
-  service_account = local.eso.service_account_name
-  role_arn        = aws_iam_role.eso.arn
-}
-
-resource "helm_release" "external_secrets" {
-  namespace        = local.eso.namespace
-  create_namespace = true
-
-  name       = local.eso.name
-  repository = "https://charts.external-secrets.io"
-  chart      = "external-secrets"
-  version    = "0.12.1"
-  wait       = true
-
-  values = [yamlencode({
-    installCRDs = true
-  })]
-}
-
+# Namespaced SecretStore in the retool namespace, beside the ExternalSecrets that
+# reference it. The cluster's shared ESO controller reconciles it using its own
+# credentials as the base identity, then assumes spec.provider.aws.role to reach
+# this deployment's secrets and nothing else.
 resource "kubectl_manifest" "secret_store" {
+  count = var.create_external_secrets ? 1 : 0
+
   yaml_body = yamlencode({
-    apiVersion = "external-secrets.io/v1beta1"
-    kind       = "ClusterSecretStore"
+    apiVersion = "external-secrets.io/v1"
+    kind       = local.secret_store_kind
     metadata = {
-      name = "aws-secretsmanager"
+      name      = local.secret_store_name
+      namespace = local.retool_namespace
     }
     spec = {
       provider = {
         aws = {
           service = "SecretsManager"
           region  = var.region
+          role    = aws_iam_role.eso.arn
         }
       }
     }
   })
 
-  depends_on = [helm_release.external_secrets]
+  depends_on = [kubernetes_namespace_v1.retool]
 }
 
 resource "kubectl_manifest" "external_secret" {
-  for_each = { for s in local.external_secrets : s.name => s }
+  for_each = var.create_external_secrets ? { for s in local.external_secrets : s.name => s } : {}
 
   yaml_body = yamlencode({
-    apiVersion = "external-secrets.io/v1beta1"
+    apiVersion = "external-secrets.io/v1"
     kind       = "ExternalSecret"
     metadata = {
       name      = each.value.name
@@ -189,8 +201,8 @@ resource "kubectl_manifest" "external_secret" {
     spec = {
       refreshInterval = "1m"
       secretStoreRef = {
-        kind = "ClusterSecretStore"
-        name = "aws-secretsmanager"
+        kind = local.secret_store_kind
+        name = local.secret_store_name
       }
       target = {
         name           = each.value.name
@@ -205,10 +217,10 @@ resource "kubectl_manifest" "external_secret" {
 }
 
 resource "kubectl_manifest" "external_secret_agent_sandbox" {
-  count = var.enable_agent_sandbox ? 1 : 0
+  count = var.create_external_secrets && var.enable_agent_sandbox ? 1 : 0
 
   yaml_body = yamlencode({
-    apiVersion = "external-secrets.io/v1beta1"
+    apiVersion = "external-secrets.io/v1"
     kind       = "ExternalSecret"
     metadata = {
       name      = local.agent_sandbox_external_secret.name
@@ -217,8 +229,8 @@ resource "kubectl_manifest" "external_secret_agent_sandbox" {
     spec = {
       refreshInterval = "1m"
       secretStoreRef = {
-        kind = "ClusterSecretStore"
-        name = "aws-secretsmanager"
+        kind = local.secret_store_kind
+        name = local.secret_store_name
       }
       target = {
         name           = local.agent_sandbox_external_secret.name
@@ -237,8 +249,10 @@ resource "kubectl_manifest" "external_secret_agent_sandbox" {
 }
 
 resource "kubectl_manifest" "external_secret_extra_env_vars" {
+  count = var.create_external_secrets ? 1 : 0
+
   yaml_body = yamlencode({
-    apiVersion = "external-secrets.io/v1beta1"
+    apiVersion = "external-secrets.io/v1"
     kind       = "ExternalSecret"
     metadata = {
       name      = "extra-env-vars"
@@ -247,8 +261,8 @@ resource "kubectl_manifest" "external_secret_extra_env_vars" {
     spec = {
       refreshInterval = "1m"
       secretStoreRef = {
-        kind = "ClusterSecretStore"
-        name = "aws-secretsmanager"
+        kind = local.secret_store_kind
+        name = local.secret_store_name
       }
       target = {
         name           = "extra-env-vars"

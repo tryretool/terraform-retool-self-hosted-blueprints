@@ -1,9 +1,9 @@
 locals {
-  all_tags = merge(var.default_tags, var.tags)
   alb_controller = {
     name                 = "alb-controller"
     namespace            = "alb-controller"
     service_account_name = "alb-controller"
+    role_name            = "${local.cluster_name}-alb-controller"
   }
 
   # The ALB controller provisions AWS resources (load balancers, target groups,
@@ -14,26 +14,29 @@ locals {
   alb_controller_default_tags = merge(data.aws_default_tags.current.tags, local.all_tags)
 }
 
-data "aws_default_tags" "current" {}
+module "alb_controller_role" {
+  count = var.enable_alb_controller ? 1 : 0
 
-module "alb_controller_irsa_role" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
   version = "5.60.0"
 
-  role_name                              = "${var.prefix}-alb-controller"
+  role_name                              = local.alb_controller.role_name
   attach_load_balancer_controller_policy = false
   tags                                   = local.all_tags
 
   oidc_providers = {
     main = {
-      provider_arn               = var.eks.oidc_provider_arn
+      provider_arn               = local.cluster.oidc_provider_arn
       namespace_service_accounts = ["${local.alb_controller.namespace}:${local.alb_controller.service_account_name}"]
     }
   }
 }
 
+
 resource "aws_iam_policy" "alb_controller_policy" {
-  name        = "${var.prefix}-alb-controller"
+  count = var.enable_alb_controller ? 1 : 0
+
+  name        = local.alb_controller.role_name
   description = "IAM policy for the ALB controller (aws-load-balancer-controller chart)"
   path        = "/"
   tags        = local.all_tags
@@ -130,11 +133,18 @@ resource "aws_iam_policy" "alb_controller_policy" {
 }
 
 resource "aws_iam_role_policy_attachment" "alb_controller_policy_attachment" {
-  role       = module.alb_controller_irsa_role.iam_role_name
-  policy_arn = aws_iam_policy.alb_controller_policy.arn
+  count = var.enable_alb_controller ? 1 : 0
+
+  role       = module.alb_controller_role[0].iam_role_name
+  policy_arn = aws_iam_policy.alb_controller_policy[0].arn
 }
 
+# A cluster-wide singleton: it owns the elbv2.k8s.aws CRDs, the
+# alb-controller-webhook admission configurations and the "alb" IngressClass,
+# all cluster-scoped with fixed names.
 resource "helm_release" "alb_controller" {
+  count = var.enable_alb_controller ? 1 : 0
+
   namespace        = local.alb_controller.namespace
   create_namespace = true
 
@@ -144,37 +154,45 @@ resource "helm_release" "alb_controller" {
   version    = "v1.13.2"
 
   # values reference: https://github.com/aws/eks-charts/blob/master/stable/aws-load-balancer-controller/values.yaml
-  values = [yamlencode({
-    nameOverride = local.alb_controller.name
-    # set region and vpcId, otherwise it tries to discover these via ec2
-    # metadata which hits permissions errors
-    region = var.region
-    vpcId  = var.vpc.vpc_id
-    # without the cert-manager dependency, this chart tries to create its own
-    # tls certs dynamically which the helm provider can't deal with
-    enableCertManager = true
-    clusterName       = var.eks.name
-    rbac = {
-      create = true
-    }
-    serviceAccount = {
-      create = true
-      name   = local.alb_controller.service_account_name
-      annotations = {
-        "eks.amazonaws.com/role-arn" = module.alb_controller_irsa_role.iam_role_arn
+  values = [
+    yamlencode({
+      nameOverride = local.alb_controller.name
+      # set region and vpcId, otherwise it tries to discover these via ec2
+      # metadata which hits permissions errors
+      region = local.region
+      vpcId  = local.vpc_id
+      # disable the service mutator which turns LoadBalancer services into ALBs,
+      # because we don't need that and the webhook can cause other things to fail
+      enableServiceMutatorWebhook = false
+      # without the cert-manager dependency, this chart tries to create its own
+      # tls certs dynamically which the helm provider can't deal with
+      enableCertManager = true
+      clusterName       = local.cluster.name
+      rbac = {
+        create = true
       }
-    }
-    # make the created IngressClass the cluster default
-    ingressClassConfig = {
-      default = true
-    }
-    # propagated to every AWS resource the controller creates (ALBs, target
-    # groups, listeners, controller-managed security groups). becomes the
-    # --default-tags CLI flag on the controller.
-    defaultTags = local.alb_controller_default_tags
-  })]
+      serviceAccount = {
+        create = true
+        name   = local.alb_controller.service_account_name
+        annotations = {
+          "eks.amazonaws.com/role-arn" = module.alb_controller_role[0].iam_role_arn
+        }
+      }
+      # Off by default so this never displaces a default IngressClass the cluster
+      # already has. Retool routes via a TargetGroupBinding and does not need one.
+      ingressClassConfig = {
+        default = var.make_default_ingress_class
+      }
+      # propagated to every AWS resource the controller creates (ALBs, target
+      # groups, listeners, controller-managed security groups). becomes the
+      # --default-tags CLI flag on the controller.
+      defaultTags = local.alb_controller_default_tags
+    }),
+    yamlencode(local.has_pod_scheduling ? local.pod_scheduling : {}),
+  ]
 
   depends_on = [
     helm_release.cert_manager,
+    module.eks,
   ]
 }

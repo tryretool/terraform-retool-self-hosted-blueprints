@@ -1,8 +1,15 @@
 locals {
+  # Namespaces sourced from the retool-services outputs (single source of truth),
+  # with prefix-based fallbacks when this module is used standalone.
+  retool_namespace = coalesce(try(var.retool_services.retool_namespace, null), "${var.prefix}-retool")
+  # external-dns is not a cluster singleton: it owns no CRDs and no webhooks,
+  # just a Deployment and cluster-scoped RBAC named after the release. Prefixing
+  # the release is enough for several deployments to coexist, and each keeps its
+  # own zone filter and txtOwnerId.
   external_dns = {
-    name                 = "external-dns"
-    namespace            = "external-dns"
-    service_account_name = "external-dns"
+    name                 = "${var.prefix}-external-dns"
+    namespace            = local.retool_namespace
+    service_account_name = "${var.prefix}-external-dns"
   }
 }
 
@@ -31,8 +38,10 @@ resource "google_project_iam_member" "external_dns_admin" {
 }
 
 resource "helm_release" "external_dns" {
+  count = var.enable_external_dns ? 1 : 0
+
   namespace        = local.external_dns.namespace
-  create_namespace = true
+  create_namespace = false
 
   name       = local.external_dns.name
   repository = var.external_dns_chart.repository
@@ -41,35 +50,42 @@ resource "helm_release" "external_dns" {
   wait       = true
   timeout    = 600
 
-  values = [yamlencode({
-    provider = { name = "google" }
+  values = [
+    yamlencode({
+      provider = { name = "google" }
 
-    image = {
-      repository = var.external_dns_chart.image_repository
-      tag        = var.external_dns_chart.image_tag
-    }
-
-    # Watch Gateway HTTPRoute resources for hostnames to publish.
-    sources = ["gateway-httproute"]
-
-    # Never delete records — safe default for shared or delegated zones.
-    policy = "upsert-only"
-
-    # Unique owner ID so txt records from multiple deployments don't collide.
-    txtOwnerId = var.prefix
-
-    serviceAccount = {
-      annotations = {
-        "iam.gke.io/gcp-service-account" = google_service_account.external_dns.email
+      image = {
+        repository = var.external_dns_chart.image_repository
+        tag        = var.external_dns_chart.image_tag
       }
-    }
 
-    # zone-id-filter has to be passed as a flag. The chart has no zoneIdFilters
-    # value and silently drops one, which leaves external-dns free to write to
-    # every zone in the project.
-    extraArgs = [
-      "--google-project=${var.project_id}",
-      "--zone-id-filter=${google_dns_managed_zone.main.name}",
-    ]
-  })]
+      # Watch Gateway HTTPRoute resources for hostnames to publish.
+      sources = ["gateway-httproute"]
+
+      # Never delete records — safe default for shared or delegated zones.
+      policy = "upsert-only"
+
+      # Unique owner ID so txt records from multiple deployments don't collide.
+      txtOwnerId = var.prefix
+
+      serviceAccount = {
+        name = local.external_dns.service_account_name
+        annotations = {
+          "iam.gke.io/gcp-service-account" = google_service_account.external_dns.email
+        }
+      }
+
+      extraArgs = [
+        "--google-project=${var.project_id}",
+        # zone-id-filter has to be passed as a flag. The chart has no zoneIdFilters
+        # value and silently drops one, which leaves external-dns free to write to
+        # every zone in the project.
+        "--zone-id-filter=${google_dns_managed_zone.main.name}",
+        # Restrict which HTTPRoutes this instance sees, so two deployments in one
+        # cluster never publish records for each other's hostnames.
+        "--namespace=${local.retool_namespace}",
+      ]
+    }),
+    yamlencode(local.has_pod_scheduling ? local.pod_scheduling : {}),
+  ]
 }

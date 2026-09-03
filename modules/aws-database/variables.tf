@@ -56,7 +56,7 @@ variable "engine" {
 
 variable "engine_version" {
   type        = string
-  default     = "16.8"
+  default     = "16.13"
   description = "The database engine version"
 }
 
