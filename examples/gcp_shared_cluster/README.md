@@ -1,46 +1,39 @@
-# GCP — deploy into a shared / existing GKE cluster
+# GCP — two Retool instances in one GKE cluster
 
-Deploys Retool into a pre-existing GKE cluster rather than creating one. It
-instantiates `gcp-gke` with `existing_cluster`, which adopts the cluster and
-installs only the cluster-wide operators Retool needs (External Secrets
-Operator, reloader), and puts the Retool deployment itself in a single
-`<prefix>-retool` namespace. Each operator has an `enable_*` toggle — turn off
-whatever your platform team already runs.
+A worked example of the pattern described in
+**[`guides/shared-clusters.md`](../../guides/shared-clusters.md)** — read that
+first. It explains which modules are shared, which are per-instance, and why.
+This example is that guidance written out for GCP.
 
-`external-dns` is not a cluster singleton and stays per-deployment, scoped to the
-DNS zone this example creates.
+It stands up one VPC and one GKE cluster, then deploys two independent Retool
+instances into them — `myretool-dev` and `myretool-prod`, each with its own
+prefix, database, namespace and domain.
 
-Read [`guides/shared-clusters.md`](../../guides/shared-clusters.md) first — it
-explains the namespace model, why the operators are singletons, and how the
-External Secrets Operator reaches Retool's secrets.
+| File | Contents |
+|---|---|
+| `shared.tf` | the VPC and the cluster, instantiated once |
+| `myretool-dev.tf` | everything belonging to the dev instance |
+| `myretool-prod.tf` | everything belonging to the prod instance |
 
-## Cluster prerequisites
-
-- Workload Identity enabled (used by ESO and external-dns). Checked at plan time.
-- Gateway API enabled (GKE `gateway_api_config`), since user ingress uses a
-  Gateway API `Gateway` + `HTTPRoute`. Also checked at plan time; set
-  `enable_gateway_api_check = false` on `gcp-gke` if you route ingress another way.
-- Private service access configured on the VPC so Cloud SQL is reachable on its
-  private IP.
+Adding a third instance means copying `myretool-prod.tf` and changing the prefix
+and domain. `shared.tf` does not change.
 
 ## Before you apply
 
-1. Copy `provider.example.tf` and set your project/region.
-2. In `main.tf`, set the `locals` for your existing infrastructure:
-   `cluster_name`, `cluster_location`, `vpc_network_id`, and `domain_name`.
-3. Confirm no other Terraform state already owns the cluster-wide operators —
-   only one may install them. If another Retool deployment already runs in this
-   cluster, drop the `gke` module block and keep the rest.
-4. If your platform team runs the External Secrets Operator, set
-   `enable_external_secrets = false` on `gcp-gke` and bind its controller to
-   `module.retool-services.outputs.eso_gcp_service_account_email`, or copy the
-   per-secret IAM grants onto whatever identity it uses.
-5. If you set `enable_external_dns = false`, point your existing external-dns at
-   the Cloud DNS zone this example creates, or create the A record manually from
-   `module.user-ingress.outputs.static_ip_address`.
+1. Copy `provider.example.tf` and fill in your project/region.
+2. In `shared.tf`, set `prefix_global`, `project_id` and `region`.
+3. In each `myretool-*.tf`, set `domain_name` and `license_key`.
+4. Enable the required GCP APIs — see
+   [`examples/gcp_all_inclusive`](../gcp_all_inclusive/README.md#required-gcp-apis).
+
+Then the usual `terraform init` / `plan` / `apply`. Both instances come up in one
+apply; nothing needs to be applied in stages.
 
 ## See also
 
-- [Upgrades](../../guides/upgrade-v0.md) — migrating an existing deployment.
+- [Using a shared/existing Kubernetes cluster](../../guides/shared-clusters.md) —
+  including how to deploy into a cluster you already run, and how to share one
+  Postgres instance between Retool instances.
+- [Upgrades](../../guides/upgrade-v0.md)
 - [Troubleshooting](../../guides/troubleshooting.md)
 - [Scaling](../../guides/scaling.md)
