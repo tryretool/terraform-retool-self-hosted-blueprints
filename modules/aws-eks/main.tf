@@ -20,7 +20,7 @@ locals {
 }
 
 resource "aws_kms_key" "eks" {
-  count = !local.byo_cluster && var.cluster_encryption_key_kms_arn == null ? 1 : 0
+  count = !local.byo_cluster && var.cluster_encryption_kms_key_arn == null ? 1 : 0
 
   description = "Key for ${local.cluster_name} EKS cluster"
   tags        = local.all_tags
