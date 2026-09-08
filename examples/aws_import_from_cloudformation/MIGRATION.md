@@ -27,11 +27,11 @@ Steps 6–8 were not exercised; everything else was.
 ## 0. Prerequisites
 
 Installed locally:
-* `terraform` ≥ 1.11 (or `terragrunt`)
-* `kubectl`
-* `helm`
-* `uv`
-* `aws` cli
+* [`terraform`](https://developer.hashicorp.com/terraform/install) ≥ 1.11
+* [`kubectl`](https://kubernetes.io/docs/tasks/tools/)
+* [`helm`](https://helm.sh/docs/intro/install/)
+* [`uv`](https://docs.astral.sh/uv/getting-started/installation/)
+* [`aws` cli](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
 
 Credentials that can read CloudFormation/RDS/EC2/SecretsManager and create EKS,
 IAM, ELB and Secrets Manager resources.
