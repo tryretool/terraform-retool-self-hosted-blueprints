@@ -23,8 +23,8 @@ EOD
 
 variable "cluster_version" {
   type        = string
-  default     = "1.32"
-  description = "The version of the EKS cluster (use a version with available EKS optimized AMI in your region, e.g. 1.32)."
+  default     = "1.34"
+  description = "The version of the EKS cluster (use a version with available EKS optimized AMI in your region, e.g. 1.34)."
 }
 
 variable "endpoint_public_access" {
@@ -129,6 +129,12 @@ variable "enable_smarter_devices_net_tun_node_overlay" {
     Karpenter would otherwise refuse to scale up nodes for them. See
     https://github.com/kubernetes-sigs/karpenter/issues/751.
   EOT
+}
+
+variable "karpenter_version" {
+  type        = string
+  default     = "1.12.0"
+  description = "Version of the karpenter and karpenter-crd charts to install (kept in lockstep with each other). Bump this when raising cluster_version to a Kubernetes release that requires a newer Karpenter — see https://karpenter.sh/docs/upgrading/compatibility/ — or pin to an older release if a newer one regresses."
 }
 
 # ---------------------------------------------------------------------------
