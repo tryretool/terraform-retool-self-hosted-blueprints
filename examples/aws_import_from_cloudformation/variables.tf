@@ -232,7 +232,7 @@ variable "license_key_secret" {
 variable "cluster_version" {
   type        = string
   description = "EKS Kubernetes version."
-  default     = "1.32"
+  default     = "1.34"
 }
 
 variable "cluster_encryption_kms_key_arn" {

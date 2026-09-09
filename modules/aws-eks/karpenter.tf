@@ -5,7 +5,7 @@ locals {
   karpenter = {
     cluster_name          = local.cluster_name
     namespace             = "kube-system"
-    version               = "1.12.0"
+    version               = var.karpenter_version
     discovery_key         = "karpenter.sh/discovery"
     discovery_value       = local.cluster_name
     instance_profile_name = "KarpenterNodeInstanceProfile-${local.cluster_name}"
