@@ -97,3 +97,21 @@ variable "dbconnector_enabled" {
   default     = true
   description = "Whether to enable the dbconnector service in the Retool deployment."
 }
+
+variable "telemetry_enabled" {
+  type        = bool
+  default     = true
+  description = "Whether to enable the telemetry service in the Retool deployment."
+}
+
+variable "telemetry_send_to_retool" {
+  type        = bool
+  default     = true
+  description = "Whether to send telemetry data to Retool."
+}
+
+variable "telemetry_send_to_retool_inputs" {
+  type        = list(string)
+  default     = ["metrics"]
+  description = "Which telemetry inputs to send to Retool. Valid inputs are 'container_logs', 'metrics', 'otlp_traces'."
+}

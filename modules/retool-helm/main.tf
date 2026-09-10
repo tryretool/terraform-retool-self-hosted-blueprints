@@ -136,6 +136,16 @@ locals {
       enabled = var.dbconnector_enabled
     }
   })]
+
+  telemetry_values = [yamlencode({
+    telemetry = {
+      enabled = var.telemetry_enabled
+      sendToRetool = {
+        enabled = var.telemetry_send_to_retool
+        inputs = var.telemetry_send_to_retool_inputs
+      }
+    }
+  })]
 }
 
 resource "helm_release" "retool" {
@@ -159,6 +169,7 @@ resource "helm_release" "retool" {
     local.workflows_values,
     local.dbconnector_values,
     local.user_ingress_values,
+    local.telemetry_values,
     var.retool_helm_extra_values,
   )
 
