@@ -56,7 +56,7 @@ module "retool-services" {
   vnet                = module.vnet.outputs
   aks                 = module.aks.outputs
   db                  = module.db-main.outputs
-  
+
   license_key = "MY-LICENSE-KEY"
 }
 
@@ -71,6 +71,8 @@ module "user-ingress" {
   vnet                = module.vnet.outputs
   aks                 = module.aks.outputs
   enable_https        = local.enable_https
+
+  retool_services = module.retool-services.outputs
 
   depends_on = [module.aks, module.retool-services]
 }

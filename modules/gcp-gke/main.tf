@@ -1,5 +1,5 @@
 locals {
-  cluster_name = "${var.prefix}-gke"
+  cluster_name = local.byo_cluster ? var.existing_cluster.name : "${var.prefix}-gke"
   location     = var.location != "" ? var.location : var.region
   all_labels   = merge(var.default_tags, var.tags)
 
@@ -9,6 +9,8 @@ locals {
 }
 
 resource "google_project_service" "container" {
+  count = local.byo_cluster ? 0 : 1
+
   project            = var.project_id
   service            = "container.googleapis.com"
   disable_on_destroy = false
@@ -17,6 +19,8 @@ resource "google_project_service" "container" {
 # Node service account for GKE nodes. Granting cloud-platform scope + IAM roles is the
 # GCP-recommended pattern (vs using default Compute SA which has broad permissions).
 resource "google_service_account" "gke_nodes" {
+  count = local.byo_cluster ? 0 : 1
+
   account_id   = substr("${var.prefix}-gke-nodes", 0, 30)
   display_name = "${var.prefix} GKE node service account"
   project      = var.project_id
@@ -24,30 +28,47 @@ resource "google_service_account" "gke_nodes" {
 
 # Minimum IAM roles required for GKE nodes to function.
 resource "google_project_iam_member" "gke_nodes_log_writer" {
+  count = local.byo_cluster ? 0 : 1
+
   project = var.project_id
   role    = "roles/logging.logWriter"
-  member  = "serviceAccount:${google_service_account.gke_nodes.email}"
+  member  = "serviceAccount:${google_service_account.gke_nodes[0].email}"
 }
 
 resource "google_project_iam_member" "gke_nodes_metric_writer" {
+  count = local.byo_cluster ? 0 : 1
+
   project = var.project_id
   role    = "roles/monitoring.metricWriter"
-  member  = "serviceAccount:${google_service_account.gke_nodes.email}"
+  member  = "serviceAccount:${google_service_account.gke_nodes[0].email}"
 }
 
 resource "google_project_iam_member" "gke_nodes_monitoring_viewer" {
+  count = local.byo_cluster ? 0 : 1
+
   project = var.project_id
   role    = "roles/monitoring.viewer"
-  member  = "serviceAccount:${google_service_account.gke_nodes.email}"
+  member  = "serviceAccount:${google_service_account.gke_nodes[0].email}"
 }
 
 resource "google_project_iam_member" "gke_nodes_artifact_reader" {
+  count = local.byo_cluster ? 0 : 1
+
   project = var.project_id
   role    = "roles/artifactregistry.reader"
-  member  = "serviceAccount:${google_service_account.gke_nodes.email}"
+  member  = "serviceAccount:${google_service_account.gke_nodes[0].email}"
 }
 
 resource "google_container_cluster" "gke" {
+  count = local.byo_cluster ? 0 : 1
+
+  lifecycle {
+    precondition {
+      condition     = var.vpc != null
+      error_message = "vpc is required when creating a cluster. Set it, or set existing_cluster to adopt one."
+    }
+  }
+
   depends_on = [google_project_service.container]
 
   name    = local.cluster_name
@@ -124,10 +145,12 @@ resource "google_container_cluster" "gke" {
 }
 
 resource "google_container_node_pool" "primary" {
+  count = local.byo_cluster ? 0 : 1
+
   name     = "${var.prefix}-nodepool"
   project  = var.project_id
   location = local.location
-  cluster  = google_container_cluster.gke.name
+  cluster  = google_container_cluster.gke[0].name
 
   # GKE cluster autoscaler scales this node pool automatically.
   # Unlike EKS+Karpenter, there is no separate controller pod — autoscaler
@@ -141,7 +164,7 @@ resource "google_container_node_pool" "primary" {
     machine_type = var.node_machine_type
     disk_size_gb = var.node_disk_size_gb
 
-    service_account = google_service_account.gke_nodes.email
+    service_account = google_service_account.gke_nodes[0].email
     oauth_scopes = [
       "https://www.googleapis.com/auth/cloud-platform"
     ]

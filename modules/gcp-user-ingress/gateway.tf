@@ -19,7 +19,7 @@ resource "google_compute_global_address" "main" {
 # to it, rather than leaning on how Helm happens to order unknown kinds.
 resource "helm_release" "gateway" {
   name      = "${var.prefix}-gateway"
-  namespace = "default"
+  namespace = local.retool_namespace
   chart     = "${path.module}/chart"
 
   values = [yamlencode({
@@ -28,7 +28,7 @@ resource "helm_release" "gateway" {
       kind       = "Gateway"
       metadata = {
         name      = "retool"
-        namespace = "default"
+        namespace = local.retool_namespace
         annotations = {
           "networking.gke.io/certmap" = google_certificate_manager_certificate_map.main.name
         }
@@ -73,7 +73,7 @@ resource "helm_release" "gateway" {
 # creates afterwards. GKE accepts a policy whose target doesn't exist yet.
 resource "helm_release" "routes" {
   name      = "${var.prefix}-routes"
-  namespace = "default"
+  namespace = local.retool_namespace
   chart     = "${path.module}/chart"
 
   values = [yamlencode({
@@ -82,8 +82,7 @@ resource "helm_release" "routes" {
         apiVersion = "gateway.networking.k8s.io/v1"
         kind       = "HTTPRoute"
         metadata = {
-          name      = "retool-redirect"
-          namespace = "default"
+          name = "retool-redirect"
         }
         spec = {
           parentRefs = [{
@@ -106,8 +105,7 @@ resource "helm_release" "routes" {
         apiVersion = "networking.gke.io/v1"
         kind       = "HealthCheckPolicy"
         metadata = {
-          name      = "retool"
-          namespace = "default"
+          name = "retool"
         }
         spec = {
           default = {

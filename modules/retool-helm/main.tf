@@ -107,7 +107,7 @@ locals {
         # `system-node-critical` PriorityClass without an explicit quota
         # carve-out, so for the agent sandbox device plugin DaemonSet on GKE we
         # unset priorityClassName.
-        var.retool_services.backend_type == "gcpSecretsManager" ? {
+        var.retool_services.secret_store_backend_type == "gcpSecretsManager" ? {
           devicePlugin = {
             priorityClassName = null
           }
@@ -125,6 +125,10 @@ locals {
     }
   })] : []
 
+  # Namespace precedence: explicit var.namespace, then the namespace exported by
+  # retool-services (so the app lands beside its ExternalSecrets), then "default".
+  namespace = coalesce(var.namespace, try(var.retool_services.retool_namespace, null), "default")
+
   workflows_values = [yamlencode({
     workflows = {
       enabled = var.workflows_enabled
@@ -136,6 +140,14 @@ locals {
       enabled = var.dbconnector_enabled
     }
   })]
+
+  # Top-level scheduling is inherited by most services; the agent sandbox pods
+  # have their own override (which only falls back to global when unset), so set
+  # it explicitly when the agent sandbox is enabled.
+  pod_scheduling_values = local.has_pod_scheduling ? [yamlencode(merge(
+    local.pod_scheduling,
+    local.agent_sandbox_enabled ? { rr = { agentSandbox = local.pod_scheduling } } : {},
+  ))] : []
 }
 
 resource "helm_release" "retool" {
@@ -143,7 +155,7 @@ resource "helm_release" "retool" {
   repository = local.repository
   chart      = "retool"
   version    = var.retool_helm_chart_version
-  namespace  = "default"
+  namespace  = local.namespace
   # Full-stack deploys (workflows, code executor) can take longer than 5m for
   # all Deployments to become ready; a short timeout causes terraform apply to fail
   # even when the release eventually succeeds.
@@ -159,6 +171,7 @@ resource "helm_release" "retool" {
     local.workflows_values,
     local.dbconnector_values,
     local.user_ingress_values,
+    local.pod_scheduling_values,
     var.retool_helm_extra_values,
   )
 

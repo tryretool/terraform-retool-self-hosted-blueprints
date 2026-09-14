@@ -31,10 +31,12 @@ variable "retool_service_name" {
   default     = "retool"
 }
 
-variable "retool_service_namespace" {
-  type        = string
-  description = "Namespace of the Kubernetes Service fronting Retool pods"
-  default     = "default"
+variable "retool_services" {
+  type = object({
+    retool_namespace = optional(string)
+  })
+  default     = null
+  description = "Retool-services outputs (e.g. module.retool-services.outputs). The TargetGroupBinding is created in retool_namespace so it sits beside the Retool Service. When null (or retool_namespace unset), falls back to the \"default\" namespace."
 }
 
 variable "retool_service_port" {

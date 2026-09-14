@@ -39,8 +39,15 @@ variable "db" {
   description = "Database connection details (e.g. from module.db-main outputs). When set alongside retool_services, configures Retool helm config.postgresql.*."
 }
 
+variable "namespace" {
+  type        = string
+  default     = null
+  description = "Namespace to deploy the Retool Helm release into. When null, falls back to retool_services.retool_namespace, then to \"default\". In the standard composition this is supplied automatically via retool_services (module.retool-services.outputs)."
+}
+
 variable "retool_services" {
   type = object({
+    retool_namespace                 = optional(string)
     encryption_key_secret_name       = string
     jwt_secret_name                  = string
     db_credentials_secret_name       = string
@@ -55,7 +62,7 @@ variable "retool_services" {
     rr_bucket_k8s_secret_name        = optional(string)
     rr_bucket_env_keys               = optional(list(string), [])
     secret_store_name                = optional(string, "aws-secretsmanager")
-    backend_type                     = optional(string, "secretsManager")
+    secret_store_backend_type        = optional(string, "secretsManager")
   })
   default     = null
   description = "K8s Secret names and cloud secret store paths from the retool-services module (e.g. module.retool-services.outputs). When set alongside db, configures Retool helm config.encryptionKeySecretName, jwtSecretSecretName, config.postgresql.passwordSecretRef, and externalSecrets. When agent_sandbox_enabled is true, agentSandbox.enabled, agentSandbox.postgres.schema, and jsExecutor.enabled are configured automatically."
@@ -68,6 +75,7 @@ variable "user_ingress" {
     gateway_section_name = optional(string)
     ingress_class_name   = optional(string)
     cluster_issuer_name  = optional(string)
+    issuer_kind          = optional(string)
     tls_secret_name      = optional(string)
   })
   default     = null
@@ -96,4 +104,21 @@ variable "dbconnector_enabled" {
   type        = bool
   default     = true
   description = "Whether to enable the dbconnector service in the Retool deployment."
+}
+
+# Pod scheduling — applied to the Retool chart's pods. In a shared cluster with
+# dedicated/labelled/tainted node pools, set these so Retool's pods land on (and
+# tolerate) the right nodes. See local.pod_scheduling in pod-scheduling.tf.
+variable "pod_node_selector" {
+  type        = map(string)
+  default     = {}
+  description = "nodeSelector applied to the Retool chart's pods. Empty = unset (chart defaults apply)."
+}
+
+variable "pod_tolerations" {
+  # A list of Kubernetes toleration objects (key/operator/value/effect/tolerationSeconds),
+  # passed verbatim into Helm values. Typed `any` to avoid rendering omitted fields as null.
+  type        = any
+  default     = []
+  description = "Tolerations applied to the Retool chart's pods. A list of Kubernetes toleration objects. Empty = unset."
 }

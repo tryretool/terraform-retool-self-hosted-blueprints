@@ -68,6 +68,8 @@ module "user-ingress" {
   region      = local.region
   domain_name = local.domain_name
 
+  retool_services = module.retool-services.outputs
+
   depends_on = [module.gke, module.retool-services]
 }
 
