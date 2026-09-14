@@ -24,7 +24,7 @@ locals {
 
 module "vpc" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/gcp-vpc"
-  version = "~> 0.4"
+  version = "~> 0.5"
 
   prefix     = local.prefix_global
   project_id = local.project_id
@@ -36,7 +36,7 @@ module "vpc" {
 # instance later means another myretool-*.tf, not another copy of this.
 module "gke" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/gcp-gke"
-  version = "~> 0.4"
+  version = "~> 0.5"
 
   prefix     = local.prefix_global
   project_id = local.project_id

@@ -15,7 +15,7 @@ locals {
 
 module "db-main-prod" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/aws-database"
-  version = "~> 0.4"
+  version = "~> 0.5"
 
   prefix     = local.prod.prefix
   db_purpose = "main"
@@ -31,7 +31,7 @@ module "db-main-prod" {
 
 module "retool-services-prod" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/aws-retool-services"
-  version = "~> 0.4"
+  version = "~> 0.5"
 
   prefix = local.prod.prefix
   region = local.region
@@ -45,7 +45,7 @@ module "retool-services-prod" {
 
 module "retool-prod" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/retool-helm"
-  version = "~> 0.4"
+  version = "~> 0.5"
 
   retool_helm_name          = "retool"
   retool_helm_chart_version = "6.11.15"
@@ -69,7 +69,7 @@ module "retool-prod" {
 
 module "user-ingress-prod" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/aws-user-ingress"
-  version = "~> 0.4"
+  version = "~> 0.5"
 
   domain_name           = local.prod.domain_name
   enable_https_listener = local.prod.enable_https

@@ -21,7 +21,7 @@ locals {
 
 module "db-main-dev" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/azure-database"
-  version = "~> 0.4"
+  version = "~> 0.5"
 
   prefix              = local.dev.prefix
   resource_group_name = local.resource_group_name
@@ -34,7 +34,7 @@ module "db-main-dev" {
 
 module "retool-services-dev" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/azure-retool-services"
-  version = "~> 0.4"
+  version = "~> 0.5"
 
   prefix              = local.dev.prefix
   resource_group_name = local.resource_group_name
@@ -50,7 +50,7 @@ module "retool-services-dev" {
 
 module "user-ingress-dev" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/azure-user-ingress"
-  version = "~> 0.4"
+  version = "~> 0.5"
 
   prefix              = local.dev.prefix
   resource_group_name = local.resource_group_name
@@ -67,7 +67,7 @@ module "user-ingress-dev" {
 
 module "retool-dev" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/retool-helm"
-  version = "~> 0.4"
+  version = "~> 0.5"
 
   retool_helm_name          = "retool"
   retool_helm_chart_version = "6.11.15"

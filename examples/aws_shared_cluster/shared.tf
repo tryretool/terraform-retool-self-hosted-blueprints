@@ -25,7 +25,7 @@ locals {
 
 module "vpc" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/aws-vpc"
-  version = "~> 0.4"
+  version = "~> 0.5"
 
   prefix = local.prefix_global
 }
@@ -36,7 +36,7 @@ module "vpc" {
 # copy of this.
 module "eks" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/aws-eks"
-  version = "~> 0.4"
+  version = "~> 0.5"
 
   prefix = local.prefix_global
   region = local.region

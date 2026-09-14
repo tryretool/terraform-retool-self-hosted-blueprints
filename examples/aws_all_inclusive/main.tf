@@ -12,14 +12,14 @@ locals {
 
 module "vpc" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/aws-vpc"
-  version = "~> 0.4"
+  version = "~> 0.5"
 
   prefix = local.prefix
 }
 
 module "eks" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/aws-eks"
-  version = "~> 0.4"
+  version = "~> 0.5"
 
   prefix = local.prefix
   region = local.region
@@ -28,7 +28,7 @@ module "eks" {
 
 module "db-main" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/aws-database"
-  version = "~> 0.4"
+  version = "~> 0.5"
 
   prefix     = local.prefix
   db_purpose = "main"
@@ -44,7 +44,7 @@ module "db-main" {
 
 module "retool-services" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/aws-retool-services"
-  version = "~> 0.4"
+  version = "~> 0.5"
 
   prefix = local.prefix
   region = local.region
@@ -58,7 +58,7 @@ module "retool-services" {
 
 module "retool" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/retool-helm"
-  version = "~> 0.4"
+  version = "~> 0.5"
 
   retool_helm_name          = "retool"
   retool_helm_chart_version = "6.11.15"
@@ -82,7 +82,7 @@ module "retool" {
 
 module "user-ingress" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/aws-user-ingress"
-  version = "~> 0.4"
+  version = "~> 0.5"
 
   domain_name           = local.domain_name
   enable_https_listener = local.enable_user_ingress_https

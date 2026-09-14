@@ -25,7 +25,7 @@ locals {
 
 module "vnet" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/azure-vnet"
-  version = "~> 0.4"
+  version = "~> 0.5"
 
   prefix              = local.prefix_global
   resource_group_name = local.resource_group_name
@@ -40,7 +40,7 @@ module "vnet" {
 # instance runs its own from its own user-ingress module.
 module "aks" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/azure-aks"
-  version = "~> 0.4"
+  version = "~> 0.5"
 
   prefix              = local.prefix_global
   resource_group_name = local.resource_group_name

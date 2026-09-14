@@ -16,7 +16,7 @@ locals {
 
 module "db-main-dev" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/gcp-database"
-  version = "~> 0.4"
+  version = "~> 0.5"
 
   prefix     = local.dev.prefix
   project_id = local.project_id
@@ -35,7 +35,7 @@ module "db-main-dev" {
 
 module "retool-services-dev" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/gcp-retool-services"
-  version = "~> 0.4"
+  version = "~> 0.5"
 
   prefix     = local.dev.prefix
   project_id = local.project_id
@@ -50,7 +50,7 @@ module "retool-services-dev" {
 
 module "user-ingress-dev" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/gcp-user-ingress"
-  version = "~> 0.4"
+  version = "~> 0.5"
 
   prefix      = local.dev.prefix
   project_id  = local.project_id
@@ -64,7 +64,7 @@ module "user-ingress-dev" {
 
 module "retool-dev" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/retool-helm"
-  version = "~> 0.4"
+  version = "~> 0.5"
 
   retool_helm_name          = "retool"
   retool_helm_chart_version = "6.11.15"
