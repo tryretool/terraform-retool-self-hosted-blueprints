@@ -64,10 +64,8 @@ require-on-main-branch:
 	  exit 1; \
 	fi; \
 	git fetch origin main >/dev/null 2>&1; \
-	local_rev=$$(git rev-parse @); \
-	remote_rev=$$(git rev-parse origin/main); \
-	if [ "$$local_rev" != "$$remote_rev" ]; then \
-	  echo "Error: local branch is not up to date with origin/main"; \
+	if ! git merge-base --is-ancestor origin/main HEAD; then \
+	  echo "Error: local branch is missing commits from origin/main, please pull"; \
 	  git status --short --branch; \
 	  exit 1; \
 	fi
@@ -104,3 +102,8 @@ release-push: ## Tag, push, and publish the GitHub release for a prepared releas
 	  git tag $$target_version; \
 	  git push origin main $$target_version; \
 	  gh release create $$target_version -t "$$target_version" --generate-notes
+
+.PHONY: release
+release: require-BUMP
+release: release-prep release-push
+release: ## Prepare & push a new release. Requires a BUMP=(patch|minor|major) argument. Can only be run on a clean `main` branch.
