@@ -36,6 +36,20 @@ version-next: ## Increment the current version using BUMP=(patch|minor|major) an
 		 else if (bump=="minor") print $$1"."$$2+1".0"; \
 		 else print $$1"."$$2"."$$3+1}'
 	
+.PHONY: require-VERSION
+require-VERSION:
+	@if [ -z "$(VERSION)" ]; then echo -e "\
+	Error: VERSION variable is required (e.g. v0.4.0).\n\
+	Use like:\n\
+	  make $(MAKECMDGOALS) VERSION=v0.4.0\n\
+	"; exit 1; fi
+
+.PHONY: update-example-versions
+update-example-versions: require-VERSION
+update-example-versions: ## Update examples/ module version constraints to the major.minor of VERSION=...
+	@minor_version=$$(echo "$(VERSION)" | sed -E 's/^v//' | cut -d. -f1-2); \
+	scripts/update-example-versions.sh "$$minor_version"
+
 # ensure local branch is main, clean, and up to date with origin, otherwise error
 .PHONY: require-on-main-branch
 require-on-main-branch:
@@ -60,15 +74,17 @@ require-on-main-branch:
 
 # Note: this implementation awkwardly generates the changelog twice: the first
 # will error out if no non-chore commits have been made since the prior version,
-# and the second happens after the local tag creation so the changelog entry
-# gets a timestamp.
-.PHONY: release
-# release: require-on-main-branch 
-release: require-BUMP
-release: ## Full release pipeline. Must be on main and use BUMP=(patch|minor|major).
+# and the second happens after a (temporary, local-only) tag creation so the
+# changelog entry gets a timestamp. The tag is removed again before exiting so
+# release-push is the only step that leaves a tag behind.
+.PHONY: release-prep
+release-prep: require-BUMP
+release-prep: ## Prepare a release commit (version bumps + changelog regen). Requires a BUMP=(patch|minor|major) argument.
 	@set -e -x; \
 		target_version=$$($(MAKE) version-next BUMP=${BUMP}); \
-	  echo "Releasing $$target_version"; \
+	  echo "Preparing $$target_version"; \
+	  $(MAKE) update-example-versions VERSION=$$target_version; \
+	  git add examples; \
 	  $(MAKE) changelog-sync VERSION=$$target_version; \
 		git add CHANGELOG.md; \
 		git commit -m "chore(release): $$target_version"; \
@@ -76,6 +92,15 @@ release: ## Full release pipeline. Must be on main and use BUMP=(patch|minor|maj
 	  $(MAKE) changelog-sync; \
 		git add CHANGELOG.md; \
 		git commit --amend --no-edit; \
+	  git tag -d $$target_version
+
+.PHONY: release-push
+release-push: require-BUMP
+release-push: require-on-main-branch
+release-push: ## Tag, push, and publish the GitHub release for a prepared release. Requires a BUMP=(patch|minor|major) argument. Can only be run on a clean `main` branch.
+	@set -e -x; \
+		target_version=$$($(MAKE) version-next BUMP=${BUMP}); \
+	  echo "Releasing $$target_version"; \
 	  git tag $$target_version; \
-	  echo git push origin main $$target_version; \
-	  echo gh release create $$target_version -t "$$target_version" --generate-notes
+	  git push origin main $$target_version; \
+	  gh release create $$target_version -t "$$target_version" --generate-notes
