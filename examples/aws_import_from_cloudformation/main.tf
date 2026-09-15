@@ -39,7 +39,6 @@ module "retool-services" {
 
   prefix = var.prefix
   region = var.region
-  vpc    = local.vpc
   eks    = module.eks.outputs
   db     = local.db
   tags   = var.tags
