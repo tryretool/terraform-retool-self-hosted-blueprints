@@ -23,7 +23,7 @@ Without it, `terraform apply` fails when fetching the chart.
 ## Quick start
 
 ```sh
-cp provider.example.tf provider.tf
+mv provider.example.tf provider.tf
 # edit the locals block in main.tf: prefix, project_id, region, domain_name
 gcloud auth application-default login   # if you haven't already
 terraform init

@@ -35,6 +35,30 @@ variable "db" {
   description = "Database outputs (e.g. module.db-main.outputs). Connection info is used to build the agent sandbox Postgres URL when enable_agent_sandbox is true."
 }
 
+# --- Namespace ---
+# The Retool application namespace is computed here (single source of truth) and
+# exported via outputs.tf so the retool-helm and gcp-user-ingress modules consume
+# the same name. Leave null for the default prefixed name; set explicitly to
+# target a pre-existing namespace in a shared cluster.
+
+variable "retool_namespace" {
+  type        = string
+  default     = null
+  description = "Namespace for the Retool application and the K8s objects that live beside it (ExternalSecrets, the namespaced SecretStore). When null, defaults to \"<prefix>-retool\"."
+}
+
+variable "create_namespace" {
+  type        = bool
+  default     = true
+  description = "Whether this module creates the retool and services namespaces. Set false in shared clusters where the namespaces are provisioned out of band."
+}
+
+variable "create_external_secrets" {
+  type        = bool
+  default     = true
+  description = "Whether to create the ESO ExternalSecret resources that sync cloud secrets into K8s Secrets in the retool namespace. Disable if you manage the ExternalSecret resources out of band. Independent of enable_external_secrets (which controls the operator itself)."
+}
+
 variable "default_tags" {
   type        = map(string)
   default     = { "service" = "retool" }
@@ -78,34 +102,9 @@ variable "enable_rr_gcs" {
   description = "Whether to create a GCS bucket and HMAC keys for Retool Remote Repository storage. Uses GCS S3-compatible API."
 }
 
-variable "external_secrets_chart" {
-  type = object({
-    repository       = string
-    version          = string
-    image_repository = string
-    image_tag        = string
-  })
-  default = {
-    repository       = "https://charts.external-secrets.io"
-    version          = "2.8.0"
-    image_repository = "ghcr.io/external-secrets/external-secrets"
-    image_tag        = "v2.8.0"
-  }
-  description = "Where to fetch the External Secrets chart and image. Defaults to upstream. Override to serve both from a private registry, which GCP Marketplace requires and restricted-egress installs need. Use an oci:// URL for repository when the chart lives in an OCI registry. Keep version and image_tag in step: the chart and the operator are released together, and a mismatch is not tested upstream."
+variable "rr_gcs_bucket_name" {
+  type        = string
+  default     = null
+  description = "Override the name of the GCS bucket created for Retool Remote Repository storage. GCS bucket names are globally unique across all of Google Cloud, so set this when the default \"retool-<prefix>-rr\" is already taken. Only used when enable_rr_gcs is true."
 }
 
-variable "reloader_chart" {
-  type = object({
-    repository       = string
-    version          = string
-    image_repository = string
-    image_tag        = string
-  })
-  default = {
-    repository       = "https://stakater.github.io/stakater-charts"
-    version          = "2.2.14"
-    image_repository = "ghcr.io/stakater/reloader"
-    image_tag        = "v1.4.19"
-  }
-  description = "Where to fetch the Reloader chart and image. Defaults to upstream. Override to serve both from a private registry. Note the chart and app versions differ (chart 2.2.14 ships app v1.4.19)."
-}

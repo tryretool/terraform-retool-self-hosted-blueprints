@@ -3,8 +3,9 @@ terraform {
 
   required_providers {
     azurerm = {
-      source  = "hashicorp/azurerm"
-      version = ">= 4.0"
+      source = "hashicorp/azurerm"
+      # >= 4.81 for user_assigned_identity_id on azurerm_federated_identity_credential.
+      version = ">= 4.81"
     }
     helm = {
       source  = "hashicorp/helm"

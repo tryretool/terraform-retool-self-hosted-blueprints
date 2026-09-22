@@ -1,0 +1,94 @@
+# Copy this file to overrides.auto.tfvars and fill it in.
+#
+#   cp vars.tf.example overrides.auto.tfvars
+#
+# This file holds only the values that are *your* choices. Everything derivable
+# from the CloudFormation stack — VPC and subnet IDs, database connection
+# details, secret ARNs, certificate ARN, image tag — belongs in
+# imported.auto.tfvars, which you can write by hand or generate:
+#
+#   ./import_from_cloudformation.py import-tfvars --stack-name <name> --region <region>
+#
+# Terraform loads both automatically, in lexical order, so anything set here
+# wins over the generated file. No -var-file flags needed:
+#
+#   terraform plan && terraform apply
+#
+# See variables.tf for the full description of every input.
+
+# ---------------------------------------------------------------------------
+# Deployment identity
+# ---------------------------------------------------------------------------
+
+# Keep this distinct from your CloudFormation stack name — both deployments run
+# side by side until you cut over.
+prefix      = "retool-prod"
+region      = "us-west-2"
+aws_profile = "retool"
+
+tags = {
+  environment = "production"
+}
+
+# ---------------------------------------------------------------------------
+# Cluster
+# ---------------------------------------------------------------------------
+
+cluster_version = "1.32"
+
+# Set only if your organization mandates a specific CMK for EKS secret
+# encryption. It cannot be changed after the cluster is created.
+# cluster_encryption_kms_key_arn = "arn:aws:kms:us-west-2:012345678901:key/..."
+
+# Grant your team kubectl access beyond the identity that runs terraform apply.
+# eks_additional_access_entries = {
+#   "arn:aws:iam::012345678901:role/Engineers" = {
+#     policy_associations = {
+#       admin = {
+#         policy_arn   = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+#         access_scope = { type = "cluster" }
+#       }
+#     }
+#   }
+# }
+
+# ---------------------------------------------------------------------------
+# DNS
+# ---------------------------------------------------------------------------
+#
+# domain_name and acm_certificate_arn come from imported.auto.tfvars (BaseDomain and
+# CertificateARN). Set hosted_zone_id only if you want this stack to manage the
+# alias records for domain_name in a Route53 zone you already own. Leave it
+# unset when DNS is managed elsewhere — you then point domain_name at the
+# alb_dns_name output yourself when you cut over.
+#
+# hosted_zone_id = "Z0123456789ABCDEFGHIJ"
+
+# ---------------------------------------------------------------------------
+# Temporal
+# ---------------------------------------------------------------------------
+#
+# Workflows run by default, independently of Temporal. The chart runs Temporal
+# in-cluster only when imported.auto.tfvars supplies a temporal_db; otherwise
+# point Retool at a Temporal you run elsewhere via retool_helm_extra_values.
+#
+# workflows_enabled = false
+
+temporal = {
+  # The Temporal Web UI, reachable via `kubectl port-forward`.
+  enable_web_ui = false
+}
+
+# ---------------------------------------------------------------------------
+# Retool application
+# ---------------------------------------------------------------------------
+#
+# retool_image_tag and replica_counts come from imported.auto.tfvars (RetoolImage and
+# the Desired*Count parameters). Override here when you want to change them.
+
+retool_helm_chart_version = "6.11.6"
+
+# R2 features, absent from the CloudFormation stack. Leave false for a
+# like-for-like migration and turn them on afterwards.
+enable_agent_sandbox = false
+enable_rr_s3         = false

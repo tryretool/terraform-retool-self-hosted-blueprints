@@ -11,12 +11,16 @@ a single `terraform apply`.
 
 ## Repository layout
 
-- [`modules/`](./modules) — the building-block Terraform modules (one set per
-  cloud, plus the cloud-agnostic [`retool-helm`](./modules/retool-helm) module).
 - [`examples/`](./examples) — copy-paste starting points that wire the modules
   together. Start here.
-- [`guides/`](./guides) — topic guides that apply across clouds (e.g.
-  [scaling](./guides/scaling.md)).
+- [`modules/`](./modules) — the building-block Terraform modules (one set per
+  cloud, plus the cloud-agnostic [`retool-helm`](./modules/retool-helm) module).
+- [`guides/`](./guides) — topic guides covering all three clouds, with
+  cloud-specific detail called out where the stacks genuinely differ.
+  - [Troubleshooting](./guides/troubleshooting.md)
+  - [Scaling](./guides/scaling.md)
+  - [Using a shared/existing Kubernetes cluster](./guides/shared-clusters.md)
+  - [Upgrades (v0.x)](./guides/upgrade-v0.md)
 
 ## Requirements
 
@@ -43,21 +47,38 @@ a single `terraform apply`.
 
 ## Getting started
 
+> [!NOTE] 
+> Already running Retool on AWS ECS/Fargate via the
+> [`retool-onpremise`](https://github.com/tryretool/retool-onpremise)
+> CloudFormation templates? Start from
+> [`aws_import_from_cloudformation`](./examples/aws_import_from_cloudformation)
+> instead — it keeps your existing VPC and databases, runs the new deployment
+> alongside the old one, and cuts over by moving DNS. It also includes a helper
+> script that reads your CloudFormation stack and writes most of the
+> configuration for you. That example includes its own migration steps at
+> [`aws_import_from_cloudformation/MIGRATION.md`](./examples/aws_import_from_cloudformation/MIGRATION.md)
+> which you'd use instead of the from-scratch steps below.
+
 1. **Pick an example** under [`examples/`](./examples) for your cloud. The
-   `*_all_inclusive` examples deploy the standard stack; the
+   `*_all_inclusive` examples deploy the standard stack from scratch; the
    `*_all_inclusive_r2_beta` examples additionally enable the agent sandbox and
-   Remote Repository storage. Each example has its own `README.md` with
-   cloud-specific notes.
+   Remote Repository storage; the `*_shared_cluster` examples deploy into a
+   Kubernetes cluster you already run, which is also how you put more than one
+   Retool deployment in one cluster (see
+   [Using a shared/existing Kubernetes cluster](./guides/shared-clusters.md)).
+   Each example has its own `README.md` with cloud-specific notes.
 
 2. **Copy the example** into your own Terraform working directory (or work in
    place), then turn the provider stub into a real config:
 
    ```sh
-   cp provider.example.tf provider.tf
+   mv provider.example.tf provider.tf
    ```
 
 3. **Edit the `locals` block** at the top of `main.tf` — set `prefix`,
-   your cloud project/subscription, `region`, and `domain_name`.
+   your cloud project/subscription, `region`, and `domain_name`. (The
+   `aws_import_from_cloudformation` example instead uses variables: copy
+   `vars.tf.example` to `terraform.tfvars` and edit that.)
 
 4. **Deploy:**
 

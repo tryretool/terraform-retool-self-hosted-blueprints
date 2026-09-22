@@ -1,11 +1,11 @@
 locals {
   outputs = {
     ingress_mode          = "external"
-    zone_id               = aws_route53_zone.hosted_zone.zone_id
-    zone_dns_name         = aws_route53_zone.hosted_zone.name
-    zone_name             = aws_route53_zone.hosted_zone.name
-    zone_name_servers     = aws_route53_zone.hosted_zone.name_servers
-    acm_certificate_arn   = length(aws_acm_certificate.cert) > 0 ? aws_acm_certificate.cert[0].arn : null
+    zone_id               = local.zone_id
+    zone_dns_name         = one(aws_route53_zone.hosted_zone[*].name)
+    zone_name             = one(aws_route53_zone.hosted_zone[*].name)
+    zone_name_servers     = one(aws_route53_zone.hosted_zone[*].name_servers)
+    acm_certificate_arn   = local.certificate_arn
     alb_id                = aws_lb.alb.id
     alb_dns_name          = aws_lb.alb.dns_name
     target_group_arn      = aws_lb_target_group.alb_target_group.arn
@@ -20,27 +20,27 @@ output "ingress_mode" {
 }
 
 output "zone_id" {
-  description = "Route53 hosted zone ID for the user domain"
+  description = "Route53 hosted zone ID this module writes records into: the zone it created, or hosted_zone_id when create_hosted_zone is false. Null when DNS is managed entirely outside this stack."
   value       = local.outputs.zone_id
 }
 
 output "zone_dns_name" {
-  description = "Domain name specified for the Cloud DNS zone."
+  description = "Domain name specified for the Cloud DNS zone. Null when create_hosted_zone is false."
   value       = local.outputs.zone_dns_name
 }
 
 output "zone_name" {
-  description = "Name specified for the Cloud DNS zone."
+  description = "Name specified for the Cloud DNS zone. Null when create_hosted_zone is false."
   value       = local.outputs.zone_name
 }
 
 output "zone_name_servers" {
-  description = "Name servers of Route53 hosted zone to delegate the user domain to at the external registrar or DNS provider of parent domain"
+  description = "Name servers of Route53 hosted zone to delegate the user domain to at the external registrar or DNS provider of parent domain. Null when create_hosted_zone is false."
   value       = local.outputs.zone_name_servers
 }
 
 output "acm_certificate_arn" {
-  description = "ARN of the ACM certificate when HTTPS is enabled; otherwise null"
+  description = "ARN of the certificate attached to the HTTPS listener — either the one this module minted or the acm_certificate_arn passed in. Null when HTTPS is disabled."
   value       = local.outputs.acm_certificate_arn
 }
 

@@ -6,7 +6,7 @@ resource "azurerm_storage_account" "rr" {
   count = var.enable_rr_blob ? 1 : 0
 
   # Storage account names must be 3-24 lowercase alphanumeric characters.
-  name                     = replace("${var.prefix}rr", "-", "")
+  name                     = coalesce(var.rr_storage_account_name, replace("${var.prefix}rr", "-", ""))
   resource_group_name      = var.resource_group_name
   location                 = var.location
   account_tier             = "Standard"

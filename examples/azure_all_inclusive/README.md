@@ -10,7 +10,7 @@ Terraform basics.
 ## Quick start
 
 ```sh
-cp provider.example.tf provider.tf
+mv provider.example.tf provider.tf
 # edit the locals block in main.tf:
 #   subscription_id, prefix, location, resource_group_name, domain_name
 az login   # if you haven't already

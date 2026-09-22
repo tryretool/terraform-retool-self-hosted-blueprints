@@ -38,9 +38,34 @@ module "retool" {
 
       # Workflows service (when workflows_enabled = true)
       workflows = {
-        replicaCount = 2
+        # The workflows backend only powers the workflows IDE and receives 
+        # triggers, so it usually needs fewer replicas compared to the workflow 
+        # workers.
+        backend = {
+          replicaCount = 1
+        }
+        # Workflows worker is what handles most workflow coordination and 
+        # execution, so its replica count is often the first throughput bottleneck.
+        worker = {
+          replicaCount = 2
+        }
         resources = {
           requests = { cpu = "1", memory = "2Gi" }
+        }
+      }
+
+      # Code Executor service (when workflows_enabled = true)
+      codeExecutor = {
+        # The code executor runs any custom code blocks (JS, Python) that are 
+        # part of a workflow. It becomes a bottleneck when custom code blocks 
+        # are either run very frequently or individually do lots of work.
+        # For high frequency, scale replicaCount first. If heavy code blocks are
+        # individualy hitting limits (i.e. timing out, hitting resource errors),
+        # increase resource requests/limits.
+        replicaCount = 2
+        resources = {
+          requests = { cpu = "1", memory = "1Gi" }
+          limits   = { cpu = "2", memory = "2Gi" }
         }
       }
     })
