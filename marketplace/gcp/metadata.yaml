@@ -156,9 +156,11 @@ spec:
       - level: Project
         roles:
           - roles/config.agent
+          - roles/config.admin
           - roles/editor
           - roles/artifactregistry.reader
           - roles/container.admin
+          - roles/certificatemanager.owner
           - roles/iam.serviceAccountAdmin
           - roles/iam.serviceAccountUser
           - roles/resourcemanager.projectIamAdmin
@@ -170,6 +172,7 @@ spec:
       - secretmanager.googleapis.com
       - dns.googleapis.com
       - certificatemanager.googleapis.com
+      - storage.googleapis.com
       - artifactregistry.googleapis.com
       - iam.googleapis.com
       - cloudresourcemanager.googleapis.com

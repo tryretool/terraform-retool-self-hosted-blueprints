@@ -78,6 +78,12 @@ module "retool-services" {
   db          = module.db-main.outputs
   license_key = var.license_key != "" ? var.license_key : null
 
+  # Same R2 / Remote Repository stack as examples/gcp_all_inclusive_r2_beta:
+  # agent-sandbox secrets + GCS bucket for git/blob storage. retool-helm turns
+  # on rr.agentSandbox / jsExecutor / gitServer from these outputs.
+  enable_agent_sandbox = true
+  enable_rr_gcs        = true
+
   external_secrets_chart = {
     repository       = var.third_party_charts_repo
     version          = "2.8.0"

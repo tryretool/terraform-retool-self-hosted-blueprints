@@ -1,8 +1,9 @@
 # Retool Blueprints (GCP Marketplace)
 
 Deploys self-hosted Retool on Google Cloud: a VPC, GKE cluster, Cloud SQL
-(Postgres), Secret Manager, Cloud DNS plus a managed certificate, and the
-Retool Helm release.
+(Postgres), Secret Manager, Cloud DNS plus a managed certificate, the
+Retool Helm release, and the R2 / Remote Repository stack (agent sandbox
+secrets plus a GCS bucket for git storage).
 
 Marketplace / Infrastructure Manager supplies `project_id` and rewrites image
 and chart locations to Google-owned Artifact Registry copies. The
@@ -52,6 +53,7 @@ gcloud services enable \
   secretmanager.googleapis.com \
   dns.googleapis.com \
   certificatemanager.googleapis.com \
+  storage.googleapis.com \
   --project YOUR_PROJECT
 ```
 
