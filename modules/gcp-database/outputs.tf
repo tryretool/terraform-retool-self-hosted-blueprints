@@ -1,15 +1,15 @@
 locals {
   outputs = {
-    address                 = module.pg.private_ip_address
+    address                 = data.google_sql_database_instance.pg.private_ip_address
     port                    = 5432
     name                    = var.database_name
     username                = var.master_username
-    id                      = module.pg.instance_name
+    id                      = data.google_sql_database_instance.pg.name
     database_name           = var.database_name
     master_user_secret_name = google_secret_manager_secret.db_password.secret_id
 
     # GCP-specific: Cloud SQL Auth Proxy connection name (project:region:instance).
-    connection_name = module.pg.instance_connection_name
+    connection_name = data.google_sql_database_instance.pg.connection_name
   }
 }
 

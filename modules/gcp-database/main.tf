@@ -17,14 +17,61 @@ resource "random_password" "pg_password" {
   special = false
 }
 
+# Matches terraform-google-modules/sql-db postgresql random_instance_name suffix.
+resource "random_id" "instance_suffix" {
+  byte_length = 4
+}
+
+moved {
+  from = module.pg.random_id.suffix[0]
+  to   = random_id.instance_suffix
+}
+
+locals {
+  instance_name = "${var.prefix}-${var.db_purpose}-${random_id.instance_suffix.hex}"
+  instance_body = {
+    region           = var.region
+    databaseVersion  = var.postgres_version
+    settings = {
+      tier                       = var.tier
+      edition                    = "ENTERPRISE"
+      dataDiskSizeGb             = tostring(var.disk_size_gb)
+      storageAutoResize          = var.disk_autoresize
+      storageAutoResizeLimit     = tostring(var.disk_autoresize_limit_gb)
+      availabilityType           = var.availability_type
+      deletionProtectionEnabled  = var.deletion_protection
+      userLabels                 = local.all_labels
+      databaseFlags              = [for f in local.database_flags : { name = f.name, value = f.value }]
+      ipConfiguration = merge(
+        {
+          ipv4Enabled    = false
+          sslMode        = "ENCRYPTED_ONLY"
+          privateNetwork = var.vpc.network_id
+        },
+        coalesce(try(var.vpc.psa_allocated_ip_range, null), "") != "" ? { allocatedIpRange = var.vpc.psa_allocated_ip_range } : {}
+      )
+      backupConfiguration = {
+        enabled                     = true
+        startTime                   = var.backup_start_time
+        pointInTimeRecoveryEnabled  = var.point_in_time_recovery_enabled
+        backupRetentionSettings = {
+          retainedBackups = var.backup_retention_count
+          retentionUnit   = "COUNT"
+        }
+      }
+      maintenanceWindow = {
+        day         = var.maintenance_window_day
+        hour        = var.maintenance_window_hour
+        updateTrack = "stable"
+      }
+    }
+  }
+}
+
+data "google_client_config" "default" {}
+
 # Cloud SQL takes its private IP from the peering range that private_service_access
 # sets up, and that range is not usable the moment the peering resource returns.
-# Callers order this module after the VPC (the marketplace root uses depends_on), so
-# with no wait the instance create fires a fraction of a second after peering and the
-# create operation comes back with a transient INTERNAL_ERROR. The provider prints that
-# as an empty "Error waiting for Create Instance:" and never retries, so the apply fails
-# while GCP goes on to build the instance. Cleaning that up means deleting an orphan
-# whose name Cloud SQL then reserves for a week, which costs far more than the wait.
 resource "time_sleep" "psa_propagation" {
   create_duration = "90s"
 
@@ -33,70 +80,64 @@ resource "time_sleep" "psa_propagation" {
   }
 }
 
-module "pg" {
-  source  = "terraform-google-modules/sql-db/google//modules/postgresql"
-  version = "25.2.2"
+# The google provider treats a still-RUNNING SQL operation with INTERNAL_ERROR as
+# fatal and prints an empty "Error waiting for Create Instance:", while GCP keeps
+# building the instance. Creating via the SQL Admin API lets us keep polling.
+resource "null_resource" "sql_instance" {
+  depends_on = [time_sleep.psa_propagation]
 
-  module_depends_on = [time_sleep.psa_propagation.id]
-
-  name                 = "${var.prefix}-${var.db_purpose}"
-  random_instance_name = true
-  project_id           = var.project_id
-  database_version     = var.postgres_version
-  region               = var.region
-
-  edition               = "ENTERPRISE"
-  tier                  = var.tier
-  disk_size             = var.disk_size_gb
-  disk_autoresize       = var.disk_autoresize
-  disk_autoresize_limit = var.disk_autoresize_limit_gb
-  availability_type     = var.availability_type
-
-  deletion_protection = var.deletion_protection
-
-  # On destroy, Postgres refuses API-level DROP of the database (it has non-superuser
-  # grantees) and the user (it holds SQL roles), so terraform destroy hangs. ABANDON
-  # drops them from state instead; the instance deletion that follows removes them.
-  database_deletion_policy = "ABANDON"
-  user_deletion_policy     = "ABANDON"
-
-  database_flags = local.database_flags
-
-  # Cloud SQL does not use security groups. With private IP, access is controlled by
-  # the VPC peering connection (private_service_access) created in the vpc module.
-  # Any GKE pod in the same VPC can reach this instance on its private IP.
-  #
-  # GCP recommends using the Cloud SQL Auth Proxy sidecar for application connections.
-  # The proxy handles TLS and IAM authentication automatically. Configure it with the
-  # db_instance_connection_name output ("project:region:instance").
-  ip_configuration = {
-    ipv4_enabled    = false
-    ssl_mode        = "ENCRYPTED_ONLY"
-    private_network = var.vpc.network_id
+  triggers = {
+    project   = var.project_id
+    name      = local.instance_name
+    body_hash = sha256(jsonencode(local.instance_body))
   }
 
-  backup_configuration = {
-    enabled                        = true
-    start_time                     = var.backup_start_time
-    location                       = null
-    point_in_time_recovery_enabled = var.point_in_time_recovery_enabled
-    transaction_log_retention_days = null
-    retained_backups               = var.backup_retention_count
-    retention_unit                 = "COUNT"
+  provisioner "local-exec" {
+    command = "sh -c 'PY=$(command -v python3 || command -v python); exec \"$PY\" \"${path.module}/scripts/cloud_sql_instance.py\" upsert'"
+    environment = {
+      SQL_PROJECT = var.project_id
+      SQL_NAME    = local.instance_name
+      SQL_BODY    = jsonencode(local.instance_body)
+      SQL_TOKEN   = data.google_client_config.default.access_token
+    }
   }
 
-  maintenance_window_day          = var.maintenance_window_day
-  maintenance_window_hour         = var.maintenance_window_hour
-  maintenance_window_update_track = "stable"
+  provisioner "local-exec" {
+    when    = destroy
+    command = "sh -c 'PY=$(command -v python3 || command -v python); exec \"$PY\" \"${path.module}/scripts/cloud_sql_instance.py\" delete'"
+    environment = {
+      SQL_PROJECT = self.triggers.project
+      SQL_NAME    = self.triggers.name
+    }
+  }
+}
 
-  db_name      = var.database_name
-  db_charset   = "UTF8"
-  db_collation = "en_US.UTF8"
+data "google_sql_database_instance" "pg" {
+  project    = var.project_id
+  name       = local.instance_name
+  depends_on = [null_resource.sql_instance]
+}
 
-  user_name     = var.master_username
-  user_password = random_password.pg_password.result
+# On destroy, Postgres refuses API-level DROP of the database (it has non-superuser
+# grantees) and the user (it holds SQL roles), so terraform destroy hangs. ABANDON
+# drops them from state instead; the instance deletion that follows removes them.
+resource "google_sql_database" "retool" {
+  project           = var.project_id
+  name              = var.database_name
+  instance          = local.instance_name
+  charset           = "UTF8"
+  collation         = "en_US.UTF8"
+  deletion_policy   = "ABANDON"
+  depends_on        = [null_resource.sql_instance]
+}
 
-  user_labels = local.all_labels
+resource "google_sql_user" "retool" {
+  project         = var.project_id
+  name            = var.master_username
+  instance        = local.instance_name
+  password        = random_password.pg_password.result
+  deletion_policy = "ABANDON"
+  depends_on      = [null_resource.sql_instance]
 }
 
 resource "google_project_service" "secretmanager" {

@@ -1,0 +1,64 @@
+# Maps each Artifact Registry image (path after terraform-app-staging/) onto
+# Terraform variables. Marketplace fills these with Google-owned copies at publish.
+# https://github.com/GoogleCloudPlatform/marketplace-tools/blob/master/docs/terraform-k8s-app/terraform-k8s-app-packaging-guide.md
+images:
+  retool-blueprints:
+    variables:
+      image_repo:
+        type: REPO_WITH_REGISTRY_WITH_NAME
+      image_tag:
+        type: TAG
+  "retool-blueprints/code-executor-service":
+    variables:
+      code_executor_image_repo:
+        type: REPO_WITH_REGISTRY_WITH_NAME
+      code_executor_image_tag:
+        type: TAG
+  "retool-blueprints/js-executor-service":
+    variables:
+      js_executor_image_repo:
+        type: REPO_WITH_REGISTRY_WITH_NAME
+      js_executor_image_tag:
+        type: TAG
+  "retool-blueprints/agent-sandbox-service":
+    variables:
+      agent_sandbox_image_repo:
+        type: REPO_WITH_REGISTRY_WITH_NAME
+      agent_sandbox_image_tag:
+        type: TAG
+  "retool-blueprints/telemetry":
+    variables:
+      telemetry_image_repo:
+        type: REPO_WITH_REGISTRY_WITH_NAME
+      telemetry_image_tag:
+        type: TAG
+  "retool-blueprints/external-secrets":
+    variables:
+      external_secrets_image_repo:
+        type: REPO_WITH_REGISTRY_WITH_NAME
+      external_secrets_image_tag:
+        type: TAG
+  "retool-blueprints/reloader":
+    variables:
+      reloader_image_repo:
+        type: REPO_WITH_REGISTRY_WITH_NAME
+      reloader_image_tag:
+        type: TAG
+  "retool-blueprints/external-dns":
+    variables:
+      external_dns_image_repo:
+        type: REPO_WITH_REGISTRY_WITH_NAME
+      external_dns_image_tag:
+        type: TAG
+  "retool-blueprints/busybox":
+    variables:
+      busybox_image_repo:
+        type: REPO_WITH_REGISTRY_WITH_NAME
+      busybox_image_tag:
+        type: TAG
+  "retool-blueprints/smarter-device-manager":
+    variables:
+      smarter_device_manager_image_repo:
+        type: REPO_WITH_REGISTRY_WITH_NAME
+      smarter_device_manager_image_tag:
+        type: TAG
