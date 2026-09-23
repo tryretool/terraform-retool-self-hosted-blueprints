@@ -8,9 +8,9 @@ resource "helm_release" "reloader" {
   create_namespace = true
 
   name       = "reloader"
-  repository = "https://stakater.github.io/stakater-charts"
+  repository = var.reloader_chart.repository
   chart      = "reloader"
-  version    = "2.2.14"
+  version    = var.reloader_chart.version
 
   values = [
     yamlencode({

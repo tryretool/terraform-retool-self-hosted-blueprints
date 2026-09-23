@@ -89,9 +89,9 @@ resource "helm_release" "external_secrets" {
   create_namespace = true
 
   name       = local.external_secrets.name
-  repository = "https://charts.external-secrets.io"
+  repository = var.external_secrets_chart.repository
   chart      = "external-secrets"
-  version    = "2.8.0"
+  version    = var.external_secrets_chart.version
   wait       = true
 
   values = [

@@ -346,6 +346,42 @@ variable "external_secrets_assumable_role_arns" {
   description = "Role ARNs (wildcards allowed) the cluster External Secrets Operator may assume to read a deployment's secrets. When null, allows any role in this account whose name ends in \"-eso\", matching the <prefix>-eso roles aws-retool-services creates."
 }
 
+variable "cert_manager_chart" {
+  type = object({
+    repository = optional(string, "https://charts.jetstack.io")
+    version    = optional(string, "v1.21.0")
+  })
+  default     = {}
+  description = "Where to fetch the cert-manager chart. This module passes CRD installation as crds.enabled, a key cert-manager only accepts from chart v1.15 onward, so pinning anything older silently installs no CRDs and makes install_crds a no-op. See https://artifacthub.io/packages/helm/cert-manager/cert-manager"
+}
+
+variable "external_secrets_chart" {
+  type = object({
+    repository = optional(string, "https://charts.external-secrets.io")
+    version    = optional(string, "2.8.0")
+  })
+  default     = {}
+  description = "Where to fetch the External Secrets Operator chart. The values this module sets — crds.unsafeServeV1Beta1 and the crds.annotations that keep the CRDs through an uninstall — exist only in chart 2.x, and external_secrets_serve_v1beta1 above describes 2.x's defaults, so pinning a 0.x or 1.x chart quietly changes what both knobs do. See https://artifacthub.io/packages/helm/external-secrets-operator/external-secrets"
+}
+
+variable "alb_controller_chart" {
+  type = object({
+    repository = optional(string, "https://aws.github.io/eks-charts")
+    version    = optional(string, "v1.13.2")
+  })
+  default     = {}
+  description = "Where to fetch the AWS Load Balancer Controller chart. Note the leading \"v\": upstream tags these chart versions both ways and Helm resolves either, but the two spellings are different strings in state, so switching between them shows a version diff without changing the chart. This chart also sets enableCertManager and templates a cert-manager.io/v1 Certificate for its own webhook, so this version and cert_manager_chart.version have to stay mutually compatible. See https://github.com/aws/eks-charts/tree/master/stable/aws-load-balancer-controller"
+}
+
+variable "reloader_chart" {
+  type = object({
+    repository = optional(string, "https://stakater.github.io/stakater-charts")
+    version    = optional(string, "2.2.14")
+  })
+  default     = {}
+  description = "Where to fetch the Stakater reloader chart. See https://artifacthub.io/packages/helm/stakater/reloader"
+}
+
 # ---------------------------------------------------------------------------
 # Pod scheduling
 # ---------------------------------------------------------------------------
