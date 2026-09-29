@@ -23,9 +23,9 @@ resource "helm_release" "cert_manager" {
   create_namespace = true
 
   name       = local.cert_manager.name
-  repository = "https://charts.jetstack.io"
+  repository = var.cert_manager_chart.repository
   chart      = "cert-manager"
-  version    = "v1.21.0"
+  version    = var.cert_manager_chart.version
   timeout    = 600
   wait       = true
 

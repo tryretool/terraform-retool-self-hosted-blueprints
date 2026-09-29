@@ -167,9 +167,9 @@ resource "helm_release" "agic" {
   count = var.enable_agic ? 1 : 0
 
   name       = "${var.prefix}-ingress-azure"
-  repository = "oci://mcr.microsoft.com/azure-application-gateway/charts"
+  repository = var.agic_chart.repository
   chart      = "ingress-azure"
-  version    = "1.9.7"
+  version    = var.agic_chart.version
   namespace  = local.retool_namespace
   wait       = true
   timeout    = 600

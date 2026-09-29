@@ -56,6 +56,15 @@ variable "enable_agic" {
   description = "Whether to create the Application Gateway and install the AGIC controller for this deployment. Disable in shared clusters that already run an ingress controller, and set ingress_class_name to that controller's class so Retool's Ingress is reconciled by it."
 }
 
+variable "agic_chart" {
+  type = object({
+    repository = optional(string, "oci://mcr.microsoft.com/azure-application-gateway/charts")
+    version    = optional(string, "1.9.7")
+  })
+  default     = {}
+  description = "Where to fetch the Application Gateway Ingress Controller chart. Pinned so an apply never silently picks up a new upstream release; override version to take an upstream fix ahead of this module, or repository to serve the chart from a private registry, which needs a registry block on the helm provider or a prior login. Because the default is an OCI registry, version must be an exact version — OCI serves no searchable index, so Helm cannot resolve a constraint range against it. Do not pin below 1.9: running one AGIC per deployment rather than one per cluster depends on armAuth.type = workloadIdentity, on kubernetes.ingressClassResource confining each instance to its own class, and on the chart shipping its CRDs in crds/ instead of templating them — on an older chart those values are silently dropped and two instances fight over every Ingress in the cluster. See https://github.com/Azure/application-gateway-kubernetes-ingress"
+}
+
 variable "ingress_class_name" {
   type        = string
   default     = null

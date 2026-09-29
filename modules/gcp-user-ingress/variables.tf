@@ -46,18 +46,13 @@ variable "tags" {
 
 variable "external_dns_chart" {
   type = object({
-    repository       = string
-    version          = string
-    image_repository = string
-    image_tag        = string
+    repository       = optional(string, "https://kubernetes-sigs.github.io/external-dns/")
+    version          = optional(string, "1.21.1")
+    image_repository = optional(string, "registry.k8s.io/external-dns/external-dns")
+    image_tag        = optional(string, "v0.21.0")
   })
-  default = {
-    repository       = "https://kubernetes-sigs.github.io/external-dns/"
-    version          = "1.21.1"
-    image_repository = "registry.k8s.io/external-dns/external-dns"
-    image_tag        = "v0.21.0"
-  }
-  description = "Where to fetch the ExternalDNS chart and image. Defaults to upstream. Override to serve both from a private registry, which GCP Marketplace requires and restricted-egress installs need. Use an oci:// URL for repository when the chart lives in an OCI registry. Note the chart and app versions differ (chart 1.21.1 ships app v0.21.0)."
+  default     = {}
+  description = "Where to fetch the ExternalDNS chart and image. Defaults to upstream. Override to serve both from a private registry, which GCP Marketplace requires and restricted-egress installs need. Use an oci:// URL for repository when the chart lives in an OCI registry. Note the chart and app versions differ (chart 1.21.1 ships app v0.21.0), and that the two move together: an override that bumps version should bump image_tag to match."
 }
 
 # Pod scheduling — applied to every pod this module schedules via Helm. In a

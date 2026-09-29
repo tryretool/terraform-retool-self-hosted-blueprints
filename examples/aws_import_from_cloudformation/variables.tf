@@ -306,7 +306,7 @@ variable "retool_image_tag" {
 variable "retool_helm_chart_version" {
   type        = string
   description = "Version of the Retool Helm chart to deploy."
-  default     = "6.11.6"
+  default     = "6.11.15"
 }
 
 variable "replica_counts" {

@@ -149,9 +149,9 @@ resource "helm_release" "alb_controller" {
   create_namespace = true
 
   name       = local.alb_controller.name
-  repository = "https://aws.github.io/eks-charts"
+  repository = var.alb_controller_chart.repository
   chart      = "aws-load-balancer-controller"
-  version    = "v1.13.2"
+  version    = var.alb_controller_chart.version
 
   # values reference: https://github.com/aws/eks-charts/blob/master/stable/aws-load-balancer-controller/values.yaml
   values = [

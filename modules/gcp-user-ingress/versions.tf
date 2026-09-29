@@ -1,5 +1,6 @@
 terraform {
-  required_version = ">= 1.0"
+  # >= 1.3 for optional() object attributes with defaults.
+  required_version = ">= 1.3"
 
   required_providers {
     google = {
