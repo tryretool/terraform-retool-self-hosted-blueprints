@@ -32,7 +32,8 @@ variable "vnet" {
 variable "kubernetes_version" {
   type        = string
   description = "Kubernetes version for the AKS cluster"
-  default     = "1.34"
+  # AUTOUPDATE: aks-cluster 1.x
+  default = "1.34"
 }
 
 variable "node_vm_size" {
@@ -151,7 +152,8 @@ variable "external_secrets_serve_v1beta1" {
 variable "cert_manager_chart" {
   type = object({
     repository = optional(string, "https://charts.jetstack.io")
-    version    = optional(string, "v1.21.0")
+    # AUTOUPDATE: cert-manager-chart 1.x.x
+    version = optional(string, "v1.21.0")
   })
   default     = {}
   description = "Where to fetch the cert-manager chart. Two couplings constrain how far this can move. CRD installation is passed as crds.enabled, a key cert-manager only accepts from chart v1.15 onward, so anything older silently installs no CRDs and makes install_crds a no-op. And cert_manager_service_account_subject is built from the service account name this chart generates, which azure-user-ingress federates each deployment's DNS identity to — a chart whose naming differs breaks DNS-01 issuance at runtime, after a clean apply. See https://artifacthub.io/packages/helm/cert-manager/cert-manager"
@@ -160,7 +162,8 @@ variable "cert_manager_chart" {
 variable "external_secrets_chart" {
   type = object({
     repository = optional(string, "https://charts.external-secrets.io")
-    version    = optional(string, "2.8.0")
+    # AUTOUPDATE: external-secrets-chart 2.x.x
+    version = optional(string, "2.8.0")
   })
   default     = {}
   description = "Where to fetch the External Secrets Operator chart. The values this module sets — crds.unsafeServeV1Beta1 and the crds.annotations that keep the CRDs through an uninstall — exist only in chart 2.x, and external_secrets_serve_v1beta1 above describes 2.x's defaults, so pinning a 0.x or 1.x chart quietly changes what both knobs do. See https://artifacthub.io/packages/helm/external-secrets-operator/external-secrets"
@@ -169,7 +172,8 @@ variable "external_secrets_chart" {
 variable "reloader_chart" {
   type = object({
     repository = optional(string, "https://stakater.github.io/stakater-charts")
-    version    = optional(string, "2.2.14")
+    # AUTOUPDATE: reloader-chart 2.x.x
+    version = optional(string, "2.2.14")
   })
   default     = {}
   description = "Where to fetch the Stakater reloader chart. See https://artifacthub.io/packages/helm/stakater/reloader"
