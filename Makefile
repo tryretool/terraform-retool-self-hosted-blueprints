@@ -34,6 +34,30 @@ require-flock:
 	  brew install flock\n\
 	"; exit 1; fi
 
+.PHONY: require-uv
+require-uv:
+	@if ! command -v uv >/dev/null; then echo -e "\
+	Error: uv not found. scripts/autoupdate.py declares its dependencies inline\n\
+	(PEP 723) and uv resolves them at run time, so there is nothing to install\n\
+	but uv itself.\n\
+	Install it with:\n\
+	  brew install uv\n\
+	"; exit 1; fi
+
+# Both targets hit live registries and, for the Kubernetes and Postgres
+# components, the AWS and Azure APIs — so they need credentials for those
+# (aws sso login / az login). A component whose credentials are missing reports
+# as a failed row and sets a non-zero exit without blocking the others.
+.PHONY: autoupdate-report
+autoupdate-report: require-uv
+autoupdate-report: ## Show which AUTOUPDATE-marked versions are behind upstream, changing nothing
+	@scripts/autoupdate.py report $(if $(ARGS),$(ARGS))
+
+.PHONY: autoupdate
+autoupdate: require-uv
+autoupdate: ## Bump every AUTOUPDATE-marked version to the newest matching its constraint
+	@scripts/autoupdate.py update $(if $(ARGS),$(ARGS))
+
 # NOTE: examples/ source their modules from the public registry pinned to a
 # released version, not from local relative paths. Validating an example
 # therefore checks it against the last *published* release, not the working tree.
