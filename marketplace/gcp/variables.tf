@@ -47,9 +47,13 @@ variable "helm_chart_name" {
 }
 
 variable "helm_chart_version" {
-  type        = string
-  description = "Chart tag. Producer Portal requires a semantic minor version (e.g. 4.0)."
-  default     = "4.0"
+  type = string
+  # Track the bare <major>.<minor> tag: it is what Producer Portal offers when
+  # picking a release, so the package and the release stay on one tag. Avoid the
+  # -stable aliases; -stable parses as a SemVer prerelease, so those tags sort
+  # below the plain version and are skipped by ordinary version ranges.
+  description = "Chart tag in Artifact Registry."
+  default     = "4.34"
 }
 
 variable "helm_release_name" {
@@ -75,7 +79,7 @@ variable "image_repo" {
 
 variable "image_tag" {
   type        = string
-  default     = "4.0"
+  default     = "4.34"
   description = "Retool backend / code-executor image tag."
 }
 
@@ -87,7 +91,7 @@ variable "code_executor_image_repo" {
 
 variable "code_executor_image_tag" {
   type        = string
-  default     = "4.0"
+  default     = "4.34"
   description = "Code-executor image tag."
 }
 
@@ -99,7 +103,7 @@ variable "js_executor_image_repo" {
 
 variable "js_executor_image_tag" {
   type        = string
-  default     = "4.0"
+  default     = "4.34"
   description = "JS-executor image tag."
 }
 
@@ -111,7 +115,7 @@ variable "agent_sandbox_image_repo" {
 
 variable "agent_sandbox_image_tag" {
   type        = string
-  default     = "4.0"
+  default     = "4.34"
   description = "Agent-sandbox image tag."
 }
 
@@ -123,7 +127,7 @@ variable "telemetry_image_repo" {
 
 variable "telemetry_image_tag" {
   type        = string
-  default     = "4.0"
+  default     = "4.34"
   description = "Telemetry image tag."
 }
 

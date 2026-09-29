@@ -51,6 +51,20 @@ module "gke" {
   region     = var.region
   vpc        = module.vpc.outputs
 
+  external_secrets_chart = {
+    repository       = var.third_party_charts_repo
+    version          = "2.8.0"
+    image_repository = var.external_secrets_image_repo
+    image_tag        = var.external_secrets_image_tag
+  }
+
+  reloader_chart = {
+    repository       = var.third_party_charts_repo
+    version          = "2.2.14"
+    image_repository = var.reloader_image_repo
+    image_tag        = var.reloader_image_tag
+  }
+
   depends_on = [module.vpc]
 }
 
@@ -83,20 +97,6 @@ module "retool-services" {
   # on rr.agentSandbox / jsExecutor / gitServer from these outputs.
   enable_agent_sandbox = true
   enable_rr_gcs        = true
-
-  external_secrets_chart = {
-    repository       = var.third_party_charts_repo
-    version          = "2.8.0"
-    image_repository = var.external_secrets_image_repo
-    image_tag        = var.external_secrets_image_tag
-  }
-
-  reloader_chart = {
-    repository       = var.third_party_charts_repo
-    version          = "2.2.14"
-    image_repository = var.reloader_image_repo
-    image_tag        = var.reloader_image_tag
-  }
 }
 
 module "user-ingress" {
