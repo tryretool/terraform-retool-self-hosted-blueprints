@@ -42,7 +42,8 @@ variable "vnet" {
 variable "postgres_version" {
   type        = string
   description = "PostgreSQL major version"
-  default     = "16"
+  # AUTOUPDATE: azure-postgres 16
+  default = "16"
 }
 
 variable "sku_name" {

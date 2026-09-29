@@ -55,7 +55,8 @@ variable "engine" {
 }
 
 variable "engine_version" {
-  type        = string
+  type = string
+  # AUTOUPDATE: rds-postgres 16.x
   default     = "16.13"
   description = "The database engine version"
 }
@@ -63,13 +64,15 @@ variable "engine_version" {
 variable "family" {
   type        = string
   description = "The family of the DB parameter group"
-  default     = "postgres16"
+  # AUTOUPDATE: rds-postgres 16.x
+  default = "postgres16"
 }
 
 variable "major_engine_version" {
   type        = string
   description = "Specifies the major version of the engine that this option group should be associated with"
-  default     = "16"
+  # AUTOUPDATE: rds-postgres 16.x
+  default = "16"
 }
 
 variable "allocated_storage" {
