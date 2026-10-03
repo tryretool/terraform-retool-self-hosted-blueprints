@@ -43,3 +43,6 @@ __pycache__/
 
 # Ephemeral per-deployment directories (state, providers, etc.)
 deployments/
+
+# Temp files from an interrupted scripts/autoupdate.py run.
+.*.autoupdate
