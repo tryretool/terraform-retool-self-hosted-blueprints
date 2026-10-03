@@ -963,6 +963,95 @@ def as_json(resolutions: list[Resolution], problems: list[Problem]) -> str:
     )
 
 
+def _md_cell(text: str) -> str:
+    """Escape a value for a Markdown table cell."""
+    # A pipe would end the cell, and notes carry free text and error messages
+    # that can contain anything.
+    return text.replace("|", "\\|").replace("\n", " ")
+
+
+def as_markdown(resolutions: list[Resolution], problems: list[Problem]) -> str:
+    """Render the outcome as Markdown, for a pull request body.
+
+    Built with plain string joins rather than rich: rich sizes a table to the
+    terminal, or to 80 columns when there is no terminal as in CI, and would
+    fold a Markdown table into unparseable fragments.
+    """
+    updates = [r for r in resolutions if r.status == "update"]
+    errors = [r for r in resolutions if r.status == "error"]
+    current = [r for r in resolutions if r.status == "current"]
+    out: list[str] = []
+
+    if updates:
+        out += [
+            "### Bumped",
+            "",
+            "| Component | Location | From | To | Note |",
+            "| --- | --- | --- | --- | --- |",
+        ]
+        for r in sorted(updates, key=lambda r: (r.marker.component, str(r.marker.path))):
+            out.append(
+                f"| `{r.marker.component}` | `{r.marker.location}` "
+                f"| `{r.marker.literal}` | `{r.proposed}` | {_md_cell(r.note)} |"
+            )
+        out.append("")
+
+    if errors or problems:
+        out += [
+            "### Failed",
+            "",
+            "| Component | Location | Current | Error |",
+            "| --- | --- | --- | --- |",
+        ]
+        for r in sorted(errors, key=lambda r: (r.marker.component, str(r.marker.path))):
+            out.append(
+                f"| `{r.marker.component}` | `{r.marker.location}` "
+                f"| `{r.marker.literal}` | {_md_cell(r.note)} |"
+            )
+        for pr in sorted(problems, key=lambda p: (str(p.path), p.line_number)):
+            out.append(
+                f"| `{pr.component}` | `{pr.location}` | - | {_md_cell(pr.message)} |"
+            )
+        out.append("")
+
+    if current:
+        out += [
+            f"<details><summary>{len(current)} marker(s) already current</summary>",
+            "",
+            "| Component | Location | Version | Note |",
+            "| --- | --- | --- | --- |",
+        ]
+        for r in sorted(current, key=lambda r: (r.marker.component, str(r.marker.path))):
+            out.append(
+                f"| `{r.marker.component}` | `{r.marker.location}` "
+                f"| `{r.marker.literal}` | {_md_cell(r.note)} |"
+            )
+        out += ["", "</details>"]
+
+    if not resolutions and not problems:
+        out.append("No `# AUTOUPDATE:` markers were found.")
+    else:
+        counts = [
+            f"{len(resolutions) + len(problems)} marker(s)",
+            f"{len(updates)} changed",
+        ]
+        if errors or problems:
+            counts.append(f"**{len(errors) + len(problems)} failed**")
+        out += ["", ", ".join(counts) + "."]
+    return "\n".join(out).rstrip() + "\n"
+
+
+# Named render_report, not render: render() above is the version-shape renderer,
+# and a second module-level render() would shadow it at call time.
+def render_report(outcome: Outcome, output_format: str) -> str:
+    """The outcome in one of the file formats. `table` is rendered by rich."""
+    if output_format == "json":
+        return as_json(outcome.resolutions, outcome.problems)
+    if output_format == "markdown":
+        return as_markdown(outcome.resolutions, outcome.problems)
+    raise ValueError(f"not a file format: {output_format!r}")
+
+
 @dataclass(frozen=True)
 class Outcome:
     resolutions: list[Resolution]
@@ -1051,45 +1140,81 @@ def cli(
         ctx.invoke(update)
 
 
-@cli.command("report")
-@click.option(
+# Shared by both subcommands. --format picks what goes to stdout; --report-path
+# additionally writes that rendering to a file, which is how the CI workflow gets
+# a pull request body out of the same single pass that does the writing.
+FORMAT_OPTION = click.option(
     "--format",
     "output_format",
-    type=click.Choice(["table", "json"]),
+    type=click.Choice(["table", "json", "markdown"]),
     default="table",
     show_default=True,
     help="Output format.",
 )
-@click.pass_context
-def report(ctx: click.Context, output_format: str) -> None:
-    """Show what would change, without writing anything."""
-    outcome = run(ctx.obj["root"], ctx.obj["env"])
-    if output_format == "json":
-        console.print_json(as_json(outcome.resolutions, outcome.problems))
-    else:
+REPORT_PATH_OPTION = click.option(
+    "--report-path",
+    type=click.Path(dir_okay=False, writable=True, path_type=Path),
+    default=None,
+    help=(
+        "Also write the report to this file, in --format (markdown when "
+        "--format is table, since a rich table is not a file format)."
+    ),
+)
+
+
+def emit(
+    outcome: Outcome,
+    output_format: str,
+    report_path: Path | None,
+    *,
+    verb: str,
+) -> None:
+    """Print the outcome, and write it to --report-path when one was given."""
+    if output_format == "table":
         console.print(build_table(outcome.resolutions, outcome.problems))
         console.print()
-        console.print(summarize(outcome, verb="would change"))
-    # The table has already said which markers failed and why, so exit bare
+        console.print(summarize(outcome, verb=verb))
+    else:
+        # click.echo, not console.print: rich would wrap and style JSON and
+        # Markdown to the terminal width, corrupting both.
+        click.echo(render_report(outcome, output_format))
+    if report_path is not None:
+        report_path.write_text(
+            render_report(
+                outcome, "markdown" if output_format == "table" else output_format
+            )
+        )
+
+
+@cli.command("report")
+@FORMAT_OPTION
+@REPORT_PATH_OPTION
+@click.pass_context
+def report(ctx: click.Context, output_format: str, report_path: Path | None) -> None:
+    """Show what would change, without writing anything."""
+    outcome = run(ctx.obj["root"], ctx.obj["env"])
+    emit(outcome, output_format, report_path, verb="would change")
+    # The report has already said which markers failed and why, so exit bare
     # rather than via ClickException, whose "Error: ..." line would add nothing.
     if outcome.failures:
         raise SystemExit(1)
 
 
 @cli.command("update")
+@FORMAT_OPTION
+@REPORT_PATH_OPTION
 @click.pass_context
-def update(ctx: click.Context) -> None:
+def update(ctx: click.Context, output_format: str, report_path: Path | None) -> None:
     """Rewrite every out-of-date literal in place."""
     outcome = run(ctx.obj["root"], ctx.obj["env"])
-    # Print before writing, so an interrupted run still leaves a full report.
-    console.print(build_table(outcome.resolutions, outcome.problems))
-    console.print()
+    # Report before writing, so an interrupted run still leaves a full report,
+    # and so --report-path describes the change even if a write then fails.
+    emit(outcome, output_format, report_path, verb="changed")
 
     written, write_failures = apply_updates(outcome.resolutions)
     for failure in write_failures:
         err_console.print(f"[red]{failure.location}: {failure.message}[/red]")
 
-    console.print(summarize(outcome, verb="changed"))
     console.print(f"Wrote {written} file(s)." if written else "Nothing to change.")
     if outcome.failures or write_failures:
         raise SystemExit(1)
