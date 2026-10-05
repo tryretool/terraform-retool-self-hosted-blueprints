@@ -20,6 +20,7 @@ a single `terraform apply`.
   - [Troubleshooting](./guides/troubleshooting.md)
   - [Scaling](./guides/scaling.md)
   - [Using a shared/existing Kubernetes cluster](./guides/shared-clusters.md)
+  - [Private ingress](./guides/private-ingress.md)
   - [Upgrades (v0.x)](./guides/upgrade-v0.md)
 
 ## Requirements

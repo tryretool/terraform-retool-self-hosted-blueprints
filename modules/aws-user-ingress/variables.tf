@@ -5,14 +5,56 @@ variable "domain_name" {
 
 variable "vpc" {
   type = object({
-    vpc_id            = string
-    public_subnet_ids = list(string)
+    vpc_id             = string
+    vpc_cidr_block     = optional(string)
+    public_subnet_ids  = optional(list(string))
+    private_subnet_ids = optional(list(string))
   })
   description = <<-EOD
     VPC related inputs:
       vpc_id: VPC where the load balancer and target group are created
-      public_subnet_ids: Subnet IDs (one per AZ) where the internet-facing ALB is placed
+      vpc_cidr_block: VPC CIDR block; used as the default ALB ingress allowlist
+        when alb_internal is true and alb_ingress_cidr_blocks is null
+      public_subnet_ids: Subnet IDs (one per AZ) the internet-facing ALB is placed in
+      private_subnet_ids: Subnet IDs (one per AZ) the internal ALB is placed in
+        when alb_internal is true
+
+    module.vpc.outputs supplies every attribute; only the ones relevant to the
+    selected scheme (alb_internal) need to be populated.
   EOD
+}
+
+variable "alb_internal" {
+  type        = bool
+  description = <<-EOT
+    When true, create an internal (private) Application Load Balancer in
+    vpc.private_subnet_ids. When false (default), create an internet-facing ALB
+    in vpc.public_subnet_ids.
+
+    This is a create-time attribute: changing it replaces the ALB, so switching
+    an existing deployment from public to internal is a cutover and the new ALB
+    gets a new DNS name.
+  EOT
+  default     = false
+}
+
+variable "alb_ingress_cidr_blocks" {
+  type        = list(string)
+  description = <<-EOT
+    IPv4 CIDRs allowed to reach the ALB on ports 443 and 80.
+
+    When null (default), resolves to the VPC CIDR (vpc.vpc_cidr_block) if
+    alb_internal is true, otherwise to ["0.0.0.0/0"]. Internal deployments
+    should set this to the approved corporate, VPN, and connected AWS network
+    CIDRs so the ALB is not reachable from the whole VPC by default.
+  EOT
+  default     = null
+}
+
+variable "alb_ingress_ipv6_cidr_blocks" {
+  type        = list(string)
+  description = "IPv6 CIDRs allowed to reach the ALB on ports 443 and 80. Defaults to none."
+  default     = []
 }
 
 variable "eks" {
@@ -93,6 +135,24 @@ variable "hosted_zone_id" {
     when create_hosted_zone is false. Leave null for fully external DNS.
   EOT
   default     = null
+}
+
+variable "private_hosted_zone" {
+  type        = bool
+  description = <<-EOT
+    When create_hosted_zone is true, create a private (VPC-associated) Route53
+    zone instead of a public one. Ignored when create_hosted_zone is false.
+
+    A private hosted zone cannot satisfy a public ACM DNS validation, so this
+    cannot be combined with a certificate minted by this module. Supply
+    acm_certificate_arn (an existing certificate) or set
+    enable_https_listener = false.
+
+    The zone is associated only with vpc_id. Reaching it from peered/transit
+    gateway VPCs requires DNS forwarding or a corporate-managed zone supplied
+    via hosted_zone_id with create_hosted_zone = false.
+  EOT
+  default     = false
 }
 
 variable "alb_authenticate_oidc" {
