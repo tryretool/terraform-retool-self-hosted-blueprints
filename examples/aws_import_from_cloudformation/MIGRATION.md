@@ -291,7 +291,7 @@ via a stack update), or take final snapshots and detach them, before any
 
 ## 9. Afterwards
 
-See https://hub.docker.com/r/tryretool/backend/tags for the latest versions of Retool.
+See https://docs.retool.com/releases/stable for the latest versions of Retool.
 
 Upgrade Retool by bumping `retool_image_tag` in `overrides.auto.tfvars` and
 applying:
