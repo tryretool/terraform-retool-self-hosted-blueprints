@@ -12,7 +12,8 @@ Example: scripts/update-example-versions.sh 0.4"
 NEW_VERSION="${1:?$USAGE}"
 EXAMPLES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/examples"
 
-find "$EXAMPLES_DIR" -type f -name '*.tf' | while IFS= read -r file; do
+git -C "$EXAMPLES_DIR" ls-files -z -- '*.tf' | while IFS= read -r -d '' file; do
+  file="$EXAMPLES_DIR/$file"
   tmp="$(mktemp)"
   awk -v new_version="$NEW_VERSION" '
     BEGIN { in_module = 0; is_retool = 0 }
