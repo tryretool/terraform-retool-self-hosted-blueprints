@@ -103,7 +103,7 @@ resource "aws_acm_certificate" "cert" {
     }
 
     precondition {
-      condition     = !(var.private_hosted_zone && local.create_certificate)
+      condition     = !(var.create_hosted_zone && var.private_hosted_zone && local.create_certificate)
       error_message = "aws-user-ingress cannot validate a public ACM certificate for ${var.domain_name} in a private hosted zone. Supply acm_certificate_arn to attach an existing certificate, or set enable_https_listener = false."
     }
   }

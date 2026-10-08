@@ -143,6 +143,10 @@ variable "private_hosted_zone" {
     When create_hosted_zone is true, create a private (VPC-associated) Route53
     zone instead of a public one. Ignored when create_hosted_zone is false.
 
+    This is a create-time attribute: changing it (while create_hosted_zone is
+    true) replaces the hosted zone, so existing deployments switching an
+    existing zone between public and private get a new zone with a new zone ID.
+
     A private hosted zone cannot satisfy a public ACM DNS validation, so this
     cannot be combined with a certificate minted by this module. Supply
     acm_certificate_arn (an existing certificate) or set
