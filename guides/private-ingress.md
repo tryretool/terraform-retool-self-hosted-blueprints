@@ -39,8 +39,7 @@ scope for the `aws-user-ingress` module.
 
 ```hcl
 module "user-ingress" {
-  source  = "tryretool/self-hosted-blueprints/retool//modules/aws-user-ingress"
-  version = "~> 0.6"
+  ...
 
   domain_name           = "retool.internal.example.com"
   enable_https_listener = true
