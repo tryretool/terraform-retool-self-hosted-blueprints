@@ -1,24 +1,11 @@
 # GCP all-inclusive example (R2 beta)
 
 Same complete GCP stack as [`gcp_all_inclusive`](../gcp_all_inclusive), with the
-R2 features enabled: the **agent sandbox** (`enable_agent_sandbox`), **Remote
-Repository GCS storage** (`enable_rr_gcs`), and the unreleased **`r2` Helm chart
-branch**.
+R2 features enabled: the **agent sandbox** (`enable_agent_sandbox`) and **Remote
+Repository GCS storage** (`enable_rr_gcs`).
 
 See the [repository README](../../README.md) for general prerequisites. This
 file covers what's specific to GCP and to the R2 beta.
-
-## Prerequisite: `helm-git`
-
-This example sets `retool_helm_chart_use_unpublished_branch = "r2"`, which pulls
-the Retool chart from git instead of the published repo. That requires the
-[`helm-git`](https://github.com/aslafy-z/helm-git) Helm plugin:
-
-```sh
-helm plugin install https://github.com/aslafy-z/helm-git
-```
-
-Without it, `terraform apply` fails when fetching the chart.
 
 ## Quick start
 

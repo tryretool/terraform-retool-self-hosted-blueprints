@@ -69,10 +69,15 @@ module "pg" {
   # GCP recommends using the Cloud SQL Auth Proxy sidecar for application connections.
   # The proxy handles TLS and IAM authentication automatically. Configure it with the
   # db_instance_connection_name output ("project:region:instance").
+  #
+  # allocated_ip_range pins the instance to the range the vpc module reserved.
+  # Without it Cloud SQL picks one itself, which is ambiguous in a project that
+  # already has another Private Service Access range.
   ip_configuration = {
-    ipv4_enabled    = false
-    ssl_mode        = "ENCRYPTED_ONLY"
-    private_network = var.vpc.network_id
+    ipv4_enabled       = false
+    ssl_mode           = "ENCRYPTED_ONLY"
+    private_network    = var.vpc.network_id
+    allocated_ip_range = var.vpc.psa_allocated_ip_range
   }
 
   backup_configuration = {
