@@ -12,7 +12,7 @@ name: Autoupdate
 #
 # 1. A GitHub App installed on this repository only, with repository
 #    permissions Contents: read & write and Pull requests: read & write.
-#    Its App ID and private key go in the AUTOUPDATE_APP_ID and
+#    Its client ID and private key go in the AUTOUPDATE_CLIENT_ID and
 #    AUTOUPDATE_APP_PRIVATE_KEY secrets.
 #
 #    The App is not a convenience. `main`'s ruleset requires the `validate`
@@ -87,7 +87,10 @@ jobs:
       - uses: actions/create-github-app-token@v3
         id: app-token
         with:
-          app-id: ${{ secrets.AUTOUPDATE_APP_ID }}
+          # client-id, not the deprecated app-id: the action warns on
+          # app-id, and the App's client ID (Iv1...) is what it wants. For a
+          # GitHub App these are two different numbers.
+          client-id: ${{ secrets.AUTOUPDATE_CLIENT_ID }}
           private-key: ${{ secrets.AUTOUPDATE_APP_PRIVATE_KEY }}
           # owner/repositories deliberately omitted: with both unset the token is
           # scoped to this repository alone, which is the tightest available.
