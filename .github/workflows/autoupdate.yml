@@ -12,8 +12,11 @@ name: Autoupdate
 #
 # 1. A GitHub App installed on this repository only, with repository
 #    permissions Contents: read & write and Pull requests: read & write.
-#    Its client ID and private key go in the AUTOUPDATE_CLIENT_ID and
-#    AUTOUPDATE_APP_PRIVATE_KEY secrets.
+#    Its client ID (an `autoupdater` environment variable, not a secret —
+#    client IDs are not sensitive) and private key (an `autoupdater`
+#    environment secret) live in that environment, which the job below
+#    declares so both resolve. The environment's branch policy allows
+#    protected branches only, matching the main-only cloud trusts below.
 #
 #    The App is not a convenience. `main`'s ruleset requires the `validate`
 #    status check, and GitHub deliberately does not start workflow runs for
@@ -82,15 +85,21 @@ jobs:
   autoupdate:
     name: autoupdate
     runs-on: ubuntu-latest
+    # The App credentials live in the `autoupdater` environment (client ID
+    # as a variable, private key as a secret), so the job must declare it
+    # for either to resolve. Environment secrets are also invisible to every
+    # other workflow in this repository, which is the point of scoping them.
+    environment: autoupdater
     timeout-minutes: 20
     steps:
       - uses: actions/create-github-app-token@v3
         id: app-token
         with:
-          # client-id, not the deprecated app-id: the action warns on
-          # app-id, and the App's client ID (Iv1...) is what it wants. For a
-          # GitHub App these are two different numbers.
-          client-id: ${{ secrets.AUTOUPDATE_CLIENT_ID }}
+          # client-id, not the deprecated app-id (the action warns on it).
+          # The App's client ID is a different number from its App ID, and
+          # not sensitive, so it is an environment variable: vars., not
+          # secrets.
+          client-id: ${{ vars.AUTOUPDATE_CLIENT_ID }}
           private-key: ${{ secrets.AUTOUPDATE_APP_PRIVATE_KEY }}
           # owner/repositories deliberately omitted: with both unset the token is
           # scoped to this repository alone, which is the tightest available.
