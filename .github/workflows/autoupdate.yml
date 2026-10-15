@@ -48,6 +48,12 @@ name: Autoupdate
 # just does not succeed, with no error naming the subject.
 
 on:
+  # TEMPORARY registration shim (throwaway branch only, never for
+  # ra/autoupdater): a workflow file that lives only on a non-default branch
+  # is invisible to workflow_dispatch until it has had a run, so fire once on
+  # push to this branch to register it. Revert this hunk after the first run.
+  push:
+    branches: [ra/autoupdate-gha-test]
   workflow_dispatch:
   schedule:
     # UTC. Three things to know before debugging a missing run:
