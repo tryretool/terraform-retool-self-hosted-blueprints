@@ -115,6 +115,30 @@ jobs:
         with:
           enable-cache: true
 
+      # TEMPORARY, rehearsal branch only: print this run's OIDC token claims
+      # (iss/aud/sub) so a trust-policy rejection can be diagnosed from the
+      # log. Delete before merging anything from this branch.
+      - name: Dump OIDC token claims
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64, json, os, urllib.request
+          url = (os.environ["ACTIONS_ID_TOKEN_REQUEST_URL"]
+                 + "&audience=sts.amazonaws.com")
+          auth = ("Authorization",
+                  "bearer " + os.environ["ACTIONS_ID_TOKEN_REQUEST_TOKEN"])
+          tok = json.load(
+              urllib.request.urlopen(
+                  urllib.request.Request(url, headers=dict([auth]))
+              )
+          )["value"]
+          part = tok.split(".")[1]
+          part += "=" * (-len(part) % 4)
+          claims = json.loads(base64.urlsafe_b64decode(part))
+          print(json.dumps({k: claims.get(k) for k in ("iss", "aud", "sub")},
+                             indent=2))
+          PY
+
       # Only the rds-postgres and eks-cluster components need AWS. The exported
       # environment credentials are picked up by boto3's default chain, so the
       # script must not be passed --aws-profile here.
