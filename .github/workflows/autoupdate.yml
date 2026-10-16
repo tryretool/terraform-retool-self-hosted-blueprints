@@ -15,8 +15,8 @@ name: Autoupdate
 #    Its client ID (an `autoupdater` environment variable, not a secret —
 #    client IDs are not sensitive) and private key (an `autoupdater`
 #    environment secret) live in that environment, which the job below
-#    declares so both resolve. The environment's branch policy allows
-#    protected branches only, matching the main-only cloud trusts below.
+#    declares so both resolve. Running in an environment also scopes this
+#    job's OIDC tokens; see the last paragraph below.
 #
 #    The App is not a convenience. `main`'s ruleset requires the `validate`
 #    status check, and GitHub deliberately does not start workflow runs for
@@ -43,12 +43,17 @@ name: Autoupdate
 #    registration needs */register/action, which Reader does not have, so an
 #    Owner has to do that once out of band.
 #
-# Both federated trusts are scoped to refs/heads/main, which covers `schedule`
-# (always the default branch) and a `workflow_dispatch` against main. Neither
-# AWS nor Azure supports wildcards here, so dispatching this from a feature
-# branch will fail to authenticate until that branch's exact subject is added as
-# a second trust entry. Azure fails *silently* in that case — the token exchange
-# just does not succeed, with no error naming the subject.
+# Both federated trusts are scoped to the environment-scoped subject
+# repo:tryretool/terraform-retool-self-hosted-blueprints:environment:autoupdater:
+# a job that declares a GitHub environment mints its OIDC token with that
+# `sub` claim instead of the ref form, and this job declares the environment
+# in every event — `schedule` (always the default branch), a
+# `workflow_dispatch` against main, and the rehearsal branch alike. Which
+# branches may run the job at all is then gated by the environment's branch
+# policy — main, plus temporarily the ra/autoupdate-gha-test rehearsal branch;
+# remove the rehearsal branch from the branch policy once this PR merges.
+# Azure fails *silently* on an untrusted subject — the token exchange just
+# does not succeed, with no error naming the subject.
 
 on:
   workflow_dispatch:
