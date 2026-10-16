@@ -148,6 +148,24 @@ locals {
     local.pod_scheduling,
     local.agent_sandbox_enabled ? { rr = { agentSandbox = local.pod_scheduling } } : {},
   ))] : []
+
+  # Self-hosted-blueprints release this module ships as, stamped by
+  # `make release-prep`.
+  blueprints_version = trimspace(file("${path.module}/BLUEPRINTS_VERSION"))
+
+  # Deployment template identity reported by the Retool Helm chart via the
+  # DEPLOYMENT_TEMPLATE_TYPE env var, e.g. "blueprint-aws-eks-helm/0.5.3".
+  # Listed last in the Helm values below so it cannot be overridden or drifted
+  # via other values.
+  deployment_template_type = (
+    var.retool_services != null && var.retool_services.deployment_template_type != null
+    ? "blueprint-${var.retool_services.deployment_template_type}-helm/${local.blueprints_version}"
+    : null
+  )
+
+  deployment_template_values = local.deployment_template_type != null ? [yamlencode({
+    deploymentTemplateType = local.deployment_template_type
+  })] : []
 }
 
 resource "helm_release" "retool" {
@@ -173,6 +191,7 @@ resource "helm_release" "retool" {
     local.user_ingress_values,
     local.pod_scheduling_values,
     var.retool_helm_extra_values,
+    local.deployment_template_values,
   )
 
   lifecycle {

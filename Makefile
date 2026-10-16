@@ -132,7 +132,9 @@ release-prep: ## Prepare a release commit (version bumps + changelog regen). Req
 		target_version=$$($(MAKE) version-next BUMP=${BUMP}); \
 	  echo "Preparing $$target_version"; \
 	  $(MAKE) update-example-versions VERSION=$$target_version; \
-	  git add examples; \
+		git add examples; \
+		printf '%s\n' "$${target_version#v}" > modules/retool-helm/BLUEPRINTS_VERSION; \
+		git add modules/retool-helm/BLUEPRINTS_VERSION; \
 	  $(MAKE) changelog-sync VERSION=$$target_version; \
 		git add CHANGELOG.md; \
 		git commit -m "chore(release): $$target_version"; \

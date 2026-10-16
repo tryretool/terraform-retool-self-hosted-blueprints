@@ -22,6 +22,7 @@ locals {
       "RR_DEFAULT_S3_SECRET_ACCESS_KEY",
     ]
     secret_store_backend_type = "secretsManager"
+    deployment_template_type  = "aws-eks"
     eso_role_arn              = aws_iam_role.eso.arn
   }
 }
@@ -109,6 +110,11 @@ output "rr_bucket_k8s_secret_name" {
 output "secret_store_backend_type" {
   description = "ESO secret store backend type identifier for use in Retool Helm values."
   value       = local.outputs.secret_store_backend_type
+}
+
+output "deployment_template_type" {
+  description = "Cloud-specific token (\"aws-eks\") identifying this blueprint's flavor. Pass to retool-helm (via retool_services) to report the deployment template type via DEPLOYMENT_TEMPLATE_TYPE."
+  value       = local.outputs.deployment_template_type
 }
 
 output "outputs" {

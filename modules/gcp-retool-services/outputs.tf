@@ -18,6 +18,7 @@ locals {
     rr_bucket_env_keys               = ["RR_DEFAULT_GCS_BUCKET", "RR_DEFAULT_GCS_CREDENTIALS", "RR_BLOB_STORAGE_PROVIDER"]
     secret_store_name                = local.secret_store_name
     secret_store_backend_type        = "gcpSecretsManager"
+    deployment_template_type         = "gcp-gke"
   }
 }
 
@@ -104,6 +105,11 @@ output "secret_store_name" {
 output "secret_store_backend_type" {
   description = "ESO secret store backend type identifier for use in Retool Helm values."
   value       = local.outputs.secret_store_backend_type
+}
+
+output "deployment_template_type" {
+  description = "Cloud-specific token (\"gcp-gke\") identifying this blueprint's flavor. Pass to retool-helm (via retool_services) to report the deployment template type via DEPLOYMENT_TEMPLATE_TYPE."
+  value       = local.outputs.deployment_template_type
 }
 
 output "outputs" {
