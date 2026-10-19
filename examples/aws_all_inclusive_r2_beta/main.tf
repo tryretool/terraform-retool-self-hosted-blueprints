@@ -63,12 +63,15 @@ module "retool" {
   version = "~> 0.5"
 
   retool_helm_name          = "retool"
-  retool_helm_chart_version = "6.11.15"
+  retool_helm_chart_version = "6.13.0"
 
   db              = module.db-main.outputs
   retool_services = module.retool-services.outputs
   domain_name     = local.domain_name
   https_enabled   = local.enable_user_ingress_https
+
+  # Serve published apps at <app>.apps.<domain_name>. Needs Retool 4.78.0 or later.
+  enable_apps_domain = true
 
   retool_helm_extra_values = [yamlencode({
     image = {
@@ -87,6 +90,7 @@ module "user-ingress" {
   version = "~> 0.5"
 
   domain_name           = local.domain_name
+  enable_apps_domain    = true
   enable_https_listener = local.enable_user_ingress_https
 
   # Place the TargetGroupBinding in the same namespace as the Retool Service.

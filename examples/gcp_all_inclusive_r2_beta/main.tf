@@ -66,10 +66,11 @@ module "user-ingress" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/gcp-user-ingress"
   version = "~> 0.5"
 
-  prefix      = local.prefix
-  project_id  = local.project_id
-  region      = local.region
-  domain_name = local.domain_name
+  prefix             = local.prefix
+  project_id         = local.project_id
+  region             = local.region
+  domain_name        = local.domain_name
+  enable_apps_domain = true
 
   retool_services = module.retool-services.outputs
 
@@ -81,12 +82,15 @@ module "retool" {
   version = "~> 0.5"
 
   retool_helm_name          = "retool"
-  retool_helm_chart_version = "6.11.15"
+  retool_helm_chart_version = "6.13.0"
 
   db              = module.db-main.outputs
   retool_services = module.retool-services.outputs
   user_ingress    = module.user-ingress.outputs
   domain_name     = local.domain_name
+
+  # Serve published apps at <app>.apps.<domain_name>. Needs Retool 4.78.0 or later.
+  enable_apps_domain = true
 
   retool_helm_extra_values = [
     yamlencode({
