@@ -125,6 +125,22 @@ locals {
     }
   })] : []
 
+  apps_domain_values = var.enable_apps_domain && var.domain_name != null ? [yamlencode({
+    rr = merge(
+      {
+        appServingLayer = {
+          enabled = true
+          domain  = "apps.${var.domain_name}"
+        }
+      },
+      var.enable_wildcard_sandboxes ? {
+        agentSandbox = {
+          wildcardSandboxes = true
+        }
+      } : {},
+    )
+  })] : []
+
   # Namespace precedence: explicit var.namespace, then the namespace exported by
   # retool-services (so the app lands beside its ExternalSecrets), then "default".
   namespace = coalesce(var.namespace, try(var.retool_services.retool_namespace, null), "default")
@@ -168,6 +184,7 @@ resource "helm_release" "retool" {
     local.rr_bucket_values,
     local.domain_values,
     local.agent_sandbox_values,
+    local.apps_domain_values,
     local.workflows_values,
     local.dbconnector_values,
     local.user_ingress_values,
@@ -180,5 +197,21 @@ resource "helm_release" "retool" {
     # would otherwise destroy/recreate the release on upgrade. Ignore post-create
     # changes so we only set the longer wait window on initial install.
     ignore_changes = [timeout]
+
+    # The serving layer reads published apps from the git server's bucket, and this
+    # module only turns the git server on alongside the agent sandbox.
+    precondition {
+      condition = !var.enable_apps_domain || (
+        var.domain_name != null
+        && local.agent_sandbox_enabled
+        && try(var.retool_services.rr_bucket_k8s_secret_name, null) != null
+      )
+      error_message = "enable_apps_domain needs domain_name, plus retool_services with agent_sandbox_enabled = true and rr_bucket_k8s_secret_name set (the chart's app serving layer requires the R² git server)."
+    }
+
+    precondition {
+      condition     = !var.enable_wildcard_sandboxes || var.enable_apps_domain
+      error_message = "enable_wildcard_sandboxes serves editor sandboxes under the apps domain, so it needs enable_apps_domain = true."
+    }
   }
 }

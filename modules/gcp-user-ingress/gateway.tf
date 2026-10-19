@@ -132,3 +132,87 @@ resource "helm_release" "routes" {
 
   depends_on = [helm_release.gateway]
 }
+
+# R² app hostnames. external-dns publishes both wildcards from these routes, which
+# is needed because the *.<domain_name> record stops covering them once DNS
+# authorization records exist under apps.<domain_name>. Gateway API prefers the
+# most specific hostname, so these win over the chart's *.<domain_name> route.
+locals {
+  apps_backends = [
+    {
+      name        = "retool-app-serving-layer"
+      hostname    = "*.${local.apps_domain}"
+      port        = 3010
+      health_path = "/api/checkHealth"
+    },
+    {
+      name        = "retool-agent-sandbox-proxy"
+      hostname    = "*.sandboxes.${local.apps_domain}"
+      port        = 3019
+      health_path = "/livez"
+    },
+  ]
+}
+
+resource "helm_release" "apps_routes" {
+  count = var.enable_apps_domain ? 1 : 0
+
+  name      = "${var.prefix}-apps-routes"
+  namespace = local.retool_namespace
+  chart     = "${path.module}/chart"
+
+  values = [yamlencode({
+    manifests = flatten([
+      for backend in local.apps_backends : [
+        {
+          apiVersion = "gateway.networking.k8s.io/v1"
+          kind       = "HTTPRoute"
+          metadata = {
+            name = backend.name
+          }
+          spec = {
+            parentRefs = [{
+              name        = "retool"
+              sectionName = "https"
+            }]
+            hostnames = [backend.hostname]
+            rules = [{
+              backendRefs = [{
+                name = backend.name
+                port = backend.port
+              }]
+            }]
+          }
+        },
+        {
+          apiVersion = "networking.gke.io/v1"
+          kind       = "HealthCheckPolicy"
+          metadata = {
+            name = backend.name
+          }
+          spec = {
+            default = {
+              checkIntervalSec   = 15
+              healthyThreshold   = 1
+              unhealthyThreshold = 2
+              config = {
+                type = "HTTP"
+                httpHealthCheck = {
+                  requestPath = backend.health_path
+                  port        = backend.port
+                }
+              }
+            }
+            targetRef = {
+              group = ""
+              kind  = "Service"
+              name  = backend.name
+            }
+          }
+        },
+      ]
+    ])
+  })]
+
+  depends_on = [helm_release.gateway]
+}

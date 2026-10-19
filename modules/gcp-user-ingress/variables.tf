@@ -26,6 +26,12 @@ variable "retool_services" {
   description = "Retool-services outputs (e.g. module.retool-services.outputs). The Gateway, HTTPRoute, HealthCheckPolicy and external-dns are all created in retool_namespace, beside the Retool Service. When null, falls back to \"<prefix>-retool\"."
 }
 
+variable "enable_apps_domain" {
+  type        = bool
+  default     = false
+  description = "Route R² app hostnames to Retool: *.apps.<domain_name> to the app serving layer (Service retool-app-serving-layer, port 3010) and *.sandboxes.apps.<domain_name> to the agent-sandbox proxy (retool-agent-sandbox-proxy, port 3019). Adds a second Google-managed certificate for both wildcards, with its own DNS authorizations and certificate map entries, plus HTTPRoutes and HealthCheckPolicies. Set enable_apps_domain on the retool-helm module too."
+}
+
 variable "enable_external_dns" {
   type        = bool
   default     = true

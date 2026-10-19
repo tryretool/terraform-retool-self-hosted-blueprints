@@ -68,3 +68,64 @@ resource "google_certificate_manager_certificate_map_entry" "wildcard" {
     replace_triggered_by = [google_certificate_manager_certificate.main]
   }
 }
+
+# R² app hostnames get their own DNS authorizations, certificate and map entries,
+# so turning them on or off never replaces the main certificate. A wildcard
+# certificate needs an authorization for the domain under the wildcard.
+locals {
+  apps_domain = "apps.${var.domain_name}"
+  apps_cert_domains = var.enable_apps_domain ? {
+    apps      = local.apps_domain
+    sandboxes = "sandboxes.${local.apps_domain}"
+  } : {}
+}
+
+resource "google_certificate_manager_dns_authorization" "apps" {
+  for_each   = local.apps_cert_domains
+  depends_on = [google_project_service.certificatemanager]
+
+  name        = "${var.prefix}-${each.key}-cert-auth"
+  description = "DNS authorization for the Retool *.${each.value} certificate"
+  domain      = each.value
+  project     = var.project_id
+  labels      = local.all_labels
+}
+
+resource "google_dns_record_set" "apps_cert_validation" {
+  for_each = local.apps_cert_domains
+
+  name         = google_certificate_manager_dns_authorization.apps[each.key].dns_resource_record[0].name
+  type         = google_certificate_manager_dns_authorization.apps[each.key].dns_resource_record[0].type
+  ttl          = 60
+  managed_zone = google_dns_managed_zone.main.name
+  project      = var.project_id
+  rrdatas      = [google_certificate_manager_dns_authorization.apps[each.key].dns_resource_record[0].data]
+}
+
+resource "google_certificate_manager_certificate" "apps" {
+  count = var.enable_apps_domain ? 1 : 0
+
+  name        = "${var.prefix}-apps-cert"
+  description = "Google-managed certificate for Retool R² app and sandbox hostnames"
+  project     = var.project_id
+  labels      = local.all_labels
+
+  managed {
+    domains            = [for domain in values(local.apps_cert_domains) : "*.${domain}"]
+    dns_authorizations = [for auth in values(google_certificate_manager_dns_authorization.apps) : auth.id]
+  }
+}
+
+resource "google_certificate_manager_certificate_map_entry" "apps" {
+  for_each = local.apps_cert_domains
+
+  name         = "${var.prefix}-cert-map-entry-${each.key}"
+  map          = google_certificate_manager_certificate_map.main.name
+  certificates = [google_certificate_manager_certificate.apps[0].id]
+  hostname     = "*.${each.value}"
+  project      = var.project_id
+  labels       = local.all_labels
+  lifecycle {
+    replace_triggered_by = [google_certificate_manager_certificate.apps]
+  }
+}

@@ -123,3 +123,28 @@ resource "kubectl_manifest" "certificate" {
 
   depends_on = [kubectl_manifest.issuer]
 }
+
+# Separate from the main certificate so turning the apps domain on or off leaves
+# the main TLS secret alone.
+resource "kubectl_manifest" "apps_certificate" {
+  count = var.enable_https && var.enable_apps_domain ? 1 : 0
+
+  yaml_body = yamlencode({
+    apiVersion = "cert-manager.io/v1"
+    kind       = "Certificate"
+    metadata = {
+      name      = "${var.prefix}-apps-tls"
+      namespace = local.retool_namespace
+    }
+    spec = {
+      secretName = "${var.prefix}-apps-tls"
+      issuerRef = {
+        name = local.issuer_name
+        kind = local.issuer_kind
+      }
+      dnsNames = [for ingress in values(local.apps_ingresses) : ingress.host]
+    }
+  })
+
+  depends_on = [kubectl_manifest.issuer]
+}

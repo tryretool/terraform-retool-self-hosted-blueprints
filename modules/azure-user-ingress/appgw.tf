@@ -217,3 +217,72 @@ resource "helm_release" "agic" {
     azurerm_role_assignment.agic_subnet_network_contributor,
   ]
 }
+
+# ---------- R² app hostnames ----------
+# One Ingress per hostname instead of the chart's apps Ingress: AGIC gives every
+# listener in an Ingress the same rule-priority, and Application Gateway rejects
+# duplicate priorities. Both sit below the main Ingress's 1000, and sandboxes go
+# first because *.apps also matches sandbox hosts. The probe port is pinned
+# because AGIC otherwise borrows the main backend's readiness probe on port 3000.
+
+locals {
+  apps_domain = "apps.${var.domain_name}"
+  apps_ingresses = var.enable_apps_domain ? {
+    apps = {
+      host        = "*.${local.apps_domain}"
+      service     = "retool-app-serving-layer"
+      port        = 3010
+      health_path = "/api/checkHealth"
+      priority    = "900"
+    }
+    sandboxes = {
+      host        = "*.sandboxes.${local.apps_domain}"
+      service     = "retool-agent-sandbox-proxy"
+      port        = 3019
+      health_path = "/livez"
+      priority    = "800"
+    }
+  } : {}
+}
+
+resource "kubectl_manifest" "apps_ingress" {
+  for_each = local.apps_ingresses
+
+  yaml_body = yamlencode({
+    apiVersion = "networking.k8s.io/v1"
+    kind       = "Ingress"
+    metadata = {
+      name      = "${var.prefix}-${each.key}"
+      namespace = local.retool_namespace
+      annotations = {
+        "appgw.ingress.kubernetes.io/health-probe-path"     = each.value.health_path
+        "appgw.ingress.kubernetes.io/health-probe-port"     = tostring(each.value.port)
+        "appgw.ingress.kubernetes.io/health-probe-timeout"  = "10"
+        "appgw.ingress.kubernetes.io/health-probe-interval" = "15"
+        "appgw.ingress.kubernetes.io/rule-priority"         = each.value.priority
+      }
+    }
+    spec = {
+      ingressClassName = local.ingress_class_name
+      rules = [{
+        host = each.value.host
+        http = {
+          paths = [{
+            path     = "/"
+            pathType = "Prefix"
+            backend = {
+              service = {
+                name = each.value.service
+                port = { number = each.value.port }
+              }
+            }
+          }]
+        }
+      }]
+      tls = var.enable_https ? [{
+        secretName = "${var.prefix}-apps-tls"
+        hosts      = [each.value.host]
+      }] : []
+    }
+  })
+}

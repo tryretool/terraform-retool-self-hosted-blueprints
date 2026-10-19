@@ -46,6 +46,27 @@ locals {
     ? coalesce(var.acm_certificate_arn, one(aws_acm_certificate.cert[*].arn))
     : null
   )
+
+  apps_domain = "apps.${var.domain_name}"
+
+  # ALB host-header wildcards match across dots, so *.apps also matches sandbox
+  # hosts; the sandbox rule needs the lower (earlier) priority.
+  apps_backends = var.enable_apps_domain ? {
+    app-serving-layer = {
+      host        = "*.${local.apps_domain}"
+      port        = 3010
+      health_path = "/api/checkHealth"
+      priority    = 20
+      tg_suffix   = "apps"
+    }
+    agent-sandbox-proxy = {
+      host        = "*.sandboxes.${local.apps_domain}"
+      port        = 3019
+      health_path = "/livez"
+      priority    = 10
+      tg_suffix   = "sbx"
+    }
+  } : {}
 }
 
 resource "aws_route53_zone" "hosted_zone" {
@@ -132,6 +153,52 @@ resource "aws_acm_certificate_validation" "cert_valid_status" {
   certificate_arn = aws_acm_certificate.cert[0].arn
 }
 
+# A separate certificate, attached as an extra listener certificate, so turning
+# the apps domain on or off never replaces the certificate the listener serves.
+resource "aws_acm_certificate" "apps" {
+  count = var.enable_apps_domain ? 1 : 0
+
+  domain_name               = "*.${local.apps_domain}"
+  subject_alternative_names = ["*.sandboxes.${local.apps_domain}"]
+
+  validation_method = "DNS"
+
+  lifecycle {
+    precondition {
+      condition     = var.enable_https_listener
+      error_message = "enable_apps_domain needs enable_https_listener = true: the apps hostnames are served on the HTTPS listener."
+    }
+
+    precondition {
+      condition     = local.manage_dns && !(var.create_hosted_zone && var.private_hosted_zone)
+      error_message = "enable_apps_domain mints a public ACM certificate for *.${local.apps_domain}, which needs a public hosted zone for ${var.domain_name}: leave create_hosted_zone = true or set hosted_zone_id."
+    }
+  }
+}
+
+resource "aws_route53_record" "apps_cert_validation" {
+  for_each = var.enable_apps_domain ? {
+    for dvo in aws_acm_certificate.apps[0].domain_validation_options : dvo.domain_name => {
+      name   = dvo.resource_record_name
+      type   = dvo.resource_record_type
+      record = dvo.resource_record_value
+    }
+  } : {}
+
+  allow_overwrite = true
+
+  zone_id = local.zone_id
+  name    = each.value.name
+  type    = each.value.type
+  ttl     = 60
+  records = [each.value.record]
+}
+
+resource "aws_acm_certificate_validation" "apps" {
+  count           = var.enable_apps_domain ? 1 : 0
+  certificate_arn = aws_acm_certificate.apps[0].arn
+}
+
 resource "aws_security_group" "alb" {
   name        = "${replace(var.domain_name, ".", "-")}-alb"
   description = "Ingress for user-facing application load balancer"
@@ -172,6 +239,17 @@ resource "aws_vpc_security_group_ingress_rule" "retool_from_alb" {
   to_port                      = var.retool_service_port
 }
 
+resource "aws_vpc_security_group_ingress_rule" "apps_from_alb" {
+  for_each = local.apps_backends
+
+  security_group_id            = var.eks.node_security_group_id
+  description                  = "Retool ${each.key} from user-managed ALB"
+  referenced_security_group_id = aws_security_group.alb.id
+  ip_protocol                  = "tcp"
+  from_port                    = each.value.port
+  to_port                      = each.value.port
+}
+
 resource "aws_lb" "alb" {
   name               = local.alb_name
   internal           = var.alb_internal
@@ -202,6 +280,28 @@ resource "aws_lb_target_group" "alb_target_group" {
   health_check {
     enabled             = true
     path                = "/api/checkHealth"
+    port                = "traffic-port"
+    protocol            = "HTTP"
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+    timeout             = 5
+    interval            = 30
+    matcher             = "200"
+  }
+}
+
+resource "aws_lb_target_group" "apps" {
+  for_each = local.apps_backends
+
+  name        = length(local.name_slug) <= 27 ? "${local.name_slug}-${each.value.tg_suffix}" : "${substr(local.name_slug, 0, 27)}-${each.value.tg_suffix}"
+  port        = each.value.port
+  protocol    = "HTTP"
+  target_type = "ip"
+  vpc_id      = var.vpc.vpc_id
+
+  health_check {
+    enabled             = true
+    path                = each.value.health_path
     port                = "traffic-port"
     protocol            = "HTTP"
     healthy_threshold   = 2
@@ -254,6 +354,34 @@ resource "aws_lb_listener" "https" {
   }
 
   depends_on = [aws_acm_certificate_validation.cert_valid_status]
+}
+
+resource "aws_lb_listener_certificate" "apps" {
+  count = var.enable_apps_domain ? 1 : 0
+
+  listener_arn    = one(aws_lb_listener.https[*].arn)
+  certificate_arn = aws_acm_certificate_validation.apps[0].certificate_arn
+}
+
+# No authenticate-oidc here even when alb_authenticate_oidc is set: every app and
+# sandbox gets its own hostname, and the IdP would need a redirect URI for each.
+# These hostnames rely on Retool's own authentication instead.
+resource "aws_lb_listener_rule" "apps" {
+  for_each = local.apps_backends
+
+  listener_arn = one(aws_lb_listener.https[*].arn)
+  priority     = each.value.priority
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.apps[each.key].arn
+  }
+
+  condition {
+    host_header {
+      values = [each.value.host]
+    }
+  }
 }
 
 resource "aws_lb_listener" "http_redirect" {
@@ -314,6 +442,33 @@ resource "kubectl_manifest" "target_group_binding" {
   }
 }
 
+resource "kubectl_manifest" "apps_target_group_binding" {
+  for_each = local.apps_backends
+
+  yaml_body = yamlencode({
+    apiVersion = "elbv2.k8s.aws/v1beta1"
+    kind       = "TargetGroupBinding"
+    metadata = {
+      name      = aws_lb_target_group.apps[each.key].name
+      namespace = local.retool_service_namespace
+    }
+    spec = {
+      targetGroupARN = aws_lb_target_group.apps[each.key].arn
+      targetType     = "ip"
+      serviceRef = {
+        name = "${var.retool_service_name}-${each.key}"
+        port = each.value.port
+      }
+    }
+  })
+
+  lifecycle {
+    replace_triggered_by = [
+      aws_lb_target_group.apps[each.key],
+    ]
+  }
+}
+
 resource "aws_route53_record" "alb_alias" {
   count = local.manage_dns ? 1 : 0
 
@@ -333,6 +488,22 @@ resource "aws_route53_record" "alb_alias_wildcard" {
 
   zone_id = local.zone_id
   name    = "*.${var.domain_name}"
+  type    = "A"
+
+  alias {
+    name                   = aws_lb.alb.dns_name
+    zone_id                = aws_lb.alb.zone_id
+    evaluate_target_health = true
+  }
+}
+
+# The ACM validation records under apps.<domain_name> stop the *.<domain_name>
+# record from answering for hosts below it, so these need their own records.
+resource "aws_route53_record" "apps_alias" {
+  for_each = local.manage_dns ? local.apps_backends : {}
+
+  zone_id = local.zone_id
+  name    = each.value.host
   type    = "A"
 
   alias {
