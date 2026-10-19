@@ -77,3 +77,9 @@ variable "pod_tolerations" {
   default     = []
   description = "Tolerations applied to every pod this module schedules. A list of Kubernetes toleration objects. Empty = unset."
 }
+
+variable "pod_labels" {
+  type        = map(string)
+  default     = {}
+  description = "Labels added to every pod this module schedules, on top of each chart's own labels."
+}

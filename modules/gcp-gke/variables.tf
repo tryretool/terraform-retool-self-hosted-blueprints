@@ -215,3 +215,9 @@ variable "pod_tolerations" {
   default     = []
   description = "Tolerations applied to every pod the cluster-wide Helm charts here create. Empty keeps each chart's own defaults."
 }
+
+variable "pod_labels" {
+  type        = map(string)
+  default     = {}
+  description = "Labels added to every pod the cluster-wide Helm charts here create, on top of each chart's own labels."
+}

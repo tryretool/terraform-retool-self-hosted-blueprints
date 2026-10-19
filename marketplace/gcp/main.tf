@@ -33,6 +33,12 @@ locals {
       var.goog_cm_deployment_name != "" ? lower(var.goog_cm_deployment_name) : "retool"
     )
   )
+
+  # mpdev only injects goog-partner-solution into the Google providers'
+  # default_labels, so Kubernetes pods need it set explicitly.
+  partner_pod_labels = {
+    "goog-partner-solution" = "isol_plb32_0014m00002jo5j3qaj_eyvrrfu7wae6xhfjdrjk3rkaadnz3fio"
+  }
 }
 
 module "vpc" {
@@ -64,6 +70,8 @@ module "gke" {
     image_repository = var.reloader_image_repo
     image_tag        = var.reloader_image_tag
   }
+
+  pod_labels = local.partner_pod_labels
 
   depends_on = [module.vpc]
 }
@@ -113,6 +121,8 @@ module "user-ingress" {
     image_repository = var.external_dns_image_repo
     image_tag        = var.external_dns_image_tag
   }
+
+  pod_labels = local.partner_pod_labels
 
   depends_on = [module.gke, module.retool-services]
 }

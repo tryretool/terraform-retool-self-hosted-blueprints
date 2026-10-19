@@ -12,6 +12,7 @@ module "retool" {
   domain_name     = var.domain_name
 
   retool_helm_extra_values = [yamlencode({
+    podLabels = local.partner_pod_labels
     image = {
       repository = var.image_repo
       tag        = var.image_tag
