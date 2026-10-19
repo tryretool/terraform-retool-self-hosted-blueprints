@@ -11,7 +11,7 @@ locals {
   default_access_entries = {}
 
   access_entries = merge(local.default_access_entries, var.additional_access_entries)
-  all_tags       = merge(var.default_tags, var.tags)
+  all_tags       = merge(var.default_tags, var.tags, { "aws-apn-id" = "pc:eb361b0frzt279bzrk1zwdk0w" })
 
   cluster_encryption_kms_key_arn = coalesce(
     var.cluster_encryption_kms_key_arn,
