@@ -175,6 +175,7 @@ resource "azurerm_key_vault" "main" {
   sku_name                   = "standard"
   soft_delete_retention_days = 7
   purge_protection_enabled   = false
+  rbac_authorization_enabled = false
   tags                       = var.tags
 
   # Grant the Terraform identity full secret management.

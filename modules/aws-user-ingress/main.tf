@@ -1,4 +1,10 @@
 locals {
+  all_tags = merge(var.default_tags, var.tags, { "aws-apn-id" = "pc:eb361b0frzt279bzrk1zwdk0w" })
+
+  # Namespace of the Retool Service the TargetGroupBinding registers, sourced
+  # from the retool-services outputs (falls back to "default").
+  retool_service_namespace = coalesce(try(var.retool_services.retool_namespace, null), "default")
+
   name_slug = replace(var.domain_name, ".", "-")
 
   # Application load balancer names: max 32 characters; alphanumeric and hyphens only.
@@ -11,6 +17,21 @@ locals {
   # alone: it gates resource counts, and the id of a zone we are about to create
   # is not known until apply.
   manage_dns = var.create_hosted_zone || var.hosted_zone_id != null
+
+  # Subnets the ALB is placed in. Internal ALBs go in the private subnets;
+  # internet-facing ALBs in the public ones.
+  alb_subnet_ids = (
+    var.alb_internal
+    ? coalesce(var.vpc.private_subnet_ids, [])
+    : coalesce(var.vpc.public_subnet_ids, [])
+  )
+
+  # CIDRs allowed to reach the ALB. Default to the VPC CIDR for internal ALBs
+  # (safe-by-default) and 0.0.0.0/0 for internet-facing ALBs (prior behavior).
+  alb_ingress_cidr_blocks = coalesce(
+    var.alb_ingress_cidr_blocks,
+    var.alb_internal ? compact([try(var.vpc.vpc_cidr_block, null)]) : ["0.0.0.0/0"],
+  )
 
   # The zone this module writes records into: the one it created, or an existing
   # one the caller nominated. Null means DNS is managed entirely outside this
@@ -33,6 +54,18 @@ resource "aws_route53_zone" "hosted_zone" {
   count = var.create_hosted_zone ? 1 : 0
 
   name = var.domain_name
+
+  tags = local.all_tags
+
+  # A zone with no vpc block is public. A private zone needs exactly one VPC
+  # association at creation.
+  dynamic "vpc" {
+    for_each = var.private_hosted_zone ? [var.vpc.vpc_id] : []
+
+    content {
+      vpc_id = vpc.value
+    }
+  }
 }
 
 # The hosted zone and the ALB alias records below became conditional in v0.4.
@@ -67,12 +100,17 @@ resource "aws_acm_certificate" "cert" {
 
   validation_method = "DNS"
 
-  lifecycle {
-    create_before_destroy = true
+  tags = local.all_tags
 
+  lifecycle {
     precondition {
       condition     = local.manage_dns
       error_message = "aws-user-ingress cannot validate a certificate for ${var.domain_name} without a hosted zone. Either leave create_hosted_zone = true, set hosted_zone_id to an existing zone, or supply acm_certificate_arn to bring your own certificate."
+    }
+
+    precondition {
+      condition     = !(var.create_hosted_zone && var.private_hosted_zone && local.create_certificate)
+      error_message = "aws-user-ingress cannot validate a public ACM certificate for ${var.domain_name} in a private hosted zone. Supply acm_certificate_arn to attach an existing certificate, or set enable_https_listener = false."
     }
   }
 }
@@ -106,19 +144,21 @@ resource "aws_security_group" "alb" {
   vpc_id      = var.vpc.vpc_id
 
   ingress {
-    description = "HTTPS from internet"
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    description      = "HTTPS from allowed networks"
+    from_port        = 443
+    to_port          = 443
+    protocol         = "tcp"
+    cidr_blocks      = local.alb_ingress_cidr_blocks
+    ipv6_cidr_blocks = var.alb_ingress_ipv6_cidr_blocks
   }
 
   ingress {
-    description = "HTTP from internet"
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    description      = "HTTP from allowed networks"
+    from_port        = 80
+    to_port          = 80
+    protocol         = "tcp"
+    cidr_blocks      = local.alb_ingress_cidr_blocks
+    ipv6_cidr_blocks = var.alb_ingress_ipv6_cidr_blocks
   }
 
   egress {
@@ -127,6 +167,8 @@ resource "aws_security_group" "alb" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
+
+  tags = local.all_tags
 }
 
 resource "aws_vpc_security_group_ingress_rule" "retool_from_alb" {
@@ -136,13 +178,30 @@ resource "aws_vpc_security_group_ingress_rule" "retool_from_alb" {
   ip_protocol                  = "tcp"
   from_port                    = var.retool_service_port
   to_port                      = var.retool_service_port
+
+  tags = local.all_tags
 }
 
 resource "aws_lb" "alb" {
   name               = local.alb_name
+  internal           = var.alb_internal
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb.id]
-  subnets            = var.vpc.public_subnet_ids
+  subnets            = local.alb_subnet_ids
+
+  tags = local.all_tags
+
+  lifecycle {
+    precondition {
+      condition     = length(local.alb_subnet_ids) > 0
+      error_message = var.alb_internal ? "alb_internal = true requires vpc.private_subnet_ids with at least one subnet." : "An internet-facing ALB requires vpc.public_subnet_ids with at least one subnet."
+    }
+
+    precondition {
+      condition     = length(local.alb_ingress_cidr_blocks) > 0 || length(var.alb_ingress_ipv6_cidr_blocks) > 0
+      error_message = "The ALB would have no allowed ingress CIDRs. Set alb_ingress_cidr_blocks, or provide vpc.vpc_cidr_block when alb_internal = true."
+    }
+  }
 }
 
 resource "aws_lb_target_group" "alb_target_group" {
@@ -151,6 +210,8 @@ resource "aws_lb_target_group" "alb_target_group" {
   protocol    = "HTTP"
   target_type = "ip"
   vpc_id      = var.vpc.vpc_id
+
+  tags = local.all_tags
 
   health_check {
     enabled             = true
@@ -163,10 +224,6 @@ resource "aws_lb_target_group" "alb_target_group" {
     interval            = 30
     matcher             = "200"
   }
-
-  lifecycle {
-    create_before_destroy = true
-  }
 }
 
 resource "aws_lb_listener" "https" {
@@ -177,6 +234,8 @@ resource "aws_lb_listener" "https" {
   protocol          = "HTTPS"
   ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
   certificate_arn   = local.certificate_arn
+
+  tags = local.all_tags
 
   # Edge authentication, when configured: users must complete the OIDC flow
   # before any request reaches Retool. `order` matters — ALB evaluates actions in
@@ -220,6 +279,8 @@ resource "aws_lb_listener" "http_redirect" {
   port              = 80
   protocol          = "HTTP"
 
+  tags = local.all_tags
+
   default_action {
     type = "redirect"
 
@@ -240,6 +301,8 @@ resource "aws_lb_listener" "http_forward" {
   port              = 80
   protocol          = "HTTP"
 
+  tags = local.all_tags
+
   default_action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.alb_target_group.arn
@@ -252,7 +315,7 @@ resource "kubectl_manifest" "target_group_binding" {
     kind       = "TargetGroupBinding"
     metadata = {
       name      = local.tg_name
-      namespace = var.retool_service_namespace
+      namespace = local.retool_service_namespace
     }
     spec = {
       targetGroupARN = aws_lb_target_group.alb_target_group.arn

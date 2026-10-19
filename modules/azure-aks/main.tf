@@ -1,6 +1,8 @@
 # ---------- Log Analytics ----------
 
 resource "azurerm_log_analytics_workspace" "aks" {
+  count = local.byo_cluster ? 0 : 1
+
   name                = "${var.prefix}-logs"
   location            = var.location
   resource_group_name = var.resource_group_name
@@ -12,6 +14,8 @@ resource "azurerm_log_analytics_workspace" "aks" {
 # ---------- AKS Cluster ----------
 
 resource "azurerm_kubernetes_cluster" "main" {
+  count = local.byo_cluster ? 0 : 1
+
   name                = "${var.prefix}-aks"
   location            = var.location
   resource_group_name = var.resource_group_name
@@ -57,6 +61,12 @@ resource "azurerm_kubernetes_cluster" "main" {
   # System-assigned identity — AKS auto-manages the necessary role assignments
   # (e.g. Network Contributor) without requiring the deploying user to have
   # Microsoft.Authorization/roleAssignments/* permissions.
+  # Required from azurerm 5.0. "Manual" is the pre-5.0 behaviour: node pools are
+  # the ones declared here, not provisioned automatically by AKS.
+  node_provisioning_profile {
+    mode = "Manual"
+  }
+
   identity {
     type = "SystemAssigned"
   }
@@ -73,6 +83,6 @@ resource "azurerm_kubernetes_cluster" "main" {
   }
 
   oms_agent {
-    log_analytics_workspace_id = azurerm_log_analytics_workspace.aks.id
+    log_analytics_workspace_id = azurerm_log_analytics_workspace.aks[0].id
   }
 }

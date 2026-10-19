@@ -8,6 +8,9 @@ locals {
     acm_certificate_arn   = local.certificate_arn
     alb_id                = aws_lb.alb.id
     alb_dns_name          = aws_lb.alb.dns_name
+    alb_internal          = var.alb_internal
+    alb_scheme            = var.alb_internal ? "internal" : "internet-facing"
+    alb_subnet_ids        = local.alb_subnet_ids
     target_group_arn      = aws_lb_target_group.alb_target_group.arn
     alb_security_group_id = aws_security_group.alb.id
     https_listener_arn    = length(aws_lb_listener.https) > 0 ? aws_lb_listener.https[0].arn : null
@@ -52,6 +55,21 @@ output "alb_id" {
 output "alb_dns_name" {
   description = "DNS name of the application load balancer"
   value       = local.outputs.alb_dns_name
+}
+
+output "alb_internal" {
+  description = "Whether the ALB is internal (private subnets) rather than internet-facing (public subnets)"
+  value       = local.outputs.alb_internal
+}
+
+output "alb_scheme" {
+  description = "ALB scheme: \"internal\" or \"internet-facing\""
+  value       = local.outputs.alb_scheme
+}
+
+output "alb_subnet_ids" {
+  description = "Subnet IDs the ALB is placed in (private when alb_internal is true, public otherwise)"
+  value       = local.outputs.alb_subnet_ids
 }
 
 output "target_group_arn" {

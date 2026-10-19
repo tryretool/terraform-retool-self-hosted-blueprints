@@ -1,13 +1,14 @@
 locals {
   outputs = {
     ingress_mode        = "azure-agic"
-    ingress_class_name  = "azure-application-gateway"
-    cluster_issuer_name = var.enable_https ? "letsencrypt-prod" : null
+    ingress_class_name  = local.ingress_class_name
+    cluster_issuer_name = var.enable_https ? local.issuer_name : null
+    issuer_kind         = var.enable_https ? local.issuer_kind : null
     tls_secret_name     = var.enable_https ? "${var.prefix}-tls" : null
     zone_name_servers   = azurerm_dns_zone.main.name_servers
     zone_dns_name       = azurerm_dns_zone.main.name
-    public_ip_address   = azurerm_public_ip.appgw.ip_address
-    appgw_name          = azurerm_application_gateway.main.name
+    public_ip_address   = var.enable_agic ? azurerm_public_ip.appgw[0].ip_address : null
+    appgw_name          = var.enable_agic ? azurerm_application_gateway.main[0].name : null
   }
 }
 

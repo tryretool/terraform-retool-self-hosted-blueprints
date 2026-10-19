@@ -29,16 +29,18 @@ locals {
         hostnames = local.ingress_hosts
         parentRefs = [{
           name        = var.user_ingress.gateway_name
-          namespace   = "default"
+          namespace   = local.namespace
           sectionName = var.user_ingress.gateway_section_name
         }]
       }
     })] : [],
 
-    # "azure-agic": render a k8s Ingress for AGIC to reconcile. The
-    # cert-manager.io/cluster-issuer annotation and TLS block are only added
-    # when the user-ingress module provisioned a ClusterIssuer + main TLS
-    # secret (HTTPS path).
+    # "azure-agic": render a k8s Ingress for AGIC to reconcile. The cert-manager
+    # annotation and TLS block are only added when the user-ingress module
+    # provisioned an issuer + main TLS secret (HTTPS path). A namespaced Issuer
+    # takes cert-manager.io/issuer; a ClusterIssuer takes
+    # cert-manager.io/cluster-issuer, and naming the wrong one leaves the
+    # certificate unissued.
     var.user_ingress.ingress_mode == "azure-agic" ? [yamlencode({
       ingress = {
         enabled          = true
@@ -58,7 +60,9 @@ locals {
             "appgw.ingress.kubernetes.io/rule-priority" = "1000"
           },
           var.user_ingress.cluster_issuer_name != null ? {
-            "cert-manager.io/cluster-issuer" = var.user_ingress.cluster_issuer_name
+            (try(var.user_ingress.issuer_kind, null) == "Issuer"
+              ? "cert-manager.io/issuer"
+            : "cert-manager.io/cluster-issuer") = var.user_ingress.cluster_issuer_name
           } : {},
         )
         hosts = [{

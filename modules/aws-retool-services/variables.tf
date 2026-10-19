@@ -8,25 +8,37 @@ variable "region" {
   description = "AWS region (passed to ALB controller Helm values for VPC discovery)."
 }
 
-variable "vpc" {
-  type = object({
-    vpc_id = string
-  })
-  description = "VPC related inputs: vpc_id is the ID of the VPC where the ALB controller operates."
-}
-
 variable "eks" {
   type = object({
-    name              = string
-    oidc_provider_arn = string
+    eso_controller_role_arn = optional(string)
   })
-  description = "EKS cluster outputs: name and oidc_provider_arn (e.g. module.eks.outputs)."
+  default     = {}
+  description = "Cluster-level outputs, e.g. module.eks.outputs. eso_controller_role_arn is the IAM role of the cluster's shared External Secrets Operator, installed by aws-eks; this deployment's <prefix>-eso role trusts it so it can be assumed to read these secrets."
 }
 
-variable "enable_metrics_server" {
+variable "eso_controller_role_arns" {
+  type        = list(string)
+  default     = []
+  description = "Additional IAM role ARNs allowed to assume this deployment's <prefix>-eso role. Use this when the External Secrets Operator is run by your platform team rather than installed by aws-eks, and set it to the IAM role its controller pods use."
+}
+# --- Namespace ---
+
+variable "retool_namespace" {
+  type        = string
+  default     = null
+  description = "Namespace for the Retool application and the K8s objects that live beside it (ExternalSecrets, the namespaced SecretStore, the RR credentials Secret). When null, defaults to \"<prefix>-retool\". This module is the single source of truth and exports it, so retool-helm and aws-user-ingress use the same name."
+}
+
+variable "create_namespace" {
   type        = bool
   default     = true
-  description = "Whether to deploy the Kubernetes metrics-server (needed for kubectl top / HPA)."
+  description = "Whether this module creates the retool namespace. Set false in shared clusters where the namespace is provisioned out of band."
+}
+
+variable "create_external_secrets" {
+  type        = bool
+  default     = true
+  description = "Whether to create the namespaced SecretStore and the ExternalSecret resources that sync cloud secrets into K8s Secrets in the retool namespace. Disable if you manage those objects out of band. The operator itself is a cluster singleton installed by aws-eks, not by this module."
 }
 
 variable "default_tags" {
@@ -156,4 +168,10 @@ variable "enable_rr_s3" {
   type        = bool
   default     = false
   description = "Whether to create an S3 bucket and IAM service account for Retool Remote Repository storage."
+}
+
+variable "rr_s3_bucket_name" {
+  type        = string
+  default     = null
+  description = "Override the name of the S3 bucket created for Retool Remote Repository storage. S3 bucket names are globally unique across all AWS accounts, so set this when the default \"retool-<prefix>-rr\" is already taken. Only used when enable_rr_s3 is true."
 }

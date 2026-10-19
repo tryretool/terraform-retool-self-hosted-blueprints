@@ -44,6 +44,31 @@ variable "db" {
   description = "Database outputs (e.g. module.db-main.outputs). Connection info is used to build the agent sandbox Postgres URL when enable_agent_sandbox is true."
 }
 
+# --- Namespaces ---
+# Both the Retool application namespace and the supporting-services namespace are
+# computed here (single source of truth) and exported via outputs.tf so the
+# retool-helm and azure-user-ingress modules consume the same names. Leave null
+# for the default prefixed names; set explicitly to target pre-existing
+# namespaces in a shared cluster.
+
+variable "retool_namespace" {
+  type        = string
+  default     = null
+  description = "Namespace for the Retool application and the K8s objects that live beside it (ExternalSecrets, the namespaced SecretStore). When null, defaults to \"<prefix>-retool\"."
+}
+
+variable "create_namespace" {
+  type        = bool
+  default     = true
+  description = "Whether this module creates the retool namespace. Set false in shared clusters where the namespace is provisioned out of band."
+}
+
+variable "create_external_secrets" {
+  type        = bool
+  default     = true
+  description = "Whether to create the ESO ExternalSecret resources that sync cloud secrets into K8s Secrets in the retool namespace. Disable if you manage the ExternalSecret resources out of band. Independent of enable_external_secrets (which controls the operator itself)."
+}
+
 variable "encryption_key_secret_name" {
   type        = string
   default     = null
@@ -105,8 +130,15 @@ variable "enable_rr_blob" {
   description = "Whether to create an Azure Storage Account and Blob container for Retool Remote Repository storage."
 }
 
+variable "rr_storage_account_name" {
+  type        = string
+  default     = null
+  description = "Override the name of the Azure Storage Account created for Retool Remote Repository storage. Storage account names are globally unique and must be 3-24 lowercase alphanumeric characters, so set this when the default (\"<prefix>rr\" with hyphens removed) is already taken. Only used when enable_rr_blob is true."
+}
+
 variable "tags" {
   type        = map(string)
   default     = {}
   description = "Tags applied to all resources created by this module"
 }
+

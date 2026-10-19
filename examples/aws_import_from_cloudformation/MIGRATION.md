@@ -291,11 +291,13 @@ via a stack update), or take final snapshots and detach them, before any
 
 ## 9. Afterwards
 
+See https://docs.retool.com/releases/stable for the latest versions of Retool.
+
 Upgrade Retool by bumping `retool_image_tag` in `overrides.auto.tfvars` and
 applying:
 
 ```hcl
-retool_image_tag = "4.1.0-stable"
+retool_image_tag = "4.34.6-stable"
 ```
 
 ```sh

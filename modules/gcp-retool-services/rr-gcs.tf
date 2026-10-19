@@ -4,7 +4,7 @@
 resource "google_storage_bucket" "rr" {
   count = var.enable_rr_gcs ? 1 : 0
 
-  name          = "retool-${var.prefix}-rr"
+  name          = coalesce(var.rr_gcs_bucket_name, "retool-${var.prefix}-rr")
   project       = var.project_id
   location      = var.region
   force_destroy = true

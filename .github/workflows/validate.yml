@@ -1,0 +1,62 @@
+name: Validate
+
+# Runs on every push to a PR (the `synchronize` event) plus PR open/reopen, and
+# on main so the default branch always has a current signal.
+#
+# Deliberately no `paths:` filter. This job is a required status check, and a
+# path-filtered required check never reports on PRs that don't touch those
+# paths, leaving them blocked on a check that will never run.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Supersede in-progress runs for the same PR. Falls back to run_id on main so
+# pushes to the default branch never cancel each other.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      # GNU parallel, not the unrelated moreutils `parallel` of the same name.
+      # The Makefile's require-parallel target verifies we got the right one.
+      - name: Install GNU parallel
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y parallel
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          # Matches the version used locally. Bump deliberately: a newer
+          # Terraform or newer providers can surface new validation errors.
+          terraform_version: 1.15.4
+          # The wrapper wraps the `terraform` binary in a script that re-emits
+          # stdout/stderr. scripts/tf-validate-module.sh captures that output to
+          # decide what to print, so the wrapper must be off.
+          terraform_wrapper: false
+
+      # Runs at the Makefile's default concurrency. Safe on CI's always-cold
+      # provider cache because scripts/tf-validate-module.sh holds an flock on
+      # the cache directory for the duration of each `terraform init`, which is
+      # the only step that writes it. Measured from a fully cold cache:
+      # 13 spurious failures at -j16 without the lock, 0 with it (and 0 at -j26).
+      #
+      # `flock` comes from util-linux and is preinstalled on ubuntu runners;
+      # the Makefile's require-flock target fails loudly if that ever changes.
+      #
+      # The provider cache is intentionally not persisted via actions/cache: it
+      # is ~1.9GB and most of the runtime is Terraform linking providers into
+      # each module and loading schemas, not downloading. Caching it measured as
+      # a net loss against a ~1:30 cold run.
+      - name: make validate
+        run: make validate

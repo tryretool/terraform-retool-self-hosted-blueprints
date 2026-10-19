@@ -1,14 +1,15 @@
 locals {
-  eso = {
-    name                 = "external-secrets"
-    namespace            = "external-secrets"
-    service_account_name = "external-secrets"
-  }
+  # Service account this deployment's SecretStore names. Nothing runs as it —
+  # the cluster's shared External Secrets Operator mints a token for it and
+  # exchanges that for this deployment's GCP service account, so one deployment
+  # can only read the secrets it was granted.
+  eso_service_account_name = "retool-eso"
 
-  eso_image = {
-    repository = var.external_secrets_chart.image_repository
-    tag        = var.external_secrets_chart.image_tag
-  }
+  # Namespaced SecretStore (lives in the retool namespace alongside the
+  # ExternalSecrets that reference it), rather than a cluster-global
+  # ClusterSecretStore whose fixed name would collide in a shared cluster.
+  secret_store_kind = "SecretStore"
+  secret_store_name = "retool-secretstore"
 
   # Secret name for encryption-key — either user-provided or auto-generated
   encryption_key_secret_ref = (
@@ -46,15 +47,31 @@ resource "null_resource" "gke_workload_identity_pool_ready" {
   }
 }
 
-# Workload Identity binding: k8s ServiceAccount external-secrets/external-secrets → GCP SA
-resource "google_service_account_iam_binding" "eso_workload_identity" {
+# Workload Identity binding: this deployment's k8s ServiceAccount → its GCP SA.
+# _member rather than _binding: _binding is authoritative for the whole role, so
+# with several Retool deployments in one cluster the last apply would evict the
+# others.
+resource "google_service_account_iam_member" "eso_workload_identity" {
   depends_on = [null_resource.gke_workload_identity_pool_ready]
 
   service_account_id = google_service_account.eso.name
   role               = "roles/iam.workloadIdentityUser"
-  members = [
-    "serviceAccount:${var.project_id}.svc.id.goog[${local.eso.namespace}/${local.eso.service_account_name}]"
-  ]
+  member             = "serviceAccount:${var.project_id}.svc.id.goog[${local.retool_namespace}/${local.eso_service_account_name}]"
+}
+
+# Annotated so the shared controller's token exchange lands on this
+# deployment's GCP service account.
+resource "kubernetes_service_account_v1" "eso" {
+  metadata {
+    name      = local.eso_service_account_name
+    namespace = local.retool_namespace
+
+    annotations = {
+      "iam.gke.io/gcp-service-account" = google_service_account.eso.email
+    }
+  }
+
+  depends_on = [kubernetes_namespace_v1.retool]
 }
 
 # Grant ESO read access to each secret individually (least-privilege, no project-level binding)
@@ -113,50 +130,6 @@ resource "google_secret_manager_secret_iam_member" "eso_license_key_external" {
   member    = "serviceAccount:${google_service_account.eso.email}"
 }
 
-resource "helm_release" "external_secrets" {
-  namespace        = local.eso.namespace
-  create_namespace = true
-
-  name       = local.eso.name
-  repository = var.external_secrets_chart.repository
-  chart      = "external-secrets"
-  version    = var.external_secrets_chart.version
-  wait       = true
-
-  values = [yamlencode({
-    installCRDs = true
-
-    # The operator, webhook and cert-controller are three deployments running the
-    # same image, each reading its own values block. Setting only the top one
-    # leaves the other two pulling from upstream.
-    image          = local.eso_image
-    certController = { image = local.eso_image }
-
-    webhook = {
-      image = local.eso_image
-
-      # Terraform destroys the node pool before these releases, so the webhook
-      # pods are gone by the time the CRs are deleted. Under the default Fail
-      # policy the unreachable webhook rejects those deletes and the destroy
-      # hangs. From 2.8.0 the chart wires this into every validating webhook,
-      # including `secretstore-validate`, which earlier versions left at Fail.
-      failurePolicy = "Ignore"
-    }
-
-    serviceAccount = {
-      annotations = {
-        "iam.gke.io/gcp-service-account" = google_service_account.eso.email
-      }
-    }
-  })]
-}
-
-# The External Secrets CRs are applied through Helm because GCP Marketplace
-# permits neither gavinbunney/kubectl nor kubernetes_manifest here. See
-# chart/Chart.yaml for why.
-#
-# The store is its own release so it's created before the ExternalSecrets that
-# reference it, rather than leaning on how Helm happens to order unknown kinds.
 resource "helm_release" "secret_store" {
   name      = "${var.prefix}-secret-store"
   namespace = local.retool_namespace
@@ -165,9 +138,10 @@ resource "helm_release" "secret_store" {
   values = [yamlencode({
     manifests = [{
       apiVersion = "external-secrets.io/v1"
-      kind       = "ClusterSecretStore"
+      kind       = local.secret_store_ref.kind
       metadata = {
-        name = local.secret_store_ref.name
+        name      = local.secret_store_ref.name
+        namespace = local.retool_namespace
       }
       spec = {
         provider = {
@@ -179,8 +153,7 @@ resource "helm_release" "secret_store" {
                 clusterName      = var.gke.name
                 clusterProjectID = var.project_id
                 serviceAccountRef = {
-                  name      = local.eso.service_account_name
-                  namespace = local.eso.namespace
+                  name = local.eso_service_account_name
                 }
               }
             }
@@ -190,15 +163,16 @@ resource "helm_release" "secret_store" {
     }]
   })]
 
-  depends_on = [helm_release.external_secrets]
+  depends_on = [
+    kubernetes_service_account_v1.eso,
+    kubernetes_namespace_v1.retool,
+  ]
 }
 
 locals {
-  retool_namespace = "default"
-
   secret_store_ref = {
-    kind = "ClusterSecretStore"
-    name = "gcp-secretsmanager"
+    kind = local.secret_store_kind
+    name = local.secret_store_name
   }
 
   # ExternalSecrets that map named Secret Manager secrets to individual keys.
@@ -308,6 +282,7 @@ locals {
 }
 
 resource "helm_release" "external_secret_crs" {
+  count     = var.create_external_secrets ? 1 : 0
   name      = "${var.prefix}-external-secrets"
   namespace = local.retool_namespace
   chart     = "${path.module}/chart"

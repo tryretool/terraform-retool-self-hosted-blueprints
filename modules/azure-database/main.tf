@@ -11,10 +11,9 @@ resource "azurerm_private_dns_zone" "postgres" {
 }
 
 resource "azurerm_private_dns_zone_virtual_network_link" "postgres" {
-  name                  = "${var.prefix}-${var.db_purpose}-vnet-link"
-  private_dns_zone_name = azurerm_private_dns_zone.postgres.name
-  virtual_network_id    = var.vnet.vnet_id
-  resource_group_name   = var.resource_group_name
+  name                = "${var.prefix}-${var.db_purpose}-vnet-link"
+  private_dns_zone_id = azurerm_private_dns_zone.postgres.id
+  virtual_network_id  = var.vnet.vnet_id
 }
 
 # ---------- Password ----------

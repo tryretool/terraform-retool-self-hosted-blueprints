@@ -1,6 +1,9 @@
 # Local .terraform directories
 **/.terraform/*
 
+# Shared provider cache used by `make validate`
+.terraform-plugin-cache/
+
 # Terraform lockfile
 .terraform.lock.hcl
 

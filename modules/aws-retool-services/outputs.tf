@@ -1,5 +1,8 @@
 locals {
   outputs = {
+    retool_namespace                 = local.retool_namespace
+    secret_store_name                = local.secret_store_name
+    secret_store_kind                = local.secret_store_kind
     encryption_key_secret_name       = "encryption-key"
     jwt_secret_name                  = "jwt-secret"
     db_credentials_secret_name       = "db-credentials"
@@ -18,10 +21,29 @@ locals {
       "RR_DEFAULT_S3_ACCESS_KEY_ID",
       "RR_DEFAULT_S3_SECRET_ACCESS_KEY",
     ]
-    backend_type                  = "secretsManager"
-    alb_controller_irsa_role_arn  = module.alb_controller_irsa_role.iam_role_arn
-    alb_controller_irsa_role_name = module.alb_controller_irsa_role.iam_role_name
+    secret_store_backend_type = "secretsManager"
+    eso_role_arn              = aws_iam_role.eso.arn
   }
+}
+
+output "retool_namespace" {
+  description = "Namespace the Retool application and its Secrets are deployed into. Pass to retool-helm (via retool_services) and to the user-ingress module."
+  value       = local.outputs.retool_namespace
+}
+
+output "secret_store_name" {
+  description = "Name of the namespaced ESO SecretStore in the retool namespace."
+  value       = local.outputs.secret_store_name
+}
+
+output "secret_store_kind" {
+  description = "Kind of the ESO secret store (SecretStore, namespaced)."
+  value       = local.outputs.secret_store_kind
+}
+
+output "eso_role_arn" {
+  description = "ARN of this deployment's IAM role granting read access to its own secrets in Secrets Manager. The cluster's shared External Secrets Operator assumes it — the namespaced SecretStore names it via spec.provider.aws.role. Trust it from the controller by passing eks = module.eks.outputs, or by listing the controller's role in eso_controller_role_arns."
+  value       = local.outputs.eso_role_arn
 }
 
 output "encryption_key_secret_name" {
@@ -84,19 +106,9 @@ output "rr_bucket_k8s_secret_name" {
   value       = local.outputs.rr_bucket_k8s_secret_name
 }
 
-output "backend_type" {
-  description = "ESO backend type identifier for use in Retool Helm values."
-  value       = local.outputs.backend_type
-}
-
-output "alb_controller_irsa_role_arn" {
-  description = "ARN of the IAM role used by the ALB controller (IRSA)."
-  value       = local.outputs.alb_controller_irsa_role_arn
-}
-
-output "alb_controller_irsa_role_name" {
-  description = "Name of the IAM role used by the ALB controller (IRSA)."
-  value       = local.outputs.alb_controller_irsa_role_name
+output "secret_store_backend_type" {
+  description = "ESO secret store backend type identifier for use in Retool Helm values."
+  value       = local.outputs.secret_store_backend_type
 }
 
 output "outputs" {

@@ -14,7 +14,7 @@
 
 module "eks" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/aws-eks"
-  version = "~> 0.4"
+  version = "~> 0.5"
 
   prefix = var.prefix
   region = var.region
@@ -35,11 +35,10 @@ module "eks" {
 
 module "retool-services" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/aws-retool-services"
-  version = "~> 0.4"
+  version = "~> 0.5"
 
   prefix = var.prefix
   region = var.region
-  vpc    = local.vpc
   eks    = module.eks.outputs
   db     = local.db
   tags   = var.tags
@@ -72,7 +71,7 @@ module "retool-services" {
 
 module "retool" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/retool-helm"
-  version = "~> 0.4"
+  version = "~> 0.5"
 
   retool_helm_name          = "retool"
   retool_helm_chart_version = var.retool_helm_chart_version
@@ -105,7 +104,7 @@ module "retool" {
 
 module "user-ingress" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/aws-user-ingress"
-  version = "~> 0.4"
+  version = "~> 0.5"
 
   domain_name           = var.domain_name
   enable_https_listener = var.enable_https
