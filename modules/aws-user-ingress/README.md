@@ -96,22 +96,23 @@ SSO configuration.
 ### R² app hostnames
 
 Set `enable_apps_domain = true` (with `enable_apps_domain` on `retool-helm`) to
-route `*.apps.<domain_name>` to the app serving layer and
-`*.sandboxes.apps.<domain_name>` to the agent-sandbox proxy. The module adds:
+route `*.apps.<domain_name>` to the app serving layer. Set
+`enable_wildcard_sandboxes = true` as well to route
+`*.sandboxes.apps.<domain_name>` to the agent-sandbox proxy; turn it on here
+before setting `enable_wildcard_sandboxes` on `retool-helm`, so the route and
+certificate exist when editor previews move. For each hostname the module adds:
 
-* A second ACM certificate for both wildcards, with DNS validation records,
-  attached to the HTTPS listener as an extra certificate. The existing
-  certificate is not replaced.
-* Target groups for ports 3010 and 3019, `TargetGroupBinding`s to
-  `<retool_service_name>-app-serving-layer` and
-  `<retool_service_name>-agent-sandbox-proxy`, and node security group rules for
-  both ports from the ALB.
-* Host-header listener rules on the HTTPS listener, and Route 53 alias records
-  for both wildcards.
+* An ACM certificate, with DNS validation records, attached to the HTTPS
+  listener as an extra certificate. The existing certificate is not replaced.
+* A target group (port 3010 or 3019), a `TargetGroupBinding` to
+  `<retool_service_name>-app-serving-layer` or
+  `<retool_service_name>-agent-sandbox-proxy`, and a node security group rule
+  for the port from the ALB.
+* A host-header listener rule on the HTTPS listener and a Route 53 alias record.
 
 It requires `enable_https_listener = true` and a public hosted zone this module
 writes into (`create_hosted_zone = true` or `hosted_zone_id`), because the new
-certificate is validated through DNS. `acm_certificate_arn` only replaces the
+certificates are validated through DNS. `acm_certificate_arn` only replaces the
 main certificate.
 
 `alb_authenticate_oidc` does not apply to these hostnames. Each app and sandbox

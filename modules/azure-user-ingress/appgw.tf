@@ -227,22 +227,26 @@ resource "helm_release" "agic" {
 
 locals {
   apps_domain = "apps.${var.domain_name}"
-  apps_ingresses = var.enable_apps_domain ? {
-    apps = {
-      host        = "*.${local.apps_domain}"
-      service     = "retool-app-serving-layer"
-      port        = 3010
-      health_path = "/api/checkHealth"
-      priority    = "900"
-    }
-    sandboxes = {
-      host        = "*.sandboxes.${local.apps_domain}"
-      service     = "retool-agent-sandbox-proxy"
-      port        = 3019
-      health_path = "/livez"
-      priority    = "800"
-    }
-  } : {}
+  apps_ingresses = merge(
+    var.enable_apps_domain ? {
+      apps = {
+        host        = "*.${local.apps_domain}"
+        service     = "retool-app-serving-layer"
+        port        = 3010
+        health_path = "/api/checkHealth"
+        priority    = "900"
+      }
+    } : {},
+    var.enable_apps_domain && var.enable_wildcard_sandboxes ? {
+      sandboxes = {
+        host        = "*.sandboxes.${local.apps_domain}"
+        service     = "retool-agent-sandbox-proxy"
+        port        = 3019
+        health_path = "/livez"
+        priority    = "800"
+      }
+    } : {},
+  )
 }
 
 resource "kubectl_manifest" "apps_ingress" {

@@ -51,22 +51,26 @@ locals {
 
   # ALB host-header wildcards match across dots, so *.apps also matches sandbox
   # hosts; the sandbox rule needs the lower (earlier) priority.
-  apps_backends = var.enable_apps_domain ? {
-    app-serving-layer = {
-      host        = "*.${local.apps_domain}"
-      port        = 3010
-      health_path = "/api/checkHealth"
-      priority    = 20
-      tg_suffix   = "apps"
-    }
-    agent-sandbox-proxy = {
-      host        = "*.sandboxes.${local.apps_domain}"
-      port        = 3019
-      health_path = "/livez"
-      priority    = 10
-      tg_suffix   = "sbx"
-    }
-  } : {}
+  apps_backends = merge(
+    var.enable_apps_domain ? {
+      app-serving-layer = {
+        host        = "*.${local.apps_domain}"
+        port        = 3010
+        health_path = "/api/checkHealth"
+        priority    = 20
+        tg_suffix   = "apps"
+      }
+    } : {},
+    var.enable_apps_domain && var.enable_wildcard_sandboxes ? {
+      agent-sandbox-proxy = {
+        host        = "*.sandboxes.${local.apps_domain}"
+        port        = 3019
+        health_path = "/livez"
+        priority    = 10
+        tg_suffix   = "sbx"
+      }
+    } : {},
+  )
 }
 
 resource "aws_route53_zone" "hosted_zone" {
@@ -153,14 +157,13 @@ resource "aws_acm_certificate_validation" "cert_valid_status" {
   certificate_arn = aws_acm_certificate.cert[0].arn
 }
 
-# A separate certificate, attached as an extra listener certificate, so turning
-# the apps domain on or off never replaces the certificate the listener serves.
+# One certificate per hostname, attached as extra listener certificates, so
+# turning the apps domain or sandboxes on or off never replaces a certificate
+# the listener is serving.
 resource "aws_acm_certificate" "apps" {
-  count = var.enable_apps_domain ? 1 : 0
+  for_each = local.apps_backends
 
-  domain_name               = "*.${local.apps_domain}"
-  subject_alternative_names = ["*.sandboxes.${local.apps_domain}"]
-
+  domain_name       = each.value.host
   validation_method = "DNS"
 
   lifecycle {
@@ -177,26 +180,20 @@ resource "aws_acm_certificate" "apps" {
 }
 
 resource "aws_route53_record" "apps_cert_validation" {
-  for_each = var.enable_apps_domain ? {
-    for dvo in aws_acm_certificate.apps[0].domain_validation_options : dvo.domain_name => {
-      name   = dvo.resource_record_name
-      type   = dvo.resource_record_type
-      record = dvo.resource_record_value
-    }
-  } : {}
+  for_each = local.apps_backends
 
   allow_overwrite = true
 
   zone_id = local.zone_id
-  name    = each.value.name
-  type    = each.value.type
+  name    = one(aws_acm_certificate.apps[each.key].domain_validation_options).resource_record_name
+  type    = one(aws_acm_certificate.apps[each.key].domain_validation_options).resource_record_type
   ttl     = 60
-  records = [each.value.record]
+  records = [one(aws_acm_certificate.apps[each.key].domain_validation_options).resource_record_value]
 }
 
 resource "aws_acm_certificate_validation" "apps" {
-  count           = var.enable_apps_domain ? 1 : 0
-  certificate_arn = aws_acm_certificate.apps[0].arn
+  for_each        = local.apps_backends
+  certificate_arn = aws_acm_certificate.apps[each.key].arn
 }
 
 resource "aws_security_group" "alb" {
@@ -357,10 +354,10 @@ resource "aws_lb_listener" "https" {
 }
 
 resource "aws_lb_listener_certificate" "apps" {
-  count = var.enable_apps_domain ? 1 : 0
+  for_each = local.apps_backends
 
   listener_arn    = one(aws_lb_listener.https[*].arn)
-  certificate_arn = aws_acm_certificate_validation.apps[0].certificate_arn
+  certificate_arn = aws_acm_certificate_validation.apps[each.key].certificate_arn
 }
 
 # No authenticate-oidc here even when alb_authenticate_oidc is set: every app and

@@ -33,6 +33,6 @@ retool_helm_extra_values = [yamlencode({
 
 `enable_wildcard_sandboxes = true` additionally sets
 `rr.agentSandbox.wildcardSandboxes`, which serves each editor preview at
-`sandbox-<id>.sandboxes.apps.<domain_name>`. Turn it on in a later apply, after
-the ingress module's certificate is issued: it moves every editor preview as soon
-as the chart rolls out.
+`sandbox-<id>.sandboxes.apps.<domain_name>`. Turn it on after setting
+`enable_wildcard_sandboxes` on the ingress module and its certificate is issued:
+it moves every editor preview as soon as the chart rolls out.

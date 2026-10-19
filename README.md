@@ -130,16 +130,15 @@ cloud's `*-user-ingress` module to serve R² published apps at
 `retool-helm` default) and Retool 4.78.0+, plus the agent sandbox and Remote
 Repository storage that the `*_r2_beta` examples turn on.
 
-The ingress module adds a second certificate covering `*.apps.<domain_name>` and
-`*.sandboxes.apps.<domain_name>`, DNS records for both, and routes to the app
-serving layer and the agent-sandbox proxy. The existing certificate is not
-changed.
+The ingress module adds a certificate for `*.apps.<domain_name>`, a DNS record
+and a route to the app serving layer. The existing certificate is not changed.
 
 To also give each editor preview its own origin
 (`sandbox-<id>.sandboxes.apps.<domain_name>`), set
-`enable_wildcard_sandboxes = true` on `retool-helm` in a later apply, once the
-new certificate is issued. It moves every editor preview as soon as the chart
-rolls out.
+`enable_wildcard_sandboxes = true` in two steps. First set it on the ingress
+module, which adds the `*.sandboxes.apps.<domain_name>` certificate, DNS record
+and route to the agent-sandbox proxy. Once that certificate is issued, set it on
+`retool-helm`. That moves every editor preview as soon as the chart rolls out.
 
 Don't add the apps hostnames to the chart's main `ingress.hosts` through
 `retool_helm_extra_values`: the main Ingress adds multiplayer and MCP paths to

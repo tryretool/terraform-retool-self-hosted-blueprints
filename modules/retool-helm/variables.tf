@@ -114,9 +114,9 @@ variable "enable_wildcard_sandboxes" {
     Serve each editor preview on its own origin at
     https://sandbox-<id>.sandboxes.apps.<domain_name>/ (rr.agentSandbox.wildcardSandboxes).
     Requires enable_apps_domain. This moves every editor preview as soon as the
-    chart rolls out, so turn it on in a later apply, once the
-    *.sandboxes.apps.<domain_name> route and certificate from the *-user-ingress
-    module work.
+    chart rolls out, so turn it on in a later apply, once
+    enable_wildcard_sandboxes on the *-user-ingress module has created the
+    *.sandboxes.apps.<domain_name> route and certificate.
   EOT
 }
 

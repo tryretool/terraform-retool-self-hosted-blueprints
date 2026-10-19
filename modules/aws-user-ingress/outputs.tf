@@ -6,7 +6,7 @@ locals {
     zone_name             = one(aws_route53_zone.hosted_zone[*].name)
     zone_name_servers     = one(aws_route53_zone.hosted_zone[*].name_servers)
     acm_certificate_arn   = local.certificate_arn
-    apps_certificate_arn  = one(aws_acm_certificate.apps[*].arn)
+    apps_certificate_arns = { for cert in aws_acm_certificate.apps : cert.domain_name => cert.arn }
     alb_id                = aws_lb.alb.id
     alb_dns_name          = aws_lb.alb.dns_name
     alb_internal          = var.alb_internal
@@ -48,9 +48,9 @@ output "acm_certificate_arn" {
   value       = local.outputs.acm_certificate_arn
 }
 
-output "apps_certificate_arn" {
-  description = "ARN of the certificate for the R² apps and sandbox hostnames. Null when enable_apps_domain is false."
-  value       = local.outputs.apps_certificate_arn
+output "apps_certificate_arns" {
+  description = "ARNs of the certificates for the R² app and sandbox hostnames, keyed by hostname. Empty when enable_apps_domain is false."
+  value       = local.outputs.apps_certificate_arns
 }
 
 output "alb_id" {

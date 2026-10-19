@@ -69,15 +69,15 @@ resource "google_certificate_manager_certificate_map_entry" "wildcard" {
   }
 }
 
-# R² app hostnames get their own DNS authorizations, certificate and map entries,
-# so turning them on or off never replaces the main certificate. A wildcard
+# Each R² app hostname gets its own DNS authorization, certificate and map entry,
+# so turning one on or off never replaces another certificate. A wildcard
 # certificate needs an authorization for the domain under the wildcard.
 locals {
   apps_domain = "apps.${var.domain_name}"
-  apps_cert_domains = var.enable_apps_domain ? {
-    apps      = local.apps_domain
-    sandboxes = "sandboxes.${local.apps_domain}"
-  } : {}
+  apps_cert_domains = merge(
+    var.enable_apps_domain ? { apps = local.apps_domain } : {},
+    var.enable_apps_domain && var.enable_wildcard_sandboxes ? { sandboxes = "sandboxes.${local.apps_domain}" } : {},
+  )
 }
 
 resource "google_certificate_manager_dns_authorization" "apps" {
@@ -103,16 +103,16 @@ resource "google_dns_record_set" "apps_cert_validation" {
 }
 
 resource "google_certificate_manager_certificate" "apps" {
-  count = var.enable_apps_domain ? 1 : 0
+  for_each = local.apps_cert_domains
 
-  name        = "${var.prefix}-apps-cert"
-  description = "Google-managed certificate for Retool R² app and sandbox hostnames"
+  name        = "${var.prefix}-${each.key}-cert"
+  description = "Google-managed certificate for Retool *.${each.value}"
   project     = var.project_id
   labels      = local.all_labels
 
   managed {
-    domains            = [for domain in values(local.apps_cert_domains) : "*.${domain}"]
-    dns_authorizations = [for auth in values(google_certificate_manager_dns_authorization.apps) : auth.id]
+    domains            = ["*.${each.value}"]
+    dns_authorizations = [google_certificate_manager_dns_authorization.apps[each.key].id]
   }
 }
 
@@ -121,11 +121,11 @@ resource "google_certificate_manager_certificate_map_entry" "apps" {
 
   name         = "${var.prefix}-cert-map-entry-${each.key}"
   map          = google_certificate_manager_certificate_map.main.name
-  certificates = [google_certificate_manager_certificate.apps[0].id]
+  certificates = [google_certificate_manager_certificate.apps[each.key].id]
   hostname     = "*.${each.value}"
   project      = var.project_id
   labels       = local.all_labels
   lifecycle {
-    replace_triggered_by = [google_certificate_manager_certificate.apps]
+    replace_triggered_by = [google_certificate_manager_certificate.apps[each.key]]
   }
 }

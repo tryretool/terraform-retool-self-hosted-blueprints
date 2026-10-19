@@ -92,7 +92,13 @@ variable "enable_https" {
 variable "enable_apps_domain" {
   type        = bool
   default     = false
-  description = "Route R² app hostnames to Retool through AGIC: *.apps.<domain_name> to the app serving layer (Service retool-app-serving-layer, port 3010) and *.sandboxes.apps.<domain_name> to the agent-sandbox proxy (retool-agent-sandbox-proxy, port 3019). Creates one Ingress per hostname, DNS records for both wildcards when enable_agic is true, and, when enable_https is true, a second cert-manager Certificate for both. Set enable_apps_domain on the retool-helm module too."
+  description = "Route *.apps.<domain_name> to the R² app serving layer (Service retool-app-serving-layer, port 3010) through AGIC. Creates an Ingress for it, a DNS record when enable_agic is true, and, when enable_https is true, a second cert-manager Certificate. Set enable_apps_domain on the retool-helm module too."
+}
+
+variable "enable_wildcard_sandboxes" {
+  type        = bool
+  default     = false
+  description = "Also route *.sandboxes.apps.<domain_name> to the agent-sandbox proxy (Service retool-agent-sandbox-proxy, port 3019), with its own Ingress and DNS record, and add it to the apps Certificate. Only takes effect with enable_apps_domain. Turn it on here first, then set enable_wildcard_sandboxes on the retool-helm module once the certificate is issued."
 }
 
 variable "tags" {
