@@ -127,7 +127,7 @@ resource "kubectl_manifest" "certificate" {
 # Separate from the main certificate so turning the apps domain on or off leaves
 # the main TLS secret alone.
 resource "kubectl_manifest" "apps_certificate" {
-  count = var.enable_https && var.enable_apps_domain ? 1 : 0
+  count = var.enable_https && local.apps_domain_enabled ? 1 : 0
 
   yaml_body = yamlencode({
     apiVersion = "cert-manager.io/v1"

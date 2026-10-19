@@ -58,6 +58,8 @@ variable "retool_services" {
     license_key_secret_name          = optional(string)
     license_key_secret_key           = optional(string)
     agent_sandbox_enabled            = optional(bool, false)
+    apps_domain_enabled              = optional(bool, false)
+    wildcard_sandboxes_enabled       = optional(bool, false)
     agent_sandbox_secret_name        = optional(string)
     rr_bucket_k8s_secret_name        = optional(string)
     rr_bucket_env_keys               = optional(list(string), [])
@@ -92,32 +94,6 @@ variable "https_enabled" {
   type        = bool
   default     = true
   description = "Whether the user-facing ingress terminates HTTPS. Drives the scheme used in BASE_DOMAIN and inverts config.useInsecureCookies (cookies are only marked Secure when HTTPS is in use)."
-}
-
-variable "enable_apps_domain" {
-  type        = bool
-  default     = false
-  description = <<-EOT
-    Serve R² published apps at https://<app>.apps.<domain_name>/ through the
-    chart's app serving layer (rr.appServingLayer, in-process on the main
-    backend). Requires domain_name, the agent sandbox, and an R² bucket, chart
-    6.13.0+ and Retool 4.78.0+. Turn on enable_apps_domain on the matching
-    *-user-ingress module too, so the apps hostnames get DNS, a certificate and a
-    route.
-  EOT
-}
-
-variable "enable_wildcard_sandboxes" {
-  type        = bool
-  default     = false
-  description = <<-EOT
-    Serve each editor preview on its own origin at
-    https://sandbox-<id>.sandboxes.apps.<domain_name>/ (rr.agentSandbox.wildcardSandboxes).
-    Requires enable_apps_domain. This moves every editor preview as soon as the
-    chart rolls out, so turn it on in a later apply, once
-    enable_wildcard_sandboxes on the *-user-ingress module has created the
-    *.sandboxes.apps.<domain_name> route and certificate.
-  EOT
 }
 
 variable "workflows_enabled" {

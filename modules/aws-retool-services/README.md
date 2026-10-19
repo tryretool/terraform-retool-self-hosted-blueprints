@@ -34,4 +34,12 @@ If you author your own `ExternalSecret` manifests that read secrets outside the
 `retool/{prefix}/*` namespace — credentials for a second database, say — list
 those ARNs in `extra_secret_read_arns` so ESO's IAM role can read them.
 
+### R² app hostnames
+
+`enable_apps_domain = true` serves R² published apps at
+`https://<app>.apps.<domain_name>/`, and `enable_wildcard_sandboxes = true` also
+serves each editor preview at `sandbox-<id>.sandboxes.apps.<domain_name>`. Both
+flow through `outputs` to `retool-helm` and the user-ingress module, which do the
+work. They need `enable_agent_sandbox` and R² storage. See the root README.
+
 > [!NOTE] This module is intended to be used in conjunction with the other AWS-specific modules in [`retool-self-hosted-blueprints`](https://github.com/tryretool/retool-self-hosted-blueprints). See the [usage examples](https://github.com/tryretool/retool-self-hosted-blueprints/tree/main/examples) for references on how to use this module.

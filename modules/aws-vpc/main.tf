@@ -4,11 +4,11 @@ locals {
   # Use first 3 AZs
   azs      = slice(data.aws_availability_zones.available.names, 0, 3)
   all_tags = merge(var.default_tags, var.tags)
-  
+
   private_subnet_tags = merge(var.private_subnet_tags, {
     # In the aws/retool-services module, the `karpenter.sh/discovery` tag value
     # must match the EKS cluster name.
-    "karpenter.sh/discovery"          = substr(var.prefix, 0, 38)
+    "karpenter.sh/discovery" = substr(var.prefix, 0, 38)
     # Discovery tag for ALB controller, see https://kubernetes-sigs.github.io/aws-load-balancer-controller/v2.6/deploy/subnet_discovery/
     "kubernetes.io/role/internal-elb" = "1"
   })

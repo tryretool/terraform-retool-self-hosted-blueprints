@@ -91,7 +91,9 @@ locals {
     }
   })] : []
 
-  agent_sandbox_enabled = var.retool_services != null && var.retool_services.agent_sandbox_enabled
+  agent_sandbox_enabled      = var.retool_services != null && var.retool_services.agent_sandbox_enabled
+  apps_domain_enabled        = var.retool_services != null && var.retool_services.apps_domain_enabled
+  wildcard_sandboxes_enabled = var.retool_services != null && var.retool_services.wildcard_sandboxes_enabled
 
   agent_sandbox_values = local.agent_sandbox_enabled ? [yamlencode({
     rr = {
@@ -125,7 +127,7 @@ locals {
     }
   })] : []
 
-  apps_domain_values = var.enable_apps_domain && var.domain_name != null ? [yamlencode({
+  apps_domain_values = local.apps_domain_enabled && var.domain_name != null ? [yamlencode({
     rr = merge(
       {
         appServingLayer = {
@@ -133,7 +135,7 @@ locals {
           domain  = "apps.${var.domain_name}"
         }
       },
-      var.enable_wildcard_sandboxes ? {
+      local.wildcard_sandboxes_enabled ? {
         agentSandbox = {
           wildcardSandboxes = true
         }
@@ -201,17 +203,12 @@ resource "helm_release" "retool" {
     # The serving layer reads published apps from the git server's bucket, and this
     # module only turns the git server on alongside the agent sandbox.
     precondition {
-      condition = !var.enable_apps_domain || (
+      condition = !local.apps_domain_enabled || (
         var.domain_name != null
         && local.agent_sandbox_enabled
         && try(var.retool_services.rr_bucket_k8s_secret_name, null) != null
       )
-      error_message = "enable_apps_domain needs domain_name, plus retool_services with agent_sandbox_enabled = true and rr_bucket_k8s_secret_name set (the chart's app serving layer requires the R² git server)."
-    }
-
-    precondition {
-      condition     = !var.enable_wildcard_sandboxes || var.enable_apps_domain
-      error_message = "enable_wildcard_sandboxes serves editor sandboxes under the apps domain, so it needs enable_apps_domain = true."
+      error_message = "enable_apps_domain on retool-services needs domain_name here, plus enable_agent_sandbox and R² storage on retool-services (the chart's app serving layer requires the R² git server)."
     }
   }
 }

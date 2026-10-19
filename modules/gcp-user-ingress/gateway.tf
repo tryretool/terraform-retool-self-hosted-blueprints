@@ -145,7 +145,7 @@ locals {
       port        = 3010
       health_path = "/api/checkHealth"
     }],
-    var.enable_wildcard_sandboxes ? [{
+    local.wildcard_sandboxes_enabled ? [{
       name        = "retool-agent-sandbox-proxy"
       hostname    = "*.sandboxes.${local.apps_domain}"
       port        = 3019
@@ -155,7 +155,7 @@ locals {
 }
 
 resource "helm_release" "apps_routes" {
-  count = var.enable_apps_domain ? 1 : 0
+  count = local.apps_domain_enabled ? 1 : 0
 
   name      = "${var.prefix}-apps-routes"
   namespace = local.retool_namespace

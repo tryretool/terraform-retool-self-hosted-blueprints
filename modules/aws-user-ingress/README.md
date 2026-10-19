@@ -95,12 +95,10 @@ SSO configuration.
 
 ### R² app hostnames
 
-Set `enable_apps_domain = true` (with `enable_apps_domain` on `retool-helm`) to
-route `*.apps.<domain_name>` to the app serving layer. Set
-`enable_wildcard_sandboxes = true` as well to route
-`*.sandboxes.apps.<domain_name>` to the agent-sandbox proxy; turn it on here
-before setting `enable_wildcard_sandboxes` on `retool-helm`, so the route and
-certificate exist when editor previews move. For each hostname the module adds:
+`enable_apps_domain` on the `*-retool-services` module routes
+`*.apps.<domain_name>` to the app serving layer, and `enable_wildcard_sandboxes`
+there also routes `*.sandboxes.apps.<domain_name>` to the agent-sandbox proxy.
+This module reads both from `retool_services`. For each hostname the module adds:
 
 * An ACM certificate, with DNS validation records, attached to the HTTPS
   listener as an extra certificate. The existing certificate is not replaced.

@@ -96,6 +96,18 @@ variable "enable_agent_sandbox" {
   description = "When true, generates agent sandbox secrets (JWT keypair, encryption key, API secret, Postgres URL) synced to K8s via ESO."
 }
 
+variable "enable_apps_domain" {
+  type        = bool
+  default     = false
+  description = "Serve R² published apps at https://<app>.apps.<domain_name>/. Read by retool-helm (turns on the chart's app serving layer) and the user-ingress module (certificate, DNS and route). Needs enable_agent_sandbox and R² storage, Helm chart 6.13.0+ and Retool 4.78.0+."
+}
+
+variable "enable_wildcard_sandboxes" {
+  type        = bool
+  default     = false
+  description = "Serve each editor preview on its own origin at https://sandbox-<id>.sandboxes.apps.<domain_name>/. Only takes effect with enable_apps_domain. Moves every org's editor preview as soon as the chart rolls out."
+}
+
 variable "enable_rr_gcs" {
   type        = bool
   default     = false

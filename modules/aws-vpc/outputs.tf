@@ -1,9 +1,9 @@
 locals {
   outputs = {
-    vpc_id = module.vpc.vpc_id
-    vpc_cidr_block = module.vpc.vpc_cidr_block
+    vpc_id             = module.vpc.vpc_id
+    vpc_cidr_block     = module.vpc.vpc_cidr_block
     private_subnet_ids = module.vpc.private_subnets
-    public_subnet_ids = module.vpc.public_subnets
+    public_subnet_ids  = module.vpc.public_subnets
   }
 }
 
@@ -28,6 +28,6 @@ output "public_subnet_ids" {
 }
 
 output "outputs" {
-  value = local.outputs
+  value       = local.outputs
   description = "Structured VPC outputs for composition with downstream modules."
 }

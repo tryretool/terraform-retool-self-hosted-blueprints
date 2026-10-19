@@ -226,9 +226,11 @@ resource "helm_release" "agic" {
 # because AGIC otherwise borrows the main backend's readiness probe on port 3000.
 
 locals {
-  apps_domain = "apps.${var.domain_name}"
+  apps_domain                = "apps.${var.domain_name}"
+  apps_domain_enabled        = try(var.retool_services.apps_domain_enabled, false)
+  wildcard_sandboxes_enabled = try(var.retool_services.wildcard_sandboxes_enabled, false)
   apps_ingresses = merge(
-    var.enable_apps_domain ? {
+    local.apps_domain_enabled ? {
       apps = {
         host        = "*.${local.apps_domain}"
         service     = "retool-app-serving-layer"
@@ -237,7 +239,7 @@ locals {
         priority    = "900"
       }
     } : {},
-    var.enable_apps_domain && var.enable_wildcard_sandboxes ? {
+    local.wildcard_sandboxes_enabled ? {
       sandboxes = {
         host        = "*.sandboxes.${local.apps_domain}"
         service     = "retool-agent-sandbox-proxy"

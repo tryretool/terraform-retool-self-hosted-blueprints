@@ -75,7 +75,9 @@ variable "retool_service_name" {
 
 variable "retool_services" {
   type = object({
-    retool_namespace = optional(string)
+    retool_namespace           = optional(string)
+    apps_domain_enabled        = optional(bool, false)
+    wildcard_sandboxes_enabled = optional(bool, false)
   })
   default     = null
   description = "Retool-services outputs (e.g. module.retool-services.outputs). The TargetGroupBinding is created in retool_namespace so it sits beside the Retool Service. When null (or retool_namespace unset), falls back to the \"default\" namespace."
@@ -183,28 +185,3 @@ variable "alb_authenticate_oidc" {
   sensitive   = true
 }
 
-variable "enable_apps_domain" {
-  type        = bool
-  description = <<-EOT
-    Route *.apps.<domain_name> to the R² app serving layer (Service
-    <retool_service_name>-app-serving-layer, port 3010). Adds an ACM
-    certificate for it, with DNS validation records, attached to the HTTPS
-    listener. Requires enable_https_listener and a public hosted zone this
-    module writes into. Set enable_apps_domain on the retool-helm module too.
-
-    alb_authenticate_oidc does not apply to these hostnames.
-  EOT
-  default     = false
-}
-
-variable "enable_wildcard_sandboxes" {
-  type        = bool
-  description = <<-EOT
-    Also route *.sandboxes.apps.<domain_name> to the agent-sandbox proxy
-    (<retool_service_name>-agent-sandbox-proxy, port 3019), with its own ACM
-    certificate. Only takes effect with enable_apps_domain. Turn it on here
-    first, then set enable_wildcard_sandboxes on the retool-helm module once
-    the certificate is issued.
-  EOT
-  default     = false
-}

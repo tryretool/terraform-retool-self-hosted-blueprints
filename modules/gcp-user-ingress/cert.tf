@@ -73,10 +73,12 @@ resource "google_certificate_manager_certificate_map_entry" "wildcard" {
 # so turning one on or off never replaces another certificate. A wildcard
 # certificate needs an authorization for the domain under the wildcard.
 locals {
-  apps_domain = "apps.${var.domain_name}"
+  apps_domain                = "apps.${var.domain_name}"
+  apps_domain_enabled        = try(var.retool_services.apps_domain_enabled, false)
+  wildcard_sandboxes_enabled = try(var.retool_services.wildcard_sandboxes_enabled, false)
   apps_cert_domains = merge(
-    var.enable_apps_domain ? { apps = local.apps_domain } : {},
-    var.enable_apps_domain && var.enable_wildcard_sandboxes ? { sandboxes = "sandboxes.${local.apps_domain}" } : {},
+    local.apps_domain_enabled ? { apps = local.apps_domain } : {},
+    local.wildcard_sandboxes_enabled ? { sandboxes = "sandboxes.${local.apps_domain}" } : {},
   )
 }
 

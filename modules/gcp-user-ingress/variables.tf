@@ -20,22 +20,12 @@ variable "domain_name" {
 
 variable "retool_services" {
   type = object({
-    retool_namespace = optional(string)
+    retool_namespace           = optional(string)
+    apps_domain_enabled        = optional(bool, false)
+    wildcard_sandboxes_enabled = optional(bool, false)
   })
   default     = null
   description = "Retool-services outputs (e.g. module.retool-services.outputs). The Gateway, HTTPRoute, HealthCheckPolicy and external-dns are all created in retool_namespace, beside the Retool Service. When null, falls back to \"<prefix>-retool\"."
-}
-
-variable "enable_apps_domain" {
-  type        = bool
-  default     = false
-  description = "Route *.apps.<domain_name> to the R² app serving layer (Service retool-app-serving-layer, port 3010). Adds a Google-managed certificate for it, with its own DNS authorization and certificate map entry, plus an HTTPRoute and HealthCheckPolicy. Set enable_apps_domain on the retool-helm module too."
-}
-
-variable "enable_wildcard_sandboxes" {
-  type        = bool
-  default     = false
-  description = "Also route *.sandboxes.apps.<domain_name> to the agent-sandbox proxy (Service retool-agent-sandbox-proxy, port 3019), with its own certificate. Only takes effect with enable_apps_domain. Turn it on here first, then set enable_wildcard_sandboxes on the retool-helm module once the certificate is issued."
 }
 
 variable "enable_external_dns" {

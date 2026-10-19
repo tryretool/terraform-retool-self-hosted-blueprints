@@ -49,7 +49,7 @@ output "acm_certificate_arn" {
 }
 
 output "apps_certificate_arns" {
-  description = "ARNs of the certificates for the R² app and sandbox hostnames, keyed by hostname. Empty when enable_apps_domain is false."
+  description = "ARNs of the certificates for the R² app and sandbox hostnames, keyed by hostname. Empty unless retool-services has enable_apps_domain on."
   value       = local.outputs.apps_certificate_arns
 }
 

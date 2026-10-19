@@ -47,12 +47,14 @@ locals {
     : null
   )
 
-  apps_domain = "apps.${var.domain_name}"
+  apps_domain                = "apps.${var.domain_name}"
+  apps_domain_enabled        = try(var.retool_services.apps_domain_enabled, false)
+  wildcard_sandboxes_enabled = try(var.retool_services.wildcard_sandboxes_enabled, false)
 
   # ALB host-header wildcards match across dots, so *.apps also matches sandbox
   # hosts; the sandbox rule needs the lower (earlier) priority.
   apps_backends = merge(
-    var.enable_apps_domain ? {
+    local.apps_domain_enabled ? {
       app-serving-layer = {
         host        = "*.${local.apps_domain}"
         port        = 3010
@@ -61,7 +63,7 @@ locals {
         tg_suffix   = "apps"
       }
     } : {},
-    var.enable_apps_domain && var.enable_wildcard_sandboxes ? {
+    local.wildcard_sandboxes_enabled ? {
       agent-sandbox-proxy = {
         host        = "*.sandboxes.${local.apps_domain}"
         port        = 3019
@@ -169,12 +171,12 @@ resource "aws_acm_certificate" "apps" {
   lifecycle {
     precondition {
       condition     = var.enable_https_listener
-      error_message = "enable_apps_domain needs enable_https_listener = true: the apps hostnames are served on the HTTPS listener."
+      error_message = "enable_apps_domain on retool-services needs enable_https_listener = true here: the apps hostnames are served on the HTTPS listener."
     }
 
     precondition {
       condition     = local.manage_dns && !(var.create_hosted_zone && var.private_hosted_zone)
-      error_message = "enable_apps_domain mints a public ACM certificate for *.${local.apps_domain}, which needs a public hosted zone for ${var.domain_name}: leave create_hosted_zone = true or set hosted_zone_id."
+      error_message = "enable_apps_domain on retool-services mints a public ACM certificate for *.${local.apps_domain}, which needs a public hosted zone for ${var.domain_name}: leave create_hosted_zone = true or set hosted_zone_id."
     }
   }
 }

@@ -1,13 +1,13 @@
 locals {
   outputs = {
-    vnet_id           = azurerm_virtual_network.main.id
-    vnet_name         = azurerm_virtual_network.main.name
-    aks_subnet_id     = azurerm_subnet.aks.id
+    vnet_id            = azurerm_virtual_network.main.id
+    vnet_name          = azurerm_virtual_network.main.name
+    aks_subnet_id      = azurerm_subnet.aks.id
     postgres_subnet_id = azurerm_subnet.postgres.id
-    appgw_subnet_id   = azurerm_subnet.appgw.id
-    key_vault_id      = azurerm_key_vault.main.id
-    key_vault_uri     = azurerm_key_vault.main.vault_uri
-    key_vault_name    = azurerm_key_vault.main.name
+    appgw_subnet_id    = azurerm_subnet.appgw.id
+    key_vault_id       = azurerm_key_vault.main.id
+    key_vault_uri      = azurerm_key_vault.main.vault_uri
+    key_vault_name     = azurerm_key_vault.main.name
   }
 }
 
