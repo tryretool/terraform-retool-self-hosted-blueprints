@@ -13,7 +13,7 @@ variable "retool_helm_extra_values" {
 variable "retool_helm_chart_version" {
   type        = string
   description = "Version of Retool Helm chart to deploy"
-  default     = "6.11.33"
+  default     = "6.13.0"
 }
 
 variable "retool_helm_chart_use_unpublished_branch" {
@@ -85,13 +85,39 @@ variable "user_ingress" {
 variable "domain_name" {
   type        = string
   default     = null
-  description = "External domain that serves Retool to end users (e.g. \"retool.example.com\"). When set, configures env.BASE_DOMAIN, agentSandbox.frontendWsProxyDomain, agentSandbox.proxy.backendDomainSuffixes, and config.useInsecureCookies. The URL scheme is selected by https_enabled."
+  description = "External domain that serves Retool to end users (e.g. \"retool.example.com\"). When set, configures env.BASE_DOMAIN, agentSandbox.proxy.backendDomainSuffixes, and config.useInsecureCookies. The URL scheme is selected by https_enabled."
 }
 
 variable "https_enabled" {
   type        = bool
   default     = true
-  description = "Whether the user-facing ingress terminates HTTPS. Drives the scheme used in BASE_DOMAIN / frontendWsProxyDomain and inverts config.useInsecureCookies (cookies are only marked Secure when HTTPS is in use)."
+  description = "Whether the user-facing ingress terminates HTTPS. Drives the scheme used in BASE_DOMAIN and inverts config.useInsecureCookies (cookies are only marked Secure when HTTPS is in use)."
+}
+
+variable "enable_apps_domain" {
+  type        = bool
+  default     = false
+  description = <<-EOT
+    Serve R² published apps at https://<app>.apps.<domain_name>/ through the
+    chart's app serving layer (rr.appServingLayer, in-process on the main
+    backend). Requires domain_name, the agent sandbox, and an R² bucket, chart
+    6.13.0+ and Retool 4.78.0+. Turn on enable_apps_domain on the matching
+    *-user-ingress module too, so the apps hostnames get DNS, a certificate and a
+    route.
+  EOT
+}
+
+variable "enable_wildcard_sandboxes" {
+  type        = bool
+  default     = false
+  description = <<-EOT
+    Serve each editor preview on its own origin at
+    https://sandbox-<id>.sandboxes.apps.<domain_name>/ (rr.agentSandbox.wildcardSandboxes).
+    Requires enable_apps_domain. This moves every editor preview as soon as the
+    chart rolls out, so turn it on in a later apply, once the
+    *.sandboxes.apps.<domain_name> route and certificate from the *-user-ingress
+    module work.
+  EOT
 }
 
 variable "workflows_enabled" {

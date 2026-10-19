@@ -93,4 +93,29 @@ an OIDC identity provider *before* forwarding to Retool, using an ordered
 load balancer, in front of the application, and is independent of Retool's own
 SSO configuration.
 
+### R² app hostnames
+
+Set `enable_apps_domain = true` (with `enable_apps_domain` on `retool-helm`) to
+route `*.apps.<domain_name>` to the app serving layer and
+`*.sandboxes.apps.<domain_name>` to the agent-sandbox proxy. The module adds:
+
+* A second ACM certificate for both wildcards, with DNS validation records,
+  attached to the HTTPS listener as an extra certificate. The existing
+  certificate is not replaced.
+* Target groups for ports 3010 and 3019, `TargetGroupBinding`s to
+  `<retool_service_name>-app-serving-layer` and
+  `<retool_service_name>-agent-sandbox-proxy`, and node security group rules for
+  both ports from the ALB.
+* Host-header listener rules on the HTTPS listener, and Route 53 alias records
+  for both wildcards.
+
+It requires `enable_https_listener = true` and a public hosted zone this module
+writes into (`create_hosted_zone = true` or `hosted_zone_id`), because the new
+certificate is validated through DNS. `acm_certificate_arn` only replaces the
+main certificate.
+
+`alb_authenticate_oidc` does not apply to these hostnames. Each app and sandbox
+gets its own hostname, and the identity provider would need a redirect URI for
+every one. They rely on Retool's own authentication.
+
 > [!NOTE] This module is intended to be used in conjunction with the other AWS-specific modules in [`retool-self-hosted-blueprints`](https://github.com/tryretool/retool-self-hosted-blueprints). See the [usage examples](https://github.com/tryretool/retool-self-hosted-blueprints/tree/main/examples) for references on how to use this module.

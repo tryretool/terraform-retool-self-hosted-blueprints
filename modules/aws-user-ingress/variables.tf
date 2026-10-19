@@ -182,3 +182,19 @@ variable "alb_authenticate_oidc" {
   default     = null
   sensitive   = true
 }
+
+variable "enable_apps_domain" {
+  type        = bool
+  description = <<-EOT
+    Route R² app hostnames to Retool: *.apps.<domain_name> to the app serving
+    layer (Service <retool_service_name>-app-serving-layer, port 3010) and
+    *.sandboxes.apps.<domain_name> to the agent-sandbox proxy
+    (<retool_service_name>-agent-sandbox-proxy, port 3019). Adds a second ACM
+    certificate for both wildcards, with DNS validation records, attached to the
+    HTTPS listener. Requires enable_https_listener and a public hosted zone this
+    module writes into. Set enable_apps_domain on the retool-helm module too.
+
+    alb_authenticate_oidc does not apply to these hostnames.
+  EOT
+  default     = false
+}

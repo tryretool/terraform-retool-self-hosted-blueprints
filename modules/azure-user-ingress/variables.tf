@@ -89,6 +89,12 @@ variable "enable_https" {
   default     = false
 }
 
+variable "enable_apps_domain" {
+  type        = bool
+  default     = false
+  description = "Route R² app hostnames to Retool through AGIC: *.apps.<domain_name> to the app serving layer (Service retool-app-serving-layer, port 3010) and *.sandboxes.apps.<domain_name> to the agent-sandbox proxy (retool-agent-sandbox-proxy, port 3019). Creates one Ingress per hostname, DNS records for both wildcards when enable_agic is true, and, when enable_https is true, a second cert-manager Certificate for both. Set enable_apps_domain on the retool-helm module too."
+}
+
 variable "tags" {
   type        = map(string)
   default     = {}

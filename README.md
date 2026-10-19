@@ -122,6 +122,29 @@ See the [scaling guide](./guides/scaling.md) for how to size the database and
 scale the Retool services (replica counts, resource requests/limits) via
 `retool_helm_extra_values`.
 
+## Serving R² apps on their own hostnames
+
+Set `enable_apps_domain = true` on both the `retool-helm` module and your
+cloud's `*-user-ingress` module to serve R² published apps at
+`https://<app>.apps.<domain_name>/`. This needs Helm chart 6.13.0+ (the
+`retool-helm` default) and Retool 4.78.0+, plus the agent sandbox and Remote
+Repository storage that the `*_r2_beta` examples turn on.
+
+The ingress module adds a second certificate covering `*.apps.<domain_name>` and
+`*.sandboxes.apps.<domain_name>`, DNS records for both, and routes to the app
+serving layer and the agent-sandbox proxy. The existing certificate is not
+changed.
+
+To also give each editor preview its own origin
+(`sandbox-<id>.sandboxes.apps.<domain_name>`), set
+`enable_wildcard_sandboxes = true` on `retool-helm` in a later apply, once the
+new certificate is issued. It moves every editor preview as soon as the chart
+rolls out.
+
+Don't add the apps hostnames to the chart's main `ingress.hosts` through
+`retool_helm_extra_values`: the main Ingress adds multiplayer and MCP paths to
+every host it serves.
+
 ## Testing an unpublished Helm chart branch
 
 By default the modules install the published Retool chart from
