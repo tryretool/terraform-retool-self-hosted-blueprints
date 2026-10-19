@@ -72,6 +72,7 @@ module "user-ingress" {
   resource_group_name = local.resource_group_name
   location            = local.location
   domain_name         = local.domain_name
+  enable_apps_domain  = true
   vnet                = module.vnet.outputs
   aks                 = module.aks.outputs
   enable_https        = local.enable_https
@@ -86,13 +87,16 @@ module "retool" {
   version = "~> 0.5"
 
   retool_helm_name          = "retool"
-  retool_helm_chart_version = "6.11.15"
+  retool_helm_chart_version = "6.13.0"
 
   db              = module.db-main.outputs
   retool_services = module.retool-services.outputs
   user_ingress    = module.user-ingress.outputs
   domain_name     = local.domain_name
   https_enabled   = local.enable_https
+
+  # Serve published apps at <app>.apps.<domain_name>. Needs Retool 4.78.0 or later.
+  enable_apps_domain = true
 
   retool_helm_extra_values = [yamlencode({
     image = {
