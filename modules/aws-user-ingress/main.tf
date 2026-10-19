@@ -1,4 +1,6 @@
 locals {
+  all_tags = merge(var.default_tags, var.tags, { "aws-apn-id" = "pc:eb361b0frzt279bzrk1zwdk0w" })
+
   # Namespace of the Retool Service the TargetGroupBinding registers, sourced
   # from the retool-services outputs (falls back to "default").
   retool_service_namespace = coalesce(try(var.retool_services.retool_namespace, null), "default")
@@ -53,6 +55,8 @@ resource "aws_route53_zone" "hosted_zone" {
 
   name = var.domain_name
 
+  tags = local.all_tags
+
   # A zone with no vpc block is public. A private zone needs exactly one VPC
   # association at creation.
   dynamic "vpc" {
@@ -95,6 +99,8 @@ resource "aws_acm_certificate" "cert" {
   ]
 
   validation_method = "DNS"
+
+  tags = local.all_tags
 
   lifecycle {
     precondition {
@@ -161,6 +167,8 @@ resource "aws_security_group" "alb" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
+
+  tags = local.all_tags
 }
 
 resource "aws_vpc_security_group_ingress_rule" "retool_from_alb" {
@@ -170,6 +178,8 @@ resource "aws_vpc_security_group_ingress_rule" "retool_from_alb" {
   ip_protocol                  = "tcp"
   from_port                    = var.retool_service_port
   to_port                      = var.retool_service_port
+
+  tags = local.all_tags
 }
 
 resource "aws_lb" "alb" {
@@ -178,6 +188,8 @@ resource "aws_lb" "alb" {
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb.id]
   subnets            = local.alb_subnet_ids
+
+  tags = local.all_tags
 
   lifecycle {
     precondition {
@@ -198,6 +210,8 @@ resource "aws_lb_target_group" "alb_target_group" {
   protocol    = "HTTP"
   target_type = "ip"
   vpc_id      = var.vpc.vpc_id
+
+  tags = local.all_tags
 
   health_check {
     enabled             = true
@@ -220,6 +234,8 @@ resource "aws_lb_listener" "https" {
   protocol          = "HTTPS"
   ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
   certificate_arn   = local.certificate_arn
+
+  tags = local.all_tags
 
   # Edge authentication, when configured: users must complete the OIDC flow
   # before any request reaches Retool. `order` matters — ALB evaluates actions in
@@ -263,6 +279,8 @@ resource "aws_lb_listener" "http_redirect" {
   port              = 80
   protocol          = "HTTP"
 
+  tags = local.all_tags
+
   default_action {
     type = "redirect"
 
@@ -282,6 +300,8 @@ resource "aws_lb_listener" "http_forward" {
   load_balancer_arn = aws_lb.alb.arn
   port              = 80
   protocol          = "HTTP"
+
+  tags = local.all_tags
 
   default_action {
     type             = "forward"

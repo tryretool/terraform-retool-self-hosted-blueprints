@@ -3,7 +3,7 @@ data "aws_availability_zones" "available" {}
 locals {
   # Use first 3 AZs
   azs      = slice(data.aws_availability_zones.available.names, 0, 3)
-  all_tags = merge(var.default_tags, var.tags)
+  all_tags = merge(var.default_tags, var.tags, { "aws-apn-id" = "pc:eb361b0frzt279bzrk1zwdk0w" })
   
   private_subnet_tags = merge(var.private_subnet_tags, {
     # In the aws/retool-services module, the `karpenter.sh/discovery` tag value

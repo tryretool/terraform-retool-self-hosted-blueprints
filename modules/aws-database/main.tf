@@ -1,6 +1,6 @@
 locals {
   rds_cluster_identifier = var.identifier != null ? var.identifier : "${var.prefix}-${var.db_purpose}"
-  all_tags               = merge(var.default_tags, var.tags)
+  all_tags               = merge(var.default_tags, var.tags, { "aws-apn-id" = "pc:eb361b0frzt279bzrk1zwdk0w" })
 }
 
 module "rds_cluster" {

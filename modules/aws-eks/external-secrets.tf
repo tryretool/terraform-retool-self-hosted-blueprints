@@ -71,6 +71,8 @@ resource "aws_eks_pod_identity_association" "external_secrets" {
   service_account = local.external_secrets.service_account_name
   role_arn        = aws_iam_role.external_secrets[0].arn
 
+  tags = local.all_tags
+
   # In create mode the agent is one of module.eks's addons; when adopting a
   # cluster it is the standalone resource.
   depends_on = [

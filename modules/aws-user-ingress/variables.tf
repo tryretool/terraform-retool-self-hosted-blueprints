@@ -182,3 +182,17 @@ variable "alb_authenticate_oidc" {
   default     = null
   sensitive   = true
 }
+
+variable "default_tags" {
+  type        = map(string)
+  description = "Default tags applied to all taggable resources. Includes service identification by default."
+  default = {
+    "service" = "retool"
+  }
+}
+
+variable "tags" {
+  type        = map(string)
+  description = "Extra tags merged on top of default_tags. Use this for environment- or deployment-specific tags."
+  default     = {}
+}
