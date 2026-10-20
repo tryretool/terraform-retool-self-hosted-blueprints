@@ -34,26 +34,20 @@ name: Autoupdate
 #    provider (https://token.actions.githubusercontent.com, audience
 #    sts.amazonaws.com) created once.
 #
-# 3. An Entra app registration with a federated credential for this repository
-#    and Reader at *subscription* scope — both Azure lookups read
-#    subscription-level provider endpoints, so a resource-group-scoped Reader is
-#    not enough. Client, tenant and subscription IDs go in the three
-#    AUTOUPDATE_AZURE_* secrets. Microsoft.ContainerService and
-#    Microsoft.DBforPostgreSQL must be registered in the subscription;
-#    registration needs */register/action, which Reader does not have, so an
-#    Owner has to do that once out of band.
+# 3. Nothing Azure, deliberately. The aks-cluster and azure-postgres
+#    components read endoflife.date's public API — see the registry comments
+#    in scripts/autoupdate.py for why, and for the tradeoffs that choice
+#    makes — so there is no Azure login step and no Azure credential anywhere.
 #
-# Both federated trusts are scoped to the environment-scoped subject
-# repo:tryretool/terraform-retool-self-hosted-blueprints:environment:autoupdater:
-# a job that declares a GitHub environment mints its OIDC token with that
-# `sub` claim instead of the ref form, and this job declares the environment
-# in every event — `schedule` (always the default branch), a
-# `workflow_dispatch` against main, and the rehearsal branch alike. Which
-# branches may run the job at all is then gated by the environment's branch
-# policy — main, plus temporarily the ra/autoupdate-gha-test rehearsal branch;
-# remove the rehearsal branch from the branch policy once this PR merges.
-# Azure fails *silently* on an untrusted subject — the token exchange just
-# does not succeed, with no error naming the subject.
+# The AWS federated trust accepts only the environment-scoped subject —
+# repo:<this repository>:environment:autoupdater — because a job that
+# declares a GitHub environment mints its OIDC token with that `sub` claim
+# instead of the ref form, and this job declares the environment in every
+# event: `schedule` (always the default branch), a `workflow_dispatch`
+# against main, and the rehearsal branch alike. Which branches may run the
+# job at all is then gated by the environment's branch policy — main, plus
+# temporarily the ra/autoupdate-gha-test rehearsal branch; remove the
+# rehearsal branch from the branch policy once this PR merges.
 
 on:
   workflow_dispatch:
@@ -83,7 +77,7 @@ permissions:
   # For actions/checkout only. Every write — the branch push and the pull
   # request — goes through the GitHub App token, so GITHUB_TOKEN stays read-only.
   contents: read
-  # Mint the OIDC token that AWS and Azure exchange for short-lived credentials.
+  # Mint the OIDC token that AWS exchanges for short-lived credentials.
   id-token: write
 
 jobs:
@@ -130,15 +124,9 @@ jobs:
           role-session-name: autoupdate-${{ github.run_id }}
           audience: sts.amazonaws.com
 
-      # The aks-cluster and azure-postgres components shell out to the `az` CLI
-      # (preinstalled on ubuntu-latest), so this has to be a real CLI login
-      # rather than an SDK credential. azure/login runs `az login` with the
-      # federated token, which is exactly that.
-      - uses: azure/login@v3
-        with:
-          client-id: ${{ secrets.AUTOUPDATE_AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AUTOUPDATE_AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AUTOUPDATE_AZURE_SUBSCRIPTION_ID }}
+      # No Azure login step, deliberately: the aks-cluster and azure-postgres
+      # components read endoflife.date's public API (see COMPONENTS in
+      # scripts/autoupdate.py) and need no credentials at all.
 
       # One invocation does the scan, the upstream lookups, the writes and the
       # Markdown report. Running `report` and then `update` would double every

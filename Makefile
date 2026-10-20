@@ -45,9 +45,10 @@ require-uv:
 	"; exit 1; fi
 
 # Both targets hit live registries and, for the Kubernetes and Postgres
-# components, the AWS and Azure APIs — so they need credentials for those
-# (aws sso login / az login). A component whose credentials are missing reports
-# as a failed row and sets a non-zero exit without blocking the others.
+# components on AWS, the AWS APIs — so they need AWS credentials
+# (aws sso login). The Azure components read endoflife.date and need none. A
+# component whose credentials are missing reports as a failed row and sets a
+# non-zero exit without blocking the others.
 .PHONY: autoupdate-report
 autoupdate-report: require-uv
 autoupdate-report: ## Show which AUTOUPDATE-marked versions are behind upstream, changing nothing
