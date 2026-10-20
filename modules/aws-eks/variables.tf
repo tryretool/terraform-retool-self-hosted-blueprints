@@ -60,8 +60,9 @@ variable "existing_cluster" {
 }
 
 variable "cluster_version" {
-  type        = string
-  default     = "1.34"
+  type = string
+  # AUTOUPDATE: eks-cluster 1.x
+  default     = "1.37"
   description = "The version of the EKS cluster (use a version with available EKS optimized AMI in your region, e.g. 1.34)."
 }
 
@@ -191,8 +192,9 @@ variable "enable_smarter_devices_net_tun_node_overlay" {
 }
 
 variable "karpenter_version" {
-  type        = string
-  default     = "1.12.0"
+  type = string
+  # AUTOUPDATE: karpenter-chart 1.x.x
+  default     = "1.15.0"
   description = "Version of the karpenter and karpenter-crd charts to install (kept in lockstep with each other). Bump this when raising cluster_version to a Kubernetes release that requires a newer Karpenter — see https://karpenter.sh/docs/upgrading/compatibility/ — or pin to an older release if a newer one regresses."
 }
 
@@ -349,7 +351,8 @@ variable "external_secrets_assumable_role_arns" {
 variable "cert_manager_chart" {
   type = object({
     repository = optional(string, "https://charts.jetstack.io")
-    version    = optional(string, "v1.21.0")
+    # AUTOUPDATE: cert-manager-chart 1.x.x
+    version = optional(string, "v1.21.2")
   })
   default     = {}
   description = "Where to fetch the cert-manager chart. This module passes CRD installation as crds.enabled, a key cert-manager only accepts from chart v1.15 onward, so pinning anything older silently installs no CRDs and makes install_crds a no-op. See https://artifacthub.io/packages/helm/cert-manager/cert-manager"
@@ -358,7 +361,8 @@ variable "cert_manager_chart" {
 variable "external_secrets_chart" {
   type = object({
     repository = optional(string, "https://charts.external-secrets.io")
-    version    = optional(string, "2.8.0")
+    # AUTOUPDATE: external-secrets-chart 2.x.x
+    version = optional(string, "2.13.0")
   })
   default     = {}
   description = "Where to fetch the External Secrets Operator chart. The values this module sets — crds.unsafeServeV1Beta1 and the crds.annotations that keep the CRDs through an uninstall — exist only in chart 2.x, and external_secrets_serve_v1beta1 above describes 2.x's defaults, so pinning a 0.x or 1.x chart quietly changes what both knobs do. See https://artifacthub.io/packages/helm/external-secrets-operator/external-secrets"
@@ -367,7 +371,8 @@ variable "external_secrets_chart" {
 variable "alb_controller_chart" {
   type = object({
     repository = optional(string, "https://aws.github.io/eks-charts")
-    version    = optional(string, "v1.13.2")
+    # AUTOUPDATE: alb-controller-chart 1.x.x
+    version = optional(string, "v1.17.1")
   })
   default     = {}
   description = "Where to fetch the AWS Load Balancer Controller chart. Note the leading \"v\": upstream tags these chart versions both ways and Helm resolves either, but the two spellings are different strings in state, so switching between them shows a version diff without changing the chart. This chart also sets enableCertManager and templates a cert-manager.io/v1 Certificate for its own webhook, so this version and cert_manager_chart.version have to stay mutually compatible. See https://github.com/aws/eks-charts/tree/master/stable/aws-load-balancer-controller"
@@ -376,7 +381,8 @@ variable "alb_controller_chart" {
 variable "reloader_chart" {
   type = object({
     repository = optional(string, "https://stakater.github.io/stakater-charts")
-    version    = optional(string, "2.2.14")
+    # AUTOUPDATE: reloader-chart 2.x.x
+    version = optional(string, "2.2.18")
   })
   default     = {}
   description = "Where to fetch the Stakater reloader chart. See https://artifacthub.io/packages/helm/stakater/reloader"
