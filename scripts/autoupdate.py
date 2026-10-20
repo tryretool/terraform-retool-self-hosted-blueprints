@@ -34,10 +34,10 @@ from __future__ import annotations
 import json
 import os
 import re
-import shutil
 import subprocess
 import sys
 from dataclasses import dataclass, field
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any, Literal, Protocol
 
@@ -171,7 +171,7 @@ def select_best(constraint: Constraint, candidates: list[str]) -> ParsedVersion:
     """Highest candidate satisfying the constraint.
 
     Upstream order is never trusted: stakater's index.yaml lists 3.0.0-beta.1
-    first, and AKS orders patch versions lexicographically (where 1.34.9 sorts
+    first, and registries sort tags lexicographically (where 1.34.9 sorts
     above 1.34.11). Everything is parsed and compared as a tuple of ints.
 
     packaging.version is deliberately not used — postgres16, POSTGRES_16,
@@ -229,7 +229,6 @@ class SourceEnv:
 
     aws_region: str
     aws_profile: str | None
-    azure_location: str
     timeout: int
     _session: Any = field(default=None, repr=False)
 
@@ -249,8 +248,13 @@ class SourceEnv:
 class VersionSource(Protocol):
     """Where the available versions of one component come from."""
 
-    needs: str
-    """Prerequisite named in error rows, e.g. "AWS credentials"."""
+    # A read-only property, not a plain attribute: every source is a frozen
+    # dataclass, whose attributes are read-only, and a read-only
+    # implementation cannot satisfy a protocol attribute declared writable.
+    @property
+    def needs(self) -> str:
+        """Prerequisite named in error rows, e.g. "AWS credentials"."""
+        ...
 
     def fetch(self, env: SourceEnv) -> list[str]:
         """Every candidate version, spelled exactly as upstream spells it.
@@ -258,6 +262,7 @@ class VersionSource(Protocol):
         Order is not significant — selection happens downstream. Raise
         VersionFetchError for anything that prevents answering.
         """
+        ...
 
 
 def _http_get(url: str, env: SourceEnv, **kwargs: Any) -> httpx.Response:
@@ -455,78 +460,66 @@ def _aws_hint(exc: Exception) -> str:
     return "check --aws-region and credentials"
 
 
-def _az(args: list[str], env: SourceEnv) -> Any:
-    """Run an `az` command and return its parsed JSON stdout.
+def _parse_iso_date(value: Any) -> date | None:
+    """Parse an endoflife.date date field; None for absent or malformed."""
+    if not isinstance(value, str):
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
 
-    stdout and stderr are kept separate on purpose: az writes WARNING: lines to
-    stderr on several of these commands, and merging would corrupt the JSON.
+
+@dataclass(frozen=True)
+class EndOfLife:
+    """Cycles endoflife.date currently lists as released and not retired.
+
+    Unofficial on purpose. Reading ARM for these instead would mean an Entra
+    app registration or managed identity, a federated credential, Reader at
+    subscription scope, and two registered resource providers — real
+    ceremony for two lookups — so these components take the community-data
+    tradeoff documented in COMPONENTS, and the nightly job stays Azure-free.
     """
-    if shutil.which("az") is None:
-        raise VersionFetchError("az not found on PATH", hint="brew install azure-cli")
-    try:
-        completed = subprocess.run(
-            ["az", *args, "-o", "json", "--only-show-errors"],
-            capture_output=True,
-            text=True,
-            timeout=env.timeout,
-        )
-    except subprocess.TimeoutExpired as exc:
-        raise VersionFetchError(f"az timed out after {env.timeout}s") from exc
-    if completed.returncode != 0:
-        lines = [ln for ln in completed.stderr.strip().splitlines() if ln.strip()]
-        raise VersionFetchError(
-            lines[-1] if lines else f"az exited {completed.returncode}",
-            hint="az login, and check --azure-location",
-        )
-    try:
-        return json.loads(completed.stdout)
-    except json.JSONDecodeError as exc:
-        raise VersionFetchError(f"unparseable JSON from az: {exc}") from exc
 
-
-@dataclass(frozen=True)
-class AksCluster:
-    """Kubernetes versions AKS offers in a location, excluding previews."""
-
-    needs: str = "az login"
+    product: str
+    # Days a release must be old before it is proposed. endoflife.date is
+    # global while availability is regional, and a Kubernetes minor reaches
+    # every AKS region over roughly the weeks after GA. The buffer trades
+    # bump latency for bump safety.
+    min_age_days: int = 30
+    needs: str = "network access"
 
     def fetch(self, env: SourceEnv) -> list[str]:
-        payload = _az(["aks", "get-versions", "--location", env.azure_location], env)
-        return [
-            entry["version"]
-            for entry in payload.get("values", [])
-            if not entry.get("isPreview")
-        ]
-
-
-@dataclass(frozen=True)
-class AzurePostgres:
-    """Postgres major versions Flexible Server offers in a location."""
-
-    needs: str = "az login"
-
-    def fetch(self, env: SourceEnv) -> list[str]:
-        payload = _az(
-            [
-                "postgres",
-                "flexible-server",
-                "list-skus",
-                "--location",
-                env.azure_location,
-            ],
-            env,
-        )
-        versions = [
-            supported["name"]
-            for entry in payload
-            for supported in entry.get("supportedServerVersions", [])
-        ]
-        if not versions:
-            # An empty list here means the region is restricted for provisioning,
-            # not that Postgres has no versions. Failing loudly beats a no-op.
+        response = _http_get(f"https://endoflife.date/api/{self.product}.json", env)
+        try:
+            cycles = response.json()
+        except json.JSONDecodeError as exc:
             raise VersionFetchError(
-                f"no server versions offered in {env.azure_location}",
-                hint="provisioning may be restricted in this region; try another",
+                f"unparseable JSON from endoflife.date: {exc}"
+            ) from exc
+        if not isinstance(cycles, list):
+            raise VersionFetchError("unexpected payload from endoflife.date")
+
+        today = date.today()
+        floor = today - timedelta(days=self.min_age_days)
+        versions: list[str] = []
+        for cycle in cycles:
+            name = cycle.get("cycle")
+            release = _parse_iso_date(cycle.get("releaseDate"))
+            eol = _parse_iso_date(cycle.get("eol"))
+            # Not released yet, or released too recently to trust everywhere.
+            if release is None or release > floor:
+                continue
+            # A null eol means the tracker has no date yet, not that the
+            # cycle is gone; a past eol means retired.
+            if eol is not None and eol <= today:
+                continue
+            if isinstance(name, str) and name:
+                versions.append(name)
+        if not versions:
+            raise VersionFetchError(
+                f"no live cycles for {self.product} on endoflife.date",
+                hint=f"https://endoflife.date/api/{self.product}.json",
             )
         return versions
 
@@ -574,9 +567,21 @@ COMPONENTS: dict[str, VersionSource] = {
     "retool-image": DockerHubTags("tryretool/backend"),
     # Cloud platform versions.
     "eks-cluster": EksCluster(),
-    "aks-cluster": AksCluster(),
     "rds-postgres": RdsPostgres(),
-    "azure-postgres": AzurePostgres(),
+    # Azure platform versions read endoflife.date's community API rather than
+    # ARM, so the nightly job needs no Azure credentials at all. The costs,
+    # accepted knowingly:
+    #
+    # aks-cluster — the data is global, not per-region; min_age_days holds a
+    #   new minor back until every AKS region should have it. Only GA cycles
+    #   are listed, so the isPreview filter the old az source needed has no
+    #   counterpart here.
+    # azure-postgres — the marker pins a bare major that advances by hand, so
+    #   this mostly answers "is that major still offered"; once the cycle is
+    #   retired the marker fails loudly and the major bump stays a human
+    #   decision, as it should be.
+    "aks-cluster": EndOfLife("azure-kubernetes-service"),
+    "azure-postgres": EndOfLife("azure-database-for-postgresql"),
     # Deliberately absent:
     #
     # gke-cluster — there is no literal to bump. modules/gcp-gke pins via
@@ -686,7 +691,12 @@ def scan_file(path: Path) -> tuple[list[Marker], list[Problem]]:
         number = index + 1
         component = match.group("component")
 
-        def fail(message: str) -> None:
+        # Bind the loop variables by default. fail is only ever called within
+        # the iteration that defines it, but a closure that outlived its
+        # iteration would read the loop's final values (B023).
+        def fail(
+            message: str, *, number: int = number, component: str = component
+        ) -> None:
             problems.append(Problem(path, number, component, message))
 
         raw_constraint = match.group("constraint")
@@ -697,7 +707,10 @@ def scan_file(path: Path) -> tuple[list[Marker], list[Problem]]:
                 # Easy mistake: writing "v1.x.x" because the literal reads
                 # "v1.21.0". Constraints are numeric because matching ignores the
                 # prefix; the literal's own prefix is reapplied when rendering.
-                hint = f" (constraints carry no prefix — did you mean {raw_constraint.lstrip('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_-')!r}?)"
+                stripped = raw_constraint.lstrip(
+                    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_-"
+                )
+                hint = f" (constraints carry no prefix — did you mean {stripped!r}?)"
             fail(f"unparseable constraint {raw_constraint!r}{hint}")
             continue
 
@@ -710,7 +723,8 @@ def scan_file(path: Path) -> tuple[list[Marker], list[Problem]]:
             continue
         if target in claimed:
             fail(
-                f"line {target + 1} is already claimed by the marker on line {claimed[target]}"
+                f"line {target + 1} is already claimed by the marker on "
+                f"line {claimed[target]}"
             )
             continue
 
@@ -722,7 +736,8 @@ def scan_file(path: Path) -> tuple[list[Marker], list[Problem]]:
         quoted = list(QUOTED_RE.finditer(lines[target]))
         if len(quoted) != 1:
             fail(
-                f"expected exactly one quoted string on line {target + 1}, found {len(quoted)}"
+                f"expected exactly one quoted string on line {target + 1}, "
+                f"found {len(quoted)}"
             )
             continue
 
@@ -836,7 +851,12 @@ def resolve(markers: list[Marker], resolver: Resolver) -> list[Resolution]:
         try:
             candidates = resolver.versions_for(marker.component)
             chosen = select_best(marker.constraint, candidates)
-            proposed = render(shape_of(parse_version(marker.literal)), chosen)
+            # parse_version cannot return None here: scan_file drops any
+            # marker whose literal is not version-shaped, so every marker
+            # reaching this point carries a parseable literal.
+            literal = parse_version(marker.literal)
+            assert literal is not None
+            proposed = render(shape_of(literal), chosen)
         except VersionFetchError as exc:
             note = str(exc) + (f" ({exc.hint})" if exc.hint else "")
             resolutions.append(Resolution(marker, "error", note=note))
@@ -989,7 +1009,9 @@ def as_markdown(resolutions: list[Resolution], problems: list[Problem]) -> str:
             "| Component | Location | From | To | Note |",
             "| --- | --- | --- | --- | --- |",
         ]
-        for r in sorted(updates, key=lambda r: (r.marker.component, str(r.marker.path))):
+        for r in sorted(
+            updates, key=lambda r: (r.marker.component, str(r.marker.path))
+        ):
             out.append(
                 f"| `{r.marker.component}` | `{r.marker.location}` "
                 f"| `{r.marker.literal}` | `{r.proposed}` | {_md_cell(r.note)} |"
@@ -1021,7 +1043,9 @@ def as_markdown(resolutions: list[Resolution], problems: list[Problem]) -> str:
             "| Component | Location | Version | Note |",
             "| --- | --- | --- | --- |",
         ]
-        for r in sorted(current, key=lambda r: (r.marker.component, str(r.marker.path))):
+        for r in sorted(
+            current, key=lambda r: (r.marker.component, str(r.marker.path))
+        ):
             out.append(
                 f"| `{r.marker.component}` | `{r.marker.location}` "
                 f"| `{r.marker.literal}` | {_md_cell(r.note)} |"
@@ -1109,12 +1133,6 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 )
 @click.option("--aws-profile", default=None, help="AWS CLI profile to use.")
 @click.option(
-    "--azure-location",
-    default="eastus2",
-    show_default=True,
-    help="Location for the AKS and Azure Postgres lookups.",
-)
-@click.option(
     "--timeout", default=60, show_default=True, help="Per-request timeout in seconds."
 )
 @click.pass_context
@@ -1123,7 +1141,6 @@ def cli(
     root: Path,
     aws_region: str,
     aws_profile: str | None,
-    azure_location: str,
     timeout: int,
 ) -> None:
     """Bump the version literals carrying an AUTOUPDATE marker."""
@@ -1132,7 +1149,6 @@ def cli(
         "env": SourceEnv(
             aws_region=aws_region,
             aws_profile=aws_profile,
-            azure_location=azure_location,
             timeout=timeout,
         ),
     }
