@@ -19,6 +19,7 @@ locals {
     secret_store_name                = local.secret_store_name
     secret_store_kind                = local.secret_store_kind
     secret_store_backend_type        = "azureKeyVault"
+    deployment_template_type         = "azure-aks"
   }
 }
 
@@ -115,6 +116,11 @@ output "secret_store_name" {
 output "secret_store_backend_type" {
   description = "ESO secret store backend type identifier for use in Retool Helm values."
   value       = local.outputs.secret_store_backend_type
+}
+
+output "deployment_template_type" {
+  description = "Cloud-specific token (\"azure-aks\") identifying this blueprint's flavor. Pass to retool-helm (via retool_services) to report the deployment template type via DEPLOYMENT_TEMPLATE_TYPE."
+  value       = local.outputs.deployment_template_type
 }
 
 output "outputs" {
