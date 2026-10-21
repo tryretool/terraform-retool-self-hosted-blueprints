@@ -29,6 +29,8 @@ resource "helm_release" "reloader" {
       }
     }),
     yamlencode(local.has_pod_scheduling ? { reloader = { deployment = local.pod_scheduling } } : {}),
+    # deployment.labels lands on both the Deployment and its pod template.
+    yamlencode(length(var.pod_labels) > 0 ? { reloader = { deployment = { labels = var.pod_labels } } } : {}),
   ]
 
   depends_on = [google_container_node_pool.primary]

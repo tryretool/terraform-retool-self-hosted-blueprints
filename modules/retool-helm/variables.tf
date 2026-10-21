@@ -4,6 +4,12 @@ variable "retool_helm_name" {
   default     = "retool"
 }
 
+variable "retool_helm_chart" {
+  type        = string
+  description = "Chart name under retool_helm_chart_repository, or a local chart path."
+  default     = "retool"
+}
+
 variable "retool_helm_extra_values" {
   type        = list(string)
   description = "List of Helm values files contents. Each list element should be a YAML string conforming to the [Retool Helm chart values.yaml schema](https://github.com/tryretool/retool-helm/blob/main/charts/retool/values.yaml)."

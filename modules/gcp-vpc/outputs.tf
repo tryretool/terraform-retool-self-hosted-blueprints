@@ -1,11 +1,12 @@
 locals {
   outputs = {
-    network_id          = module.vpc.network_id
-    network_name        = module.vpc.network_name
-    subnet_name         = module.vpc.subnets_names[0]
-    subnet_self_link    = module.vpc.subnets_self_links[0]
-    pods_range_name     = local.pods_range_name
-    services_range_name = local.services_range_name
+    network_id             = module.vpc.network_id
+    network_name           = module.vpc.network_name
+    subnet_name            = module.vpc.subnets_names[0]
+    subnet_self_link       = module.vpc.subnets_self_links[0]
+    pods_range_name        = local.pods_range_name
+    services_range_name    = local.services_range_name
+    psa_allocated_ip_range = module.private_service_access.google_compute_global_address_name
   }
 }
 
@@ -37,6 +38,11 @@ output "pods_range_name" {
 output "services_range_name" {
   description = "Name of the secondary IP range for GKE services"
   value       = local.outputs.services_range_name
+}
+
+output "psa_allocated_ip_range" {
+  description = "Name of the reserved Private Service Access range (pass to Cloud SQL allocated_ip_range)."
+  value       = local.outputs.psa_allocated_ip_range
 }
 
 output "outputs" {

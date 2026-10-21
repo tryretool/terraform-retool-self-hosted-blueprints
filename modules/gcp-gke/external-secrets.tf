@@ -62,6 +62,9 @@ resource "helm_release" "external_secrets" {
       webhook        = local.pod_scheduling
       certController = local.pod_scheduling
     }) : {}),
+    # Each deployment uses its own podLabels instead of the global ones when
+    # set, so the global block is the only place that reaches all three.
+    yamlencode(length(var.pod_labels) > 0 ? { global = { podLabels = var.pod_labels } } : {}),
   ]
 
   depends_on = [google_container_node_pool.primary]
