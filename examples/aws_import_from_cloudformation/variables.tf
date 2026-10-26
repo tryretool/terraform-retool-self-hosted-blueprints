@@ -232,7 +232,8 @@ variable "license_key_secret" {
 variable "cluster_version" {
   type        = string
   description = "EKS Kubernetes version."
-  default     = "1.34"
+  # AUTOUPDATE: eks-cluster 1.x
+  default = "1.37"
 }
 
 variable "cluster_encryption_kms_key_arn" {
@@ -306,7 +307,8 @@ variable "retool_image_tag" {
 variable "retool_helm_chart_version" {
   type        = string
   description = "Version of the Retool Helm chart to deploy."
-  default     = "6.11.15"
+  # AUTOUPDATE: retool-chart 6.x.x
+  default = "6.13.2"
 }
 
 variable "replica_counts" {

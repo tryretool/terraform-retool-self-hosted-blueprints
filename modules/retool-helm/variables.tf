@@ -13,7 +13,8 @@ variable "retool_helm_extra_values" {
 variable "retool_helm_chart_version" {
   type        = string
   description = "Version of Retool Helm chart to deploy"
-  default     = "6.11.33"
+  # AUTOUPDATE: retool-chart 6.x.x
+  default = "6.13.2"
 }
 
 variable "retool_helm_chart_use_unpublished_branch" {
