@@ -60,8 +60,9 @@ module "retool" {
   source  = "tryretool/self-hosted-blueprints/retool//modules/retool-helm"
   version = "~> 0.5"
 
-  retool_helm_name          = "retool"
-  retool_helm_chart_version = "6.11.15"
+  retool_helm_name = "retool"
+  # AUTOUPDATE: retool-chart 6.x.x
+  retool_helm_chart_version = "6.13.2"
 
   db              = module.db-main.outputs
   retool_services = module.retool-services.outputs
@@ -70,7 +71,8 @@ module "retool" {
 
   retool_helm_extra_values = [yamlencode({
     image = {
-      tag = "3.334.0-stable"
+      # AUTOUPDATE: retool-image 3.x.x-stable
+      tag = "3.334.32-stable"
     }
     podDisruptionBudget = {
       maxUnavailable = 1
