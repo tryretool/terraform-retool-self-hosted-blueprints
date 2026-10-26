@@ -202,8 +202,8 @@ jobs:
           # Not a `chore(...)` subject: .auto-changelog ignores that prefix, and
           # these bumps change what a downstream `terraform apply` provisions, so
           # they belong in the changelog people read before upgrading.
-          title: Bump pinned component versions to their latest upstream releases
-          commit-message: Bump pinned component versions to their latest upstream releases
+          title: '[autoupdate] Bump pinned component versions'
+          commit-message: '[autoupdate] Bump pinned component versions'
           body-path: ${{ runner.temp }}/pr-body.md
           # A crashed `update` can leave a `.<name>.tf.autoupdate` temp file
           # behind. It does not end in `.tf`, so this pathspec already excludes
