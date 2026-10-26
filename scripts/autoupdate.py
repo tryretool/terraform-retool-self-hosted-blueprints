@@ -1065,6 +1065,54 @@ def as_markdown(resolutions: list[Resolution], problems: list[Problem]) -> str:
     return "\n".join(out).rstrip() + "\n"
 
 
+def as_commit_message(resolutions: list[Resolution], problems: list[Problem]) -> str:
+    """Render the bumped markers as a plain-text git commit message.
+
+    Derived from the same Outcome as the Markdown report, so a workflow that
+    writes one into a commit and the other into the PR body can never show
+    them disagreeing. Kept deliberately plain — no Markdown tables or
+    emphasis — since this is what lands in the commit history. Identical
+    (component, from → to) bumps that recur across several locations are
+    grouped onto one line so a component pinned in many example files does
+    not swamp the message.
+    """
+    updates = [r for r in resolutions if r.status == "update"]
+    if not updates:
+        return ""
+
+    # Group by the version move, preserving first-seen order. Bumps that
+    # share component/from/to but live in different files (the retool chart
+    # and image pinned in every example) collapse to one line each.
+    # r.note is optional, so None normalizes to "" for the dict key; a bump
+    # always has a concrete proposed version, but the field is typed optional.
+    groups: dict[tuple[str, str, str | None, str], list[Resolution]] = {}
+    for r in updates:
+        key = (r.marker.component, r.marker.literal, r.proposed, r.note or "")
+        groups.setdefault(key, []).append(r)
+
+    out: list[str] = []
+    for (component, from_v, to_v, note), rs in sorted(
+        groups.items(), key=lambda kv: (kv[0][0], str(kv[1][0].marker.path))
+    ):
+        locations = sorted(r.marker.location for r in rs)
+        if len(locations) == 1:
+            where = f" ({locations[0]})"
+        elif len(locations) == 2:
+            where = f" ({locations[0]}; {locations[1]})"
+        else:
+            where = f" ({len(locations)} locations: {locations[0]}, …)"
+        line = f"- {component}: {from_v} → {to_v}{where}"
+        if note:
+            line += f" — {note}"
+        out.append(line)
+    out.append("")
+    out.append("Components: " + ", ".join(sorted({r.marker.component for r in updates})))
+    failures = len([r for r in resolutions if r.status == "error"]) + len(problems)
+    if failures:
+        out.append(f"\n({failures} marker(s) failed to resolve this run — see the job log.)")
+    return "\n".join(out).rstrip() + "\n"
+
+
 # Named render_report, not render: render() above is the version-shape renderer,
 # and a second module-level render() would shadow it at call time.
 def render_report(outcome: Outcome, output_format: str) -> str:
@@ -1073,6 +1121,8 @@ def render_report(outcome: Outcome, output_format: str) -> str:
         return as_json(outcome.resolutions, outcome.problems)
     if output_format == "markdown":
         return as_markdown(outcome.resolutions, outcome.problems)
+    if output_format == "commit":
+        return as_commit_message(outcome.resolutions, outcome.problems)
     raise ValueError(f"not a file format: {output_format!r}")
 
 
@@ -1178,14 +1228,33 @@ REPORT_PATH_OPTION = click.option(
 )
 
 
+# Internal format choices for the CI workflow, not for the interactive
+# --format flag: `commit` produces a plain-text commit message from the same
+# pass that produces the Markdown PR body, so the bumps land in the commit
+# history without a second run (which would double every upstream call and
+# could disagree with the body if a release landed between runs). Keyed by
+# output path so the two are orthogonal to --format.
+COMMIT_MESSAGE_PATH_OPTION = click.option(
+    "--commit-message-path",
+    type=click.Path(dir_okay=False, writable=True, path_type=Path),
+    default=None,
+    help=(
+        "Also write a plain-text commit message listing the bumped versions "
+        "to this file, for the workflow to feed to create-pull-request's "
+        "commit-message-path."
+    ),
+)
+
+
 def emit(
     outcome: Outcome,
     output_format: str,
     report_path: Path | None,
     *,
     verb: str,
+    commit_message_path: Path | None = None,
 ) -> None:
-    """Print the outcome, and write it to --report-path when one was given."""
+    """Print the outcome, and write the files the optional paths name."""
     if output_format == "table":
         console.print(build_table(outcome.resolutions, outcome.problems))
         console.print()
@@ -1199,6 +1268,10 @@ def emit(
             render_report(
                 outcome, "markdown" if output_format == "table" else output_format
             )
+        )
+    if commit_message_path is not None:
+        commit_message_path.write_text(
+            as_commit_message(outcome.resolutions, outcome.problems)
         )
 
 
@@ -1219,13 +1292,25 @@ def report(ctx: click.Context, output_format: str, report_path: Path | None) -> 
 @cli.command("update")
 @FORMAT_OPTION
 @REPORT_PATH_OPTION
+@COMMIT_MESSAGE_PATH_OPTION
 @click.pass_context
-def update(ctx: click.Context, output_format: str, report_path: Path | None) -> None:
+def update(
+    ctx: click.Context,
+    output_format: str,
+    report_path: Path | None,
+    commit_message_path: Path | None,
+) -> None:
     """Rewrite every out-of-date literal in place."""
     outcome = run(ctx.obj["root"], ctx.obj["env"])
     # Report before writing, so an interrupted run still leaves a full report,
     # and so --report-path describes the change even if a write then fails.
-    emit(outcome, output_format, report_path, verb="changed")
+    emit(
+        outcome,
+        output_format,
+        report_path,
+        verb="changed",
+        commit_message_path=commit_message_path,
+    )
 
     written, write_failures = apply_updates(outcome.resolutions)
     for failure in write_failures:
