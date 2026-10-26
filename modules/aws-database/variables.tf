@@ -55,8 +55,9 @@ variable "engine" {
 }
 
 variable "engine_version" {
-  type        = string
-  default     = "16.13"
+  type = string
+  # AUTOUPDATE: rds-postgres 16.x
+  default     = "16.15"
   description = "The database engine version"
 }
 
