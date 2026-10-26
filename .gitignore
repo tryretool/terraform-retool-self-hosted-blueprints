@@ -34,6 +34,9 @@ backend.tf
 # Python
 __pycache__/
 *.py[cod]
+# Local virtualenv, only to give an editor/LSP importable copies of
+# scripts/autoupdate.py's dependencies; uv resolves the real ones itself.
+.venv/
 
 *.log
 *.tgz
@@ -43,3 +46,6 @@ __pycache__/
 
 # Ephemeral per-deployment directories (state, providers, etc.)
 deployments/
+
+# Temp files from an interrupted scripts/autoupdate.py run.
+.*.autoupdate
