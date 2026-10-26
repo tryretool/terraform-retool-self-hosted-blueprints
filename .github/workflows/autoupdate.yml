@@ -150,9 +150,14 @@ jobs:
         run: |
           body="$RUNNER_TEMP/pr-body.md"
           report="$RUNNER_TEMP/report.md"
+          commitmsg="$RUNNER_TEMP/commit-message.txt"
 
           exit_status=0
-          scripts/autoupdate.py update --report-path "$report" || exit_status=$?
+          # One pass produces both the Markdown PR body and the commit message,
+          # so the two cannot disagree and upstream is queried once.
+          scripts/autoupdate.py update \
+            --report-path "$report" \
+            --commit-message-path "$commitmsg" || exit_status=$?
           echo "status=$exit_status" >> "$GITHUB_OUTPUT"
 
           if [ ! -s "$report" ]; then
@@ -203,7 +208,10 @@ jobs:
           # these bumps change what a downstream `terraform apply` provisions, so
           # they belong in the changelog people read before upgrading.
           title: '[autoupdate] Bump pinned component versions'
-          commit-message: '[autoupdate] Bump pinned component versions'
+          # The commit body (not the subject) lists every bump, so the change
+          # set survives in the commit history instead of living only in the
+          # PR description. create-pull-request reads the file.
+          commit-message-path: ${{ runner.temp }}/commit-message.txt
           body-path: ${{ runner.temp }}/pr-body.md
           # A crashed `update` can leave a `.<name>.tf.autoupdate` temp file
           # behind. It does not end in `.tf`, so this pathspec already excludes
