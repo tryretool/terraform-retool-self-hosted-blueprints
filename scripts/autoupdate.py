@@ -1241,7 +1241,7 @@ COMMIT_MESSAGE_PATH_OPTION = click.option(
     help=(
         "Also write a plain-text commit message listing the bumped versions "
         "to this file, for the workflow to feed to create-pull-request's "
-        "commit-message-path."
+        "commit-message input via a step output."
     ),
 )
 

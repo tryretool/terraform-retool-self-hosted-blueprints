@@ -176,6 +176,20 @@ jobs:
             printf 'is red for that reason, not because these bumps are wrong.\n'
           } > "$body"
 
+          # create-pull-request has no commit-message-path input — only
+          # commit-message as a string (unlike body-path below) — so the
+          # file becomes a multiline step output instead. The subject must
+          # stay identical to the title below: a single-commit PR can take
+          # the squash subject from either, and the CHANGELOG line should be
+          # right either way.
+          delim="commit-message-$GITHUB_RUN_ID-$RANDOM"
+          {
+            echo "commit-message<<$delim"
+            printf '[autoupdate] Bump pinned component versions\n\n'
+            cat "$commitmsg"
+            echo "$delim"
+          } >> "$GITHUB_OUTPUT"
+
           # Informational: create-pull-request does the real gating, creating
           # nothing when the branch has no diff against base.
           if git diff --quiet -- '*.tf'; then
@@ -210,8 +224,9 @@ jobs:
           title: '[autoupdate] Bump pinned component versions'
           # The commit body (not the subject) lists every bump, so the change
           # set survives in the commit history instead of living only in the
-          # PR description. create-pull-request reads the file.
-          commit-message-path: ${{ runner.temp }}/commit-message.txt
+          # PR description. Composed into a step output in the previous step:
+          # the action has no commit-message-path input, only this string.
+          commit-message: ${{ steps.autoupdate.outputs.commit-message }}
           body-path: ${{ runner.temp }}/pr-body.md
           # A crashed `update` can leave a `.<name>.tf.autoupdate` temp file
           # behind. It does not end in `.tf`, so this pathspec already excludes
