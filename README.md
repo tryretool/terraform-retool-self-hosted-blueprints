@@ -127,7 +127,7 @@ scale the Retool services (replica counts, resource requests/limits) via
 Set `enable_apps_domain = true` on your cloud's `*-retool-services` module to
 serve R² published apps at `https://<app>.apps.<domain_name>/`. `retool-helm`
 and the `*-user-ingress` module read it from `retool_services`. This needs Helm
-chart 6.13.0+ (the `retool-helm` default) and Retool 4.78.0+, plus the agent
+chart 6.13.2+ (the `retool-helm` default) and Retool 4.78.0+, plus the agent
 sandbox and Remote Repository storage that the `*_r2_beta` examples turn on.
 
 The ingress module adds a certificate for `*.apps.<domain_name>`, a DNS record
