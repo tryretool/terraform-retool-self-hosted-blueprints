@@ -140,9 +140,11 @@ The ingress module adds the `*.sandboxes.apps.<domain_name>` certificate, DNS
 record and route to the agent-sandbox proxy, and `retool-helm` moves every
 editor preview as soon as the chart rolls out.
 
-The new certificate is issued during that apply, so editor previews can show
-certificate errors for a few minutes until it is ready. This only happens once:
-later applies and chart upgrades reuse the certificate, and it renews in place.
+The new certificate, DNS record and route are created during that apply, and
+editor previews move as soon as new Retool pods start. Until all three are
+ready, previews can fail with DNS or certificate errors, for up to about 15
+minutes if a resolver cached the missing record. This only happens once: later
+applies and chart upgrades reuse the certificate, and it renews in place.
 
 Don't add the apps hostnames to the chart's main `ingress.hosts` through
 `retool_helm_extra_values`: the main Ingress adds multiplayer and MCP paths to
