@@ -146,6 +146,10 @@ ready, previews can fail with DNS or certificate errors, for up to about 15
 minutes if a resolver cached the missing record. This only happens once: later
 applies and chart upgrades reuse the certificate, and it renews in place.
 
+Turning either flag back off has the same window in reverse: the route and
+certificate are removed first, and Retool keeps handing out the hostnames until
+the chart change finishes rolling out.
+
 Don't add the apps hostnames to the chart's main `ingress.hosts` through
 `retool_helm_extra_values`: the main Ingress adds multiplayer and MCP paths to
 every host it serves.
