@@ -69,17 +69,16 @@ resource "google_certificate_manager_certificate_map_entry" "wildcard" {
   }
 }
 
-# Each R² app hostname gets its own DNS authorization, certificate and map entry,
-# so turning one on or off never replaces another certificate. A wildcard
+# R² app hostnames get their own DNS authorizations, certificates and map entries,
+# so turning them on or off never replaces the main certificate. A wildcard
 # certificate needs an authorization for the domain under the wildcard.
 locals {
-  apps_domain                = "apps.${var.domain_name}"
-  apps_domain_enabled        = try(var.retool_services.apps_domain_enabled, false)
-  wildcard_sandboxes_enabled = try(var.retool_services.wildcard_sandboxes_enabled, false)
-  apps_cert_domains = merge(
-    local.apps_domain_enabled ? { apps = local.apps_domain } : {},
-    local.wildcard_sandboxes_enabled ? { sandboxes = "sandboxes.${local.apps_domain}" } : {},
-  )
+  apps_domain         = "apps.${var.domain_name}"
+  apps_domain_enabled = try(var.retool_services.apps_domain_enabled, false)
+  apps_cert_domains = local.apps_domain_enabled ? {
+    apps      = local.apps_domain
+    sandboxes = "sandboxes.${local.apps_domain}"
+  } : {}
 }
 
 resource "google_certificate_manager_dns_authorization" "apps" {

@@ -10,9 +10,9 @@ This is a Terraform module which provides the recommended user-facing (ingress) 
 ### R² app hostnames
 
 `enable_apps_domain` on the `*-retool-services` module routes
-`*.apps.<domain_name>` to the app serving layer, and `enable_wildcard_sandboxes`
-there also routes `*.sandboxes.apps.<domain_name>` to the agent-sandbox proxy.
-This module reads both from `retool_services`. The module creates one
+`*.apps.<domain_name>` to the app serving layer and
+`*.sandboxes.apps.<domain_name>` to the agent-sandbox proxy. This module reads
+it from `retool_services`. The module creates one
 Ingress per hostname, because AGIC gives every listener in an Ingress the same
 rule priority. With `enable_https`, it adds a second cert-manager Certificate for
 the routed wildcards, so the existing certificate is not replaced. With

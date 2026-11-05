@@ -138,20 +138,20 @@ resource "helm_release" "routes" {
 # authorization records exist under apps.<domain_name>. Gateway API prefers the
 # most specific hostname, so these win over the chart's *.<domain_name> route.
 locals {
-  apps_backends = concat(
-    [{
+  apps_backends = [
+    {
       name        = "retool-app-serving-layer"
       hostname    = "*.${local.apps_domain}"
       port        = 3010
       health_path = "/api/checkHealth"
-    }],
-    local.wildcard_sandboxes_enabled ? [{
+    },
+    {
       name        = "retool-agent-sandbox-proxy"
       hostname    = "*.sandboxes.${local.apps_domain}"
       port        = 3019
       health_path = "/livez"
-    }] : [],
-  )
+    },
+  ]
 }
 
 resource "helm_release" "apps_routes" {

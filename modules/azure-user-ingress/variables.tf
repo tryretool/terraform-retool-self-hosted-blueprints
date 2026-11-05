@@ -44,9 +44,8 @@ variable "retool_service_port" {
 
 variable "retool_services" {
   type = object({
-    retool_namespace           = optional(string)
-    apps_domain_enabled        = optional(bool, false)
-    wildcard_sandboxes_enabled = optional(bool, false)
+    retool_namespace    = optional(string)
+    apps_domain_enabled = optional(bool, false)
   })
   default     = null
   description = "Retool-services outputs (e.g. module.retool-services.outputs). The TLS Certificate, the Issuer and AGIC all live in retool_namespace, beside the Retool Ingress. When null, falls back to \"<prefix>-retool\"."

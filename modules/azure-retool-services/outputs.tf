@@ -14,7 +14,6 @@ locals {
     license_key_secret_key           = (nonsensitive(var.license_key != null) || var.license_key_secret_path != null) ? "license-key" : null
     agent_sandbox_enabled            = var.enable_agent_sandbox
     apps_domain_enabled              = var.enable_apps_domain
-    wildcard_sandboxes_enabled       = var.enable_apps_domain && var.enable_wildcard_sandboxes
     agent_sandbox_secret_name        = var.enable_agent_sandbox ? "agent-sandbox" : null
     rr_bucket_k8s_secret_name        = var.enable_rr_blob ? "rr-blob-credentials" : null
     rr_bucket_env_keys               = var.enable_rr_blob ? ["RR_DEFAULT_AZURE_CONTAINER", "RR_DEFAULT_AZURE_CONNECTION_STRING", "RR_BLOB_STORAGE_PROVIDER"] : []
@@ -95,13 +94,8 @@ output "agent_sandbox_enabled" {
 }
 
 output "apps_domain_enabled" {
-  description = "Whether R² apps are served at <app>.apps.<domain_name>."
+  description = "Whether R² apps are served at <app>.apps.<domain_name> and editor previews at sandbox-<id>.sandboxes.apps.<domain_name>."
   value       = local.outputs.apps_domain_enabled
-}
-
-output "wildcard_sandboxes_enabled" {
-  description = "Whether editor previews are served at sandbox-<id>.sandboxes.apps.<domain_name>."
-  value       = local.outputs.wildcard_sandboxes_enabled
 }
 
 output "agent_sandbox_secret_name" {

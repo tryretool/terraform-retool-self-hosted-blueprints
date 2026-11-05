@@ -91,9 +91,8 @@ locals {
     }
   })] : []
 
-  agent_sandbox_enabled      = var.retool_services != null && var.retool_services.agent_sandbox_enabled
-  apps_domain_enabled        = var.retool_services != null && var.retool_services.apps_domain_enabled
-  wildcard_sandboxes_enabled = var.retool_services != null && var.retool_services.wildcard_sandboxes_enabled
+  agent_sandbox_enabled = var.retool_services != null && var.retool_services.agent_sandbox_enabled
+  apps_domain_enabled   = var.retool_services != null && var.retool_services.apps_domain_enabled
 
   agent_sandbox_values = local.agent_sandbox_enabled ? [yamlencode({
     rr = {
@@ -128,19 +127,15 @@ locals {
   })] : []
 
   apps_domain_values = local.apps_domain_enabled && var.domain_name != null ? [yamlencode({
-    rr = merge(
-      {
-        appServingLayer = {
-          enabled = true
-          domain  = "apps.${var.domain_name}"
-        }
-      },
-      local.wildcard_sandboxes_enabled ? {
-        agentSandbox = {
-          wildcardSandboxes = true
-        }
-      } : {},
-    )
+    rr = {
+      appServingLayer = {
+        enabled = true
+        domain  = "apps.${var.domain_name}"
+      }
+      agentSandbox = {
+        wildcardSandboxes = true
+      }
+    }
   })] : []
 
   # Namespace precedence: explicit var.namespace, then the namespace exported by

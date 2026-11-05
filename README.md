@@ -125,29 +125,31 @@ scale the Retool services (replica counts, resource requests/limits) via
 ## Serving R² apps on their own hostnames
 
 Set `enable_apps_domain = true` on your cloud's `*-retool-services` module to
-serve R² published apps at `https://<app>.apps.<domain_name>/`. `retool-helm`
+serve R² published apps at `https://<app>.apps.<domain_name>/` and each editor
+preview at `https://sandbox-<id>.sandboxes.apps.<domain_name>/`. `retool-helm`
 and the `*-user-ingress` module read it from `retool_services`. This needs Helm
 chart 6.13.2+ (the `retool-helm` default) and Retool 4.78.0+, plus the agent
 sandbox and Remote Repository storage that the `*_r2_beta` examples turn on.
 
-The ingress module adds a certificate for `*.apps.<domain_name>`, a DNS record
-and a route to the app serving layer. The existing certificate is not changed.
+The ingress module adds certificates for `*.apps.<domain_name>` and
+`*.sandboxes.apps.<domain_name>`, DNS records, and routes to the app serving
+layer and the agent-sandbox proxy. The existing certificate is not changed.
 
-To also give each editor preview its own origin
-(`sandbox-<id>.sandboxes.apps.<domain_name>`), set
-`enable_wildcard_sandboxes = true` on the same module once app hostnames work.
-The ingress module adds the `*.sandboxes.apps.<domain_name>` certificate, DNS
-record and route to the agent-sandbox proxy, and `retool-helm` moves every
-editor preview as soon as the chart rolls out.
+Published apps only move to their hostnames when an org admin turns off
+`r2IframeHostedMode` in Settings → Beta, so each org can switch when it's ready.
+Editor previews move for every org as soon as the chart rolls out. A preview on
+its own origin only gets the browser features in the org's Permissions Policy
+(Settings → App Security), so set that list before turning this on; without it
+the preview loses camera, microphone, clipboard and fullscreen.
 
-The new certificate, DNS record and route are created during that apply, and
-editor previews move as soon as new Retool pods start. Until all three are
+The new certificates, DNS records and routes are created during that apply, and
+editor previews move as soon as new Retool pods start. Until all of them are
 ready, previews can fail with DNS or certificate errors, for up to about 15
 minutes if a resolver cached the missing record. This only happens once: later
-applies and chart upgrades reuse the certificate, and it renews in place.
+applies and chart upgrades reuse the certificates, and they renew in place.
 
-Turning either flag back off has the same window in reverse: the route and
-certificate are removed first, and Retool keeps handing out the hostnames until
+Turning the flag back off has the same window in reverse: the routes and
+certificates are removed first, and Retool keeps handing out the hostnames until
 the chart change finishes rolling out.
 
 Don't add the apps hostnames to the chart's main `ingress.hosts` through

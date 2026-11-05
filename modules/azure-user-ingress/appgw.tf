@@ -226,29 +226,24 @@ resource "helm_release" "agic" {
 # because AGIC otherwise borrows the main backend's readiness probe on port 3000.
 
 locals {
-  apps_domain                = "apps.${var.domain_name}"
-  apps_domain_enabled        = try(var.retool_services.apps_domain_enabled, false)
-  wildcard_sandboxes_enabled = try(var.retool_services.wildcard_sandboxes_enabled, false)
-  apps_ingresses = merge(
-    local.apps_domain_enabled ? {
-      apps = {
-        host        = "*.${local.apps_domain}"
-        service     = "retool-app-serving-layer"
-        port        = 3010
-        health_path = "/api/checkHealth"
-        priority    = "900"
-      }
-    } : {},
-    local.wildcard_sandboxes_enabled ? {
-      sandboxes = {
-        host        = "*.sandboxes.${local.apps_domain}"
-        service     = "retool-agent-sandbox-proxy"
-        port        = 3019
-        health_path = "/livez"
-        priority    = "800"
-      }
-    } : {},
-  )
+  apps_domain         = "apps.${var.domain_name}"
+  apps_domain_enabled = try(var.retool_services.apps_domain_enabled, false)
+  apps_ingresses = local.apps_domain_enabled ? {
+    apps = {
+      host        = "*.${local.apps_domain}"
+      service     = "retool-app-serving-layer"
+      port        = 3010
+      health_path = "/api/checkHealth"
+      priority    = "900"
+    }
+    sandboxes = {
+      host        = "*.sandboxes.${local.apps_domain}"
+      service     = "retool-agent-sandbox-proxy"
+      port        = 3019
+      health_path = "/livez"
+      priority    = "800"
+    }
+  } : {}
 }
 
 resource "kubectl_manifest" "apps_ingress" {

@@ -59,7 +59,6 @@ variable "retool_services" {
     license_key_secret_key           = optional(string)
     agent_sandbox_enabled            = optional(bool, false)
     apps_domain_enabled              = optional(bool, false)
-    wildcard_sandboxes_enabled       = optional(bool, false)
     agent_sandbox_secret_name        = optional(string)
     rr_bucket_k8s_secret_name        = optional(string)
     rr_bucket_env_keys               = optional(list(string), [])

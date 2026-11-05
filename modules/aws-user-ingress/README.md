@@ -96,9 +96,9 @@ SSO configuration.
 ### R² app hostnames
 
 `enable_apps_domain` on the `*-retool-services` module routes
-`*.apps.<domain_name>` to the app serving layer, and `enable_wildcard_sandboxes`
-there also routes `*.sandboxes.apps.<domain_name>` to the agent-sandbox proxy.
-This module reads both from `retool_services`. For each hostname the module adds:
+`*.apps.<domain_name>` to the app serving layer and
+`*.sandboxes.apps.<domain_name>` to the agent-sandbox proxy. This module reads
+it from `retool_services`. For each hostname the module adds:
 
 * An ACM certificate, with DNS validation records, attached to the HTTPS
   listener as an extra certificate. The existing certificate is not replaced.

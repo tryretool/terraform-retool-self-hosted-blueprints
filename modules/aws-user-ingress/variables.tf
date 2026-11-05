@@ -75,9 +75,8 @@ variable "retool_service_name" {
 
 variable "retool_services" {
   type = object({
-    retool_namespace           = optional(string)
-    apps_domain_enabled        = optional(bool, false)
-    wildcard_sandboxes_enabled = optional(bool, false)
+    retool_namespace    = optional(string)
+    apps_domain_enabled = optional(bool, false)
   })
   default     = null
   description = "Retool-services outputs (e.g. module.retool-services.outputs). The TargetGroupBinding is created in retool_namespace so it sits beside the Retool Service. When null (or retool_namespace unset), falls back to the \"default\" namespace."

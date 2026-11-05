@@ -156,13 +156,7 @@ variable "enable_agent_sandbox" {
 variable "enable_apps_domain" {
   type        = bool
   default     = false
-  description = "Serve R² published apps at https://<app>.apps.<domain_name>/. Read by retool-helm (turns on the chart's app serving layer) and the user-ingress module (certificate, DNS and route). Needs enable_agent_sandbox and R² storage, Helm chart 6.13.2+ and Retool 4.78.0+."
-}
-
-variable "enable_wildcard_sandboxes" {
-  type        = bool
-  default     = false
-  description = "Serve each editor preview on its own origin at https://sandbox-<id>.sandboxes.apps.<domain_name>/. Only takes effect with enable_apps_domain. Moves every org's editor preview as soon as the chart rolls out."
+  description = "Serve R² published apps at https://<app>.apps.<domain_name>/ and each editor preview at https://sandbox-<id>.sandboxes.apps.<domain_name>/. Read by retool-helm (the chart's app serving layer and wildcard sandboxes) and the user-ingress module (certificates, DNS and routes). Needs enable_agent_sandbox and R² storage, Helm chart 6.13.2+ and Retool 4.78.0+. Moves every org's editor preview as soon as the chart rolls out, so set each org's Permissions Policy first."
 }
 
 variable "db" {

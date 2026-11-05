@@ -47,32 +47,27 @@ locals {
     : null
   )
 
-  apps_domain                = "apps.${var.domain_name}"
-  apps_domain_enabled        = try(var.retool_services.apps_domain_enabled, false)
-  wildcard_sandboxes_enabled = try(var.retool_services.wildcard_sandboxes_enabled, false)
+  apps_domain         = "apps.${var.domain_name}"
+  apps_domain_enabled = try(var.retool_services.apps_domain_enabled, false)
 
   # ALB host-header wildcards match across dots, so *.apps also matches sandbox
   # hosts; the sandbox rule needs the lower (earlier) priority.
-  apps_backends = merge(
-    local.apps_domain_enabled ? {
-      app-serving-layer = {
-        host        = "*.${local.apps_domain}"
-        port        = 3010
-        health_path = "/api/checkHealth"
-        priority    = 20
-        tg_suffix   = "apps"
-      }
-    } : {},
-    local.wildcard_sandboxes_enabled ? {
-      agent-sandbox-proxy = {
-        host        = "*.sandboxes.${local.apps_domain}"
-        port        = 3019
-        health_path = "/livez"
-        priority    = 10
-        tg_suffix   = "sbx"
-      }
-    } : {},
-  )
+  apps_backends = local.apps_domain_enabled ? {
+    app-serving-layer = {
+      host        = "*.${local.apps_domain}"
+      port        = 3010
+      health_path = "/api/checkHealth"
+      priority    = 20
+      tg_suffix   = "apps"
+    }
+    agent-sandbox-proxy = {
+      host        = "*.sandboxes.${local.apps_domain}"
+      port        = 3019
+      health_path = "/livez"
+      priority    = 10
+      tg_suffix   = "sbx"
+    }
+  } : {}
 }
 
 resource "aws_route53_zone" "hosted_zone" {
@@ -159,9 +154,9 @@ resource "aws_acm_certificate_validation" "cert_valid_status" {
   certificate_arn = aws_acm_certificate.cert[0].arn
 }
 
-# One certificate per hostname, attached as extra listener certificates, so
-# turning the apps domain or sandboxes on or off never replaces a certificate
-# the listener is serving.
+# Separate from the main certificate, attached as extra listener certificates,
+# so turning the apps domain on or off never replaces the certificate the
+# listener is serving.
 resource "aws_acm_certificate" "apps" {
   for_each = local.apps_backends
 

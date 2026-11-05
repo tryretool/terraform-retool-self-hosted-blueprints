@@ -8,7 +8,9 @@ This is a Terraform module wrapper around the official [`retool-helm`](https://g
 
 When `retool_services.apps_domain_enabled` is true (`enable_apps_domain` on the
 `*-retool-services` module), this module turns on the chart's app serving layer
-(`rr.appServingLayer`) at `apps.<domain_name>`, in-process on the main backend.
+(`rr.appServingLayer`) at `apps.<domain_name>`, in-process on the main backend,
+and sets `rr.agentSandbox.wildcardSandboxes` so each editor preview is served at
+`sandbox-<id>.sandboxes.apps.<domain_name>`.
 It requires `domain_name`, the agent sandbox, and an R² bucket, because the
 serving layer reads published apps from the git server's storage. It needs chart
 6.13.2+ and Retool 4.78.0+. The cloud's `*-user-ingress` module reads the same
@@ -30,8 +32,3 @@ retool_helm_extra_values = [yamlencode({
   }
 })]
 ```
-
-`retool_services.wildcard_sandboxes_enabled` additionally sets
-`rr.agentSandbox.wildcardSandboxes`, which serves each editor preview at
-`sandbox-<id>.sandboxes.apps.<domain_name>`. It moves every editor preview as soon
-as the chart rolls out.
