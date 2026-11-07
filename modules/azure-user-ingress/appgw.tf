@@ -105,6 +105,7 @@ resource "azurerm_application_gateway" "main" {
       request_routing_rule,
       ssl_certificate,
       url_path_map,
+      tags["managed-by-k8s-ingress"],
     ]
   }
 }
@@ -146,6 +147,12 @@ resource "azurerm_role_assignment" "agic_rg_reader" {
   scope                = data.azurerm_resource_group.main.id
   role_definition_name = "Reader"
   principal_id         = azurerm_user_assigned_identity.agic[0].principal_id
+
+  # The data source is read at apply time whenever this module has pending
+  # upstream changes, which would otherwise replace the assignment on every plan.
+  lifecycle {
+    ignore_changes = [scope]
+  }
 }
 
 # AGIC needs Network Contributor on the AppGW subnet to perform subnets/join/action.
@@ -192,7 +199,9 @@ resource "helm_release" "agic" {
       kubernetes = {
         # Confine this controller to its own Ingresses. Without all three, two
         # AGIC instances in one cluster fight over every Ingress in it.
-        ingressClass = local.ingress_class_name
+        # ingressClass must equal controllerValue: AGIC only handles an
+        # ingressClassName Ingress whose IngressClass controller equals ingressClass.
+        ingressClass = "azure/${local.ingress_class_name}"
         ingressClassResource = {
           enabled         = true
           name            = local.ingress_class_name
