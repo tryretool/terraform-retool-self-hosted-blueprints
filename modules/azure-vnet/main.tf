@@ -187,4 +187,10 @@ resource "azurerm_key_vault" "main" {
       "Get", "Set", "Delete", "List", "Purge", "Recover",
     ]
   }
+
+  # azure-retool-services adds ESO's policy as a separate
+  # azurerm_key_vault_access_policy; without this, every other apply removes it.
+  lifecycle {
+    ignore_changes = [access_policy]
+  }
 }
