@@ -58,6 +58,8 @@ module "retool-services" {
   db                  = module.db-main.outputs
 
   license_key = "MY-LICENSE-KEY"
+
+  depends_on = [module.aks]
 }
 
 module "user-ingress" {

@@ -62,6 +62,8 @@ module "retool-services" {
   enable_agent_sandbox = true
   enable_rr_blob       = true
   license_key          = "SECRET"
+
+  depends_on = [module.aks]
 }
 
 module "user-ingress" {
