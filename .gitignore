@@ -41,6 +41,7 @@ __pycache__/
 *.log
 *.tgz
 *.lock
+!*.py.lock
 
 **/certs/**
 
