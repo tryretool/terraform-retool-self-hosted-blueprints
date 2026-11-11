@@ -63,6 +63,8 @@ module "retool-services" {
   enable_rr_blob       = true
   license_key          = "SECRET"
 
+  # Wait for the External Secrets Helm release in module.aks, so its CRDs
+  # exist before this module creates the SecretStore.
   depends_on = [module.aks]
 }
 

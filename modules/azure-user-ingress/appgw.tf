@@ -105,6 +105,7 @@ resource "azurerm_application_gateway" "main" {
       request_routing_rule,
       ssl_certificate,
       url_path_map,
+      # AGIC adds this tag to the gateway; without this, every plan removes it.
       tags["managed-by-k8s-ingress"],
     ]
   }
@@ -148,8 +149,9 @@ resource "azurerm_role_assignment" "agic_rg_reader" {
   role_definition_name = "Reader"
   principal_id         = azurerm_user_assigned_identity.agic[0].principal_id
 
-  # The data source is read at apply time whenever this module has pending
-  # upstream changes, which would otherwise replace the assignment on every plan.
+  # The resource group data source is read at apply time whenever a module this
+  # one depends on has pending changes. That leaves scope unknown, which would
+  # otherwise force a replacement.
   lifecycle {
     ignore_changes = [scope]
   }

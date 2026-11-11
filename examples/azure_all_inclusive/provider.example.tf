@@ -21,7 +21,6 @@ provider "helm" {
 }
 
 provider "kubectl" {
-  apply_retry_count      = 5
   host                   = module.aks.cluster.endpoint
   client_certificate     = base64decode(module.aks.cluster.client_certificate)
   client_key             = base64decode(module.aks.cluster.client_key)
