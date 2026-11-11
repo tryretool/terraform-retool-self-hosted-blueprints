@@ -146,7 +146,7 @@ locals {
       enabled = var.telemetry_enabled
       sendToRetool = {
         enabled = var.telemetry_send_to_retool
-        inputs = var.telemetry_send_to_retool_inputs
+        inputs  = var.telemetry_send_to_retool_inputs
       }
     }
   })]
@@ -203,11 +203,4 @@ resource "helm_release" "retool" {
     var.retool_helm_extra_values,
     local.deployment_template_values,
   )
-
-  lifecycle {
-    # The Helm provider treats `timeout` as a replace-triggering attribute; bumping it
-    # would otherwise destroy/recreate the release on upgrade. Ignore post-create
-    # changes so we only set the longer wait window on initial install.
-    ignore_changes = [timeout]
-  }
 }
