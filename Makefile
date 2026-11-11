@@ -158,6 +158,12 @@ version-target: ## Print the release target version (no v prefix): VERSION=X.Y.Z
 	  echo "  make $(MAKECMDGOALS) BUMP=patch" >&2; \
 	  exit 1; fi
 
+# release-prep rewrites the root VERSION file to the target version: the
+# retool-helm module reads that file at apply time to stamp its deployment
+# template identity, so the tree at a tag must carry the tag's version. For
+# VERSION=-driven releases the file is already correct (a no-op); for
+# BUMP=-driven releases this is what records the new version.
+#
 # Note: this implementation awkwardly generates the changelog twice: the first
 # will error out if no non-chore commits have been made since the prior version,
 # and the second happens after a (temporary, local-only) tag creation so the
@@ -171,8 +177,8 @@ release-prep: ## Prepare a release commit (version bumps + changelog regen). Req
 	  echo "Preparing $$target_tag"; \
 	  $(MAKE) update-example-versions VERSION=$$target_version; \
 		git add examples; \
-		printf '%s\n' "$$target_version" > modules/retool-helm/BLUEPRINTS_VERSION; \
-		git add modules/retool-helm/BLUEPRINTS_VERSION; \
+		printf '%s\n' "$$target_version" > VERSION; \
+		git add VERSION; \
 	  $(MAKE) changelog-sync VERSION=$$target_tag; \
 		git add CHANGELOG.md; \
 		git commit -m "chore(release): $$target_tag [skip ci]"; \
