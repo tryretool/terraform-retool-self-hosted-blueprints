@@ -18,8 +18,11 @@ variable "region" {
 # can reach Cloud SQL on its private IP once the vpc module's private_service_access
 # connection is established.
 variable "vpc" {
-  type        = object({ network_id = string })
-  description = "VPC outputs (e.g. module.vpc.outputs). Only network_id is used."
+  type = object({
+    network_id             = string
+    psa_allocated_ip_range = optional(string)
+  })
+  description = "VPC outputs (e.g. module.vpc.outputs). network_id is required; psa_allocated_ip_range should be set when the project has more than one Private Service Access range."
 }
 
 variable "db_purpose" {

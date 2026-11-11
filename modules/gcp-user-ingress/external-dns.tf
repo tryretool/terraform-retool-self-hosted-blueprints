@@ -87,5 +87,6 @@ resource "helm_release" "external_dns" {
       ]
     }),
     yamlencode(local.has_pod_scheduling ? local.pod_scheduling : {}),
+    yamlencode(length(var.pod_labels) > 0 ? { podLabels = var.pod_labels } : {}),
   ]
 }
