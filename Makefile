@@ -66,8 +66,8 @@ changelog-sync: ## Sync CHANGELOG.md from git history, using VERSION=... as to-b
 	npx auto-changelog -c .auto-changelog $(if $(VERSION),-v $(VERSION))
 
 .PHONY: version-current
-version-current: ## Print the latest tagged release version
-	@git describe --tags --abbrev=0 --match='v*' origin/main
+version-current: ## Print the latest tagged release version (without the v prefix)
+	@git describe --tags --abbrev=0 --match='v*' origin/main | sed 's/^v//'
 	
 .PHONY: require-BUMP
 require-BUMP:
@@ -80,16 +80,42 @@ require-BUMP:
 .PHONY: version-next
 version-next: require-BUMP
 version-next: ## Increment the current version using BUMP=(patch|minor|major) and print new version
-	@git describe --tags --abbrev=0 --match='v*' origin/main | awk -F. -v bump="$(BUMP)" \
+	@git describe --tags --abbrev=0 --match='v*' origin/main | sed 's/^v//' | awk -F. -v bump="$(BUMP)" \
 		'BEGIN {if (!bump) bump="patch"} \
-		{if (bump=="major") print "v"$$1+1".0.0"; \
+		{if (bump=="major") print $$1+1".0.0"; \
 		 else if (bump=="minor") print $$1"."$$2+1".0"; \
 		 else print $$1"."$$2"."$$3+1}'
 	
+# "Published" means the version tags on GitHub origin: release-push pushes the
+# tag and creates the GitHub release together, so the highest v* tag on origin
+# is the source of truth for what has been released. The VERSION file is only
+# the *intended* version and may lag or lead it. Versions are handled without
+# the v prefix everywhere (VERSION file, VERSION=... args, this output); only
+# git tags carry the v.
+.PHONY: version-published
+version-published: ## Print the highest published version on origin, without the v prefix (source of truth for releases)
+	@git ls-remote --tags --refs origin 'v*' \
+	  | awk -F/ '{print $$3}' | sed 's/^v//' | sort -V | tail -1
+
+# PR gate: merging a VERSION file behind the latest published release would
+# break monotonic versioning (and the release workflow bails in that state),
+# so fail the check. VERSION equal to or ahead of the latest published version
+# is fine.
+.PHONY: version-check-monotonic
+version-check-monotonic: ## Fail if the VERSION file is strictly less than the latest published version
+	@file=$$(cat VERSION); \
+	published=$$($(MAKE) --no-print-directory version-published); \
+	echo "VERSION file: $$file | latest published: $$published"; \
+	if [ "$$(scripts/version-compare.sh $$file $$published)" -lt 0 ]; then \
+	  echo "Error: VERSION ($$file) is behind the latest published release ($$published)."; \
+	  echo "Bump the VERSION file in your PR to at least $$published."; \
+	  exit 1; \
+	fi
+
 .PHONY: require-VERSION
 require-VERSION:
 	@if [ -z "$(VERSION)" ]; then echo -e "\
-	Error: VERSION variable is required (e.g. v0.4.0).\n\
+	Error: VERSION variable is required (e.g. 0.4.0).\n\
 	Use like:\n\
 	  make $(MAKECMDGOALS) VERSION=v0.4.0\n\
 	"; exit 1; fi
@@ -120,42 +146,90 @@ require-on-main-branch:
 	  exit 1; \
 	fi
 
+# Releases are normally driven by the VERSION file (VERSION=...), but BUMP=
+# (patch|minor|major) still works and computes the target from the latest tag.
+.PHONY: version-target
+version-target: ## Print the release target version (no v prefix): VERSION=X.Y.Z if set, else computed from BUMP=(patch|minor|major)
+	@if [ -n "$(VERSION)" ]; then echo "$(VERSION)"; \
+	elif [ -n "$(BUMP)" ]; then $(MAKE) --no-print-directory version-next BUMP=$(BUMP); \
+	else echo "Error: either VERSION=X.Y.Z or BUMP=(patch|minor|major) is required." >&2; \
+	  echo "Use like:" >&2; \
+	  echo "  make $(MAKECMDGOALS) VERSION=0.4.0" >&2; \
+	  echo "  make $(MAKECMDGOALS) BUMP=patch" >&2; \
+	  exit 1; fi
+
 # Note: this implementation awkwardly generates the changelog twice: the first
 # will error out if no non-chore commits have been made since the prior version,
 # and the second happens after a (temporary, local-only) tag creation so the
 # changelog entry gets a timestamp. The tag is removed again before exiting so
 # release-push is the only step that leaves a tag behind.
 .PHONY: release-prep
-release-prep: require-BUMP
-release-prep: ## Prepare a release commit (version bumps + changelog regen). Requires a BUMP=(patch|minor|major) argument.
+release-prep: ## Prepare a release commit (version bumps + changelog regen). Requires VERSION=X.Y.Z or BUMP=(patch|minor|major).
 	@set -e -x; \
-		target_version=$$($(MAKE) version-next BUMP=${BUMP}); \
-	  echo "Preparing $$target_version"; \
+		target_version=$$($(MAKE) --no-print-directory version-target); \
+		target_tag=v$$target_version; \
+	  echo "Preparing $$target_tag"; \
 	  $(MAKE) update-example-versions VERSION=$$target_version; \
 		git add examples; \
-		printf '%s\n' "$${target_version#v}" > modules/retool-helm/BLUEPRINTS_VERSION; \
+		printf '%s\n' "$$target_version" > modules/retool-helm/BLUEPRINTS_VERSION; \
 		git add modules/retool-helm/BLUEPRINTS_VERSION; \
-	  $(MAKE) changelog-sync VERSION=$$target_version; \
+	  $(MAKE) changelog-sync VERSION=$$target_tag; \
 		git add CHANGELOG.md; \
-		git commit -m "chore(release): $$target_version"; \
-	  git tag $$target_version; \
+		git commit -m "chore(release): $$target_tag [skip ci]"; \
+	  git tag $$target_tag; \
 	  $(MAKE) changelog-sync; \
 		git add CHANGELOG.md; \
 		git commit --amend --no-edit; \
-	  git tag -d $$target_version
+	  git tag -d $$target_tag
 
 .PHONY: release-push
-release-push: require-BUMP
 release-push: require-on-main-branch
-release-push: ## Tag, push, and publish the GitHub release for a prepared release. Requires a BUMP=(patch|minor|major) argument. Can only be run on a clean `main` branch.
+release-push: ## Tag, push, and publish the GitHub release for a prepared release. Requires VERSION=X.Y.Z or BUMP=(patch|minor|major). Can only be run on a clean `main` branch.
 	@set -e -x; \
-		target_version=$$($(MAKE) version-next BUMP=${BUMP}); \
-	  echo "Releasing $$target_version"; \
-	  git tag $$target_version; \
-	  git push origin main $$target_version; \
-	  gh release create $$target_version -t "$$target_version" --generate-notes
+		target_version=$$($(MAKE) --no-print-directory version-target); \
+		target_tag=v$$target_version; \
+	  echo "Releasing $$target_tag"; \
+	  git tag $$target_tag; \
+	  git push origin main $$target_tag; \
+	  gh release create $$target_tag -t "$$target_tag" --generate-notes
 
 .PHONY: release
-release: require-BUMP
 release: release-prep release-push
-release: ## Prepare & push a new release. Requires a BUMP=(patch|minor|major) argument. Can only be run on a clean `main` branch.
+release: ## Prepare & push a new release. Requires VERSION=X.Y.Z or BUMP=(patch|minor|major). Can only be run on a clean `main` branch.
+
+.PHONY: changelog-push
+changelog-push: require-on-main-branch
+changelog-push: ## Sync CHANGELOG.md and push a chore(changelog) commit to main, if it changed. Can only be run on a clean `main` branch.
+	@$(MAKE) --no-print-directory changelog-sync; \
+	if git diff --quiet CHANGELOG.md; then \
+	  echo "CHANGELOG.md already in sync, nothing to push"; \
+	else \
+	  git add CHANGELOG.md; \
+	  git commit -m "chore(changelog): sync CHANGELOG.md [skip ci]"; \
+	  git push origin main; \
+	fi
+
+# Entry point for the release workflow (and its local reproduction). Compares
+# the VERSION file against the latest published tag on origin:
+#   VERSION <  published -> bail (would break monotonic versioning)
+#   VERSION == published -> changelog-sync only, push a chore(changelog) commit
+#   VERSION >  published -> full release of the VERSION-file version
+.PHONY: release-auto
+release-auto: require-on-main-branch
+release-auto: ## Sync releases with the VERSION file: changelog-only, full release, or fail if VERSION is behind published
+	@set -e; \
+	file=$$(cat VERSION); \
+	published=$$($(MAKE) --no-print-directory version-published); \
+	cmp=$$(scripts/version-compare.sh $$file $$published); \
+	echo "VERSION file: $$file | latest published: $$published"; \
+	if [ "$$cmp" -lt 0 ]; then \
+	  echo "Error: VERSION ($$file) is behind the latest published release ($$published)."; \
+	  echo "Refusing to release; bump the VERSION file on main to at least $$published."; \
+	  exit 1; \
+	elif [ "$$cmp" -eq 0 ]; then \
+	  echo "VERSION matches the latest published release: syncing changelog only"; \
+	  $(MAKE) --no-print-directory changelog-push; \
+	else \
+	  echo "VERSION is ahead of the latest published release: releasing $$file"; \
+	  $(MAKE) --no-print-directory release VERSION=$$file; \
+	fi
