@@ -184,10 +184,7 @@ resource "helm_release" "retool" {
   chart      = "retool"
   version    = var.retool_helm_chart_version
   namespace  = local.namespace
-  # Full-stack deploys (workflows, code executor) can take longer than 5m for
-  # all Deployments to become ready; a short timeout causes terraform apply to fail
-  # even when the release eventually succeeds.
-  timeout = 20 * 60
+  timeout    = var.retool_helm_timeout
 
   values = concat(
     local.defaults_values,
