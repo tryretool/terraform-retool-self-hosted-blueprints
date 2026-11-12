@@ -5,7 +5,9 @@ locals {
     aks_subnet_id     = azurerm_subnet.aks.id
     postgres_subnet_id = azurerm_subnet.postgres.id
     appgw_subnet_id   = azurerm_subnet.appgw.id
-    key_vault_id      = azurerm_key_vault.main.id
+    # Read through the access policy so callers don't write secrets before
+    # Terraform has permission to.
+    key_vault_id      = azurerm_key_vault_access_policy.terraform.key_vault_id
     key_vault_uri     = azurerm_key_vault.main.vault_uri
     key_vault_name    = azurerm_key_vault.main.name
   }
