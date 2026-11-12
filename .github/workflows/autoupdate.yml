@@ -1,0 +1,255 @@
+name: Autoupdate
+
+# Bumps every version literal carrying an `# AUTOUPDATE:` marker to the newest
+# release matching its constraint, and opens a single rolling pull request with
+# the version bumps as the diff and the report as the description. Re-running
+# force-updates that same branch and rewrites the description, so there is never
+# more than one open autoupdate PR.
+#
+# ---------------------------------------------------------------------------
+# One-time setup this workflow depends on
+# ---------------------------------------------------------------------------
+#
+# 1. A GitHub App installed on this repository only, with repository
+#    permissions Contents: read & write and Pull requests: read & write.
+#    Its client ID (an `autoupdater` environment variable, not a secret —
+#    client IDs are not sensitive) and private key (an `autoupdater`
+#    environment secret) live in that environment, which the job below
+#    declares so both resolve. Running in an environment also scopes this
+#    job's OIDC tokens; see the last paragraph below.
+#
+#    The App is not a convenience. `main`'s ruleset requires the `validate`
+#    status check, and GitHub deliberately does not start workflow runs for
+#    events raised by the built-in GITHUB_TOKEN — a PR opened with it would sit
+#    forever at "Expected - waiting for status to be reported" and could never
+#    merge. An App installation token is the documented way to raise events
+#    that do trigger workflows. Separately, this repository has
+#    can_approve_pull_request_reviews disabled, and GitHub bundles that setting
+#    with PR *creation*, so GITHUB_TOKEN cannot open a PR here at all.
+#
+# 2. An AWS role this repository can assume over OIDC, granting exactly
+#    rds:DescribeDBEngineVersions and eks:DescribeClusterVersions (both support
+#    no resource types, so "Resource": "*" is the only legal form). Its ARN goes
+#    in AUTOUPDATE_AWS_ROLE_ARN. The account also needs the GitHub OIDC identity
+#    provider (https://token.actions.githubusercontent.com, audience
+#    sts.amazonaws.com) created once.
+#
+# 3. Nothing Azure, deliberately. The aks-cluster and azure-postgres
+#    components read endoflife.date's public API — see the registry comments
+#    in scripts/autoupdate.py for why, and for the tradeoffs that choice
+#    makes — so there is no Azure login step and no Azure credential anywhere.
+#
+# The AWS federated trust accepts only the environment-scoped subject —
+# repo:<this repository>:environment:autoupdater — because a job that
+# declares a GitHub environment mints its OIDC token with that `sub` claim
+# instead of the ref form, and this job declares the environment in every
+# event: `schedule` (always the default branch), a `workflow_dispatch`
+# against main, and the rehearsal branch alike. Which branches may run the
+# job at all is then gated by the environment's branch policy — main, plus
+# temporarily the ra/autoupdate-gha-test rehearsal branch; remove the
+# rehearsal branch from the branch policy once this PR merges.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # UTC. Three things to know before debugging a missing run:
+    #   * The schedule event is delayed under load, and the top of the hour is
+    #     named in the docs as a high-load window where queued jobs may be
+    #     dropped outright. Midnight UTC is the worst such slot. Nothing here is
+    #     time-sensitive, so move this to an odd minute if runs start going
+    #     missing.
+    #   * This is a public repository, so GitHub disables scheduled workflows
+    #     after 60 days with no repository activity. Any commit re-enables them.
+    #   * Only the copy of this file on the default branch schedules anything.
+    - cron: "0 0 * * *"
+
+# One run at a time, and never cancelled. Deliberately unlike validate.yml:
+# `github.head_ref` is empty outside a pull request, so that workflow's fallback
+# to `run_id` would put every run in its own group — exactly wrong here, where
+# two overlapping runs would race to force-push the same branch. Queueing rather
+# than cancelling also means a manual dispatch colliding with the nightly run
+# still finishes instead of leaving the branch half-pushed.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  # For actions/checkout only. Every write — the branch push and the pull
+  # request — goes through the GitHub App token, so GITHUB_TOKEN stays read-only.
+  contents: read
+  # Mint the OIDC token that AWS exchanges for short-lived credentials.
+  id-token: write
+
+jobs:
+  autoupdate:
+    name: autoupdate
+    runs-on: ubuntu-latest
+    # The App credentials live in the `autoupdater` environment (client ID
+    # as a variable, private key as a secret), so the job must declare it
+    # for either to resolve. Environment secrets are also invisible to every
+    # other workflow in this repository, which is the point of scoping them.
+    environment: autoupdater
+    timeout-minutes: 20
+    steps:
+      - uses: actions/create-github-app-token@v3
+        id: app-token
+        with:
+          # client-id, not the deprecated app-id (the action warns on it).
+          # The App's client ID is a different number from its App ID, and
+          # not sensitive, so it is an environment variable: vars., not
+          # secrets.
+          client-id: ${{ vars.AUTOUPDATE_CLIENT_ID }}
+          private-key: ${{ secrets.AUTOUPDATE_APP_PRIVATE_KEY }}
+          # owner/repositories deliberately omitted: with both unset the token is
+          # scoped to this repository alone, which is the tightest available.
+
+      - uses: actions/checkout@v4
+
+      # uv is not on the runner image, and the script is a PEP 723 single file
+      # that resolves its own dependencies, so this is the only install step.
+      #
+      # Pinned to a full version, not a major: astral-sh/setup-uv stopped
+      # publishing floating major tags after v7, so `@v10` does not resolve.
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          enable-cache: true
+
+      # Only the rds-postgres and eks-cluster components need AWS. The exported
+      # environment credentials are picked up by boto3's default chain, so the
+      # script must not be passed --aws-profile here.
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ secrets.AUTOUPDATE_AWS_ROLE_ARN }}
+          aws-region: us-east-1
+          role-session-name: autoupdate-${{ github.run_id }}
+          audience: sts.amazonaws.com
+
+      # No Azure login step, deliberately: the aks-cluster and azure-postgres
+      # components read endoflife.date's public API (see COMPONENTS in
+      # scripts/autoupdate.py) and need no credentials at all.
+
+      # One invocation does the scan, the upstream lookups, the writes and the
+      # Markdown report. Running `report` and then `update` would double every
+      # upstream call — including Docker Hub's per-IP rate-limited tags API,
+      # from a shared runner egress IP — and, worse, the two passes could
+      # disagree: a release landing between them would put a version in the PR
+      # body that is not in the diff, permanently, because the body is rewritten
+      # on every run.
+      #
+      # `update` exits 1 if ANY component errored, even when the components that
+      # did resolve were written successfully, and it is not transactional — by
+      # then the partial writes are already on disk. So record the status here
+      # instead of letting it end the job, and re-raise it after the PR is open.
+      - name: Bump pinned versions
+        id: autoupdate
+        env:
+          # rich sizes its table from COLUMNS when stdout is not a terminal, and
+          # would otherwise fold five columns into 80 characters.
+          COLUMNS: "200"
+          FORCE_COLOR: "1"
+        run: |
+          body="$RUNNER_TEMP/pr-body.md"
+          report="$RUNNER_TEMP/report.md"
+          commitmsg="$RUNNER_TEMP/commit-message.txt"
+
+          exit_status=0
+          # One pass produces both the Markdown PR body and the commit message,
+          # so the two cannot disagree and upstream is queried once.
+          scripts/autoupdate.py update \
+            --report-path "$report" \
+            --commit-message-path "$commitmsg" || exit_status=$?
+          echo "status=$exit_status" >> "$GITHUB_OUTPUT"
+
+          if [ ! -s "$report" ]; then
+            printf '_The run produced no report; see the job log._\n' > "$report"
+          fi
+          cat "$report" >> "$GITHUB_STEP_SUMMARY"
+
+          {
+            printf 'Opened by [`autoupdate.yml`](%s/%s/blob/main/.github/workflows/autoupdate.yml), [run %s](%s/%s/actions/runs/%s).\n\n' \
+              "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" \
+              "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID"
+            cat "$report"
+            printf '\nEvery changed line carries an `# AUTOUPDATE:` marker and every new value\n'
+            printf 'satisfies that marker'"'"'s constraint. A **Failed** section above means some\n'
+            printf 'components could not be resolved this run and are unchanged here — the job\n'
+            printf 'is red for that reason, not because these bumps are wrong.\n'
+          } > "$body"
+
+          # create-pull-request has no commit-message-path input — only
+          # commit-message as a string (unlike body-path below) — so the
+          # file becomes a multiline step output instead. The subject must
+          # stay identical to the title below: a single-commit PR can take
+          # the squash subject from either, and the CHANGELOG line should be
+          # right either way.
+          delim="commit-message-$GITHUB_RUN_ID-$RANDOM"
+          {
+            echo "commit-message<<$delim"
+            printf '[autoupdate] Bump pinned component versions\n\n'
+            cat "$commitmsg"
+            echo "$delim"
+          } >> "$GITHUB_OUTPUT"
+
+          # Informational: create-pull-request does the real gating, creating
+          # nothing when the branch has no diff against base.
+          if git diff --quiet -- '*.tf'; then
+            echo "No .tf changes."
+          else
+            git diff --stat -- '*.tf'
+          fi
+
+      # Pinned to a commit SHA rather than a major tag, unlike every other action
+      # here. This is the only community-maintained action in the repository and
+      # it holds a write-capable App token, so a hijacked tag would be a direct
+      # path into this repo. Bump deliberately.
+      #
+      # Run unconditionally: the action creates nothing when there is no diff,
+      # which is the correct gate, and that same path is what closes the PR and
+      # deletes the branch once a previous one has merged. Gating it would skip
+      # the cleanup.
+      - uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          branch: bot/autoupdate
+          base: main
+          # Title and commit message match on purpose: the squash subject comes
+          # from the PR title under the default repo setting but from the commit
+          # subject when a PR has a single commit and the repo is set to prefer
+          # that — and this action always produces exactly one commit. Keeping
+          # them identical makes the CHANGELOG line right either way.
+          #
+          # Not a `chore(...)` subject: .auto-changelog ignores that prefix, and
+          # these bumps change what a downstream `terraform apply` provisions, so
+          # they belong in the changelog people read before upgrading.
+          title: '[autoupdate] Bump pinned component versions'
+          # The commit body (not the subject) lists every bump, so the change
+          # set survives in the commit history instead of living only in the
+          # PR description. Composed into a step output in the previous step:
+          # the action has no commit-message-path input, only this string.
+          commit-message: ${{ steps.autoupdate.outputs.commit-message }}
+          body-path: ${{ runner.temp }}/pr-body.md
+          # A crashed `update` can leave a `.<name>.tf.autoupdate` temp file
+          # behind. It does not end in `.tf`, so this pathspec already excludes
+          # it; the explicit exclude is here so the guard is not "simplified"
+          # away later. Everything the script touches is a tracked *.tf file.
+          add-paths: |
+            *.tf
+            :(exclude).*.autoupdate
+          # Commits come out authored by the App, verified. Without this the
+          # author defaults to github.actor, which on a scheduled run is whoever
+          # last edited the cron line above — attributing the nightly bump to a
+          # human who did not write it, and colliding with "an author cannot
+          # approve their own PR". Setting this makes the action ignore the
+          # committer and author inputs entirely.
+          sign-commits: true
+          delete-branch: true
+
+      - name: Fail if any component could not be resolved
+        # Last on purpose. The exit code does not distinguish "some components
+        # failed" from "nothing was written", and the markers that did resolve
+        # have already been committed by the step above. Let the PR land, then go
+        # red so the failure is not silently absorbed.
+        if: steps.autoupdate.outputs.status != '0'
+        run: |
+          echo "::error::scripts/autoupdate.py exited ${{ steps.autoupdate.outputs.status }} — see the Failed rows in the run summary."
+          exit 1

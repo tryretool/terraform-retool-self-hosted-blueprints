@@ -59,7 +59,8 @@ variable "enable_agic" {
 variable "agic_chart" {
   type = object({
     repository = optional(string, "oci://mcr.microsoft.com/azure-application-gateway/charts")
-    version    = optional(string, "1.9.7")
+    # AUTOUPDATE: agic-chart 1.9.x
+    version = optional(string, "1.9.7")
   })
   default     = {}
   description = "Where to fetch the Application Gateway Ingress Controller chart. Pinned so an apply never silently picks up a new upstream release; override version to take an upstream fix ahead of this module, or repository to serve the chart from a private registry, which needs a registry block on the helm provider or a prior login. Because the default is an OCI registry, version must be an exact version — OCI serves no searchable index, so Helm cannot resolve a constraint range against it. Do not pin below 1.9: running one AGIC per deployment rather than one per cluster depends on armAuth.type = workloadIdentity, on kubernetes.ingressClassResource confining each instance to its own class, and on the chart shipping its CRDs in crds/ instead of templating them — on an older chart those values are silently dropped and two instances fight over every Ingress in the cluster. See https://github.com/Azure/application-gateway-kubernetes-ingress"
