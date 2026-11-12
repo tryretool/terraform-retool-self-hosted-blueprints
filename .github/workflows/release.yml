@@ -15,6 +15,11 @@ name: Release
 on:
   push:
     branches: [main]
+  # Manual trigger from the Actions tab (needs repo write access), for
+  # testing and ops. Runs the same release-auto reconciliation against main.
+  # The if: guard below passes: github.event.head_commit is unset for
+  # workflow_dispatch, so its startsWith() checks are both false.
+  workflow_dispatch:
 
 # Releases must serialize: each run may push commits and a tag to main, and
 # require-on-main-branch refuses to run from a branch that is behind origin.
@@ -75,14 +80,19 @@ jobs:
 
       # Commits are authored as the App's own bot identity (<slug>[bot]).
       # The slug/id aren't known to the workflow until the App exists, so
-      # resolve them from the API instead of hardcoding the App's name.
+      # resolve them from the API instead of hardcoding the App's name. REST
+      # /app requires JWT auth and /user 403s on installation tokens; the
+      # GraphQL viewer query works with installation tokens and returns the
+      # bot's login (<slug>[bot]) and its user id (for the noreply email).
       - name: Configure git identity from the GitHub App
         run: |
-          slug="$(gh api /app --jq .slug)"
-          id="$(gh api /app --jq .id)"
-          git config user.name "${slug}[bot]"
-          git config user.email \
-            "${id}+${slug}[bot]@users.noreply.github.com"
+          identity="$(gh api graphql \
+            -f query='query { viewer { login databaseId } }' \
+            --jq '.data.viewer | "\(.login) \(.databaseId)"')"
+          login="${identity% *}"
+          dbid="${identity#* }"
+          git config user.name "$login"
+          git config user.email "${dbid}+${login}@users.noreply.github.com"
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
 
