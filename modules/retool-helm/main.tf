@@ -159,9 +159,11 @@ locals {
     local.agent_sandbox_enabled ? { rr = { agentSandbox = local.pod_scheduling } } : {},
   ))] : []
 
-  # Self-hosted-blueprints release this module ships as, stamped by
-  # `make release-prep`.
-  blueprints_version = trimspace(file("${path.module}/BLUEPRINTS_VERSION"))
+  # Self-hosted-blueprints release this module ships as. The single VERSION
+  # file lives at the repo root; registry and git module consumers both
+  # vendor the whole repo, so ../../VERSION resolves inside the fetched
+  # package. `make release-prep` keeps the file in sync with the tag.
+  blueprints_version = trimspace(file("${path.module}/../../VERSION"))
 
   # Deployment template identity reported by the Retool Helm chart via the
   # DEPLOYMENT_TEMPLATE_TYPE env var, e.g. "blueprint-aws-eks-helm/0.5.3".

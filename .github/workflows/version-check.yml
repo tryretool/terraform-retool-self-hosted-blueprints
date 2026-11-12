@@ -1,0 +1,36 @@
+name: Version check
+
+# PR gate enforcing monotonic versioning: the VERSION file (the *intended*
+# version) must never be strictly less than the latest published release
+# (tags on origin remain the source of truth). Equal means "no release yet,
+# changelog sync only"; greater means "this PR triggers a release on merge".
+#
+# The check itself lives in the Makefile (`make version-check-monotonic`) so
+# it can be reproduced locally; this workflow is a thin wrapper.
+#
+# Deliberately no `paths:` filter, so this can be added as a required status
+# check without leaving PRs that don't touch VERSION blocked forever.
+on:
+  pull_request:
+
+# Supersede in-progress runs for the same PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  version-check-monotonic:
+    name: version-check-monotonic
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Depth 1 is enough: `make version-check-monotonic` only reads the
+      # VERSION file from the checkout and resolves published versions via
+      # `git ls-remote`.
+      - uses: actions/checkout@v4
+
+      - name: make version-check-monotonic
+        run: make version-check-monotonic

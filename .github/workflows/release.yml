@@ -1,0 +1,97 @@
+name: Release
+
+# Runs on every merge to main and reconciles repo state with the VERSION file:
+#   VERSION <  latest published tag -> fail (someone merged a stale VERSION;
+#                                     the version-check PR gate should have
+#                                     caught this before merge)
+#   VERSION == latest published tag -> sync CHANGELOG.md (including the
+#                                     Unreleased section) and push a
+#                                     chore(changelog) commit to main
+#   VERSION >  latest published tag -> full release: version bumps, changelog,
+#                                     tag, and GitHub release
+#
+# All logic lives in the Makefile (`make release-auto`) so everything here can
+# be reproduced locally on a clean main branch; this workflow is a thin wrapper.
+on:
+  push:
+    branches: [main]
+
+# Releases must serialize: each run may push commits and a tag to main, and
+# require-on-main-branch refuses to run from a branch that is behind origin.
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+# All auth in this workflow (clone, push, `gh release create`, the `gh api`
+# call below) goes through the release GitHub App's token; the default
+# GITHUB_TOKEN is never used and so gets no permissions at all.
+permissions: {}
+
+jobs:
+  release:
+    name: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # The App credentials live in the `release` Environment's secrets, which
+    # are only visible to jobs that declare this environment (and to whatever
+    # protection rules the environment sets, e.g. deployment branch = main).
+    environment: release
+    # Loop avoidance: App-token pushes DO trigger workflows, unlike
+    # GITHUB_TOKEN pushes, so the chore(release) / chore(changelog) commits
+    # this job pushes to main would retrigger it. This guard (plus the
+    # [skip ci] markers in those commit messages) skips those runs.
+    if: >-
+      !startsWith(github.event.head_commit.message, 'chore(release)') &&
+      !startsWith(github.event.head_commit.message, 'chore(changelog)')
+    steps:
+      # All access is via the release GitHub App (org tryretool -> Settings
+      # -> Developer settings -> GitHub Apps): it has Contents: read-and-write
+      # on this repo and is an "always" bypass actor on the ruleset
+      # protecting main, which is what lets the pushes below through branch
+      # protection. Its credentials live in this repo's `release` Environment
+      # as RELEASE_BOT_APP_ID and RELEASE_BOT_PRIVATE_KEY.
+      - uses: actions/create-github-app-token@v2
+        id: app-token
+        with:
+          app-id: ${{ secrets.RELEASE_BOT_APP_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          ref: main
+          # Full history and tags: `git describe` (version-next for BUMP=),
+          # auto-changelog, and require-on-main-branch all need them.
+          fetch-depth: 0
+
+      # `make changelog-sync` runs `npx auto-changelog`. ubuntu-latest runners
+      # ship Node, but pin it explicitly so the changelog tooling is stable.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      # Commits are authored as the App's own bot identity (<slug>[bot]).
+      # The slug/id aren't known to the workflow until the App exists, so
+      # resolve them from the API instead of hardcoding the App's name.
+      - name: Configure git identity from the GitHub App
+        run: |
+          slug="$(gh api /app --jq .slug)"
+          id="$(gh api /app --jq .id)"
+          git config user.name "${slug}[bot]"
+          git config user.email \
+            "${id}+${slug}[bot]@users.noreply.github.com"
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+
+      # Guard against stale merges: a PR whose version-check-monotonic passed
+      # can still be behind by merge time if another release landed on main in
+      # the meantime. release-auto would bail in that state anyway; running
+      # the same check the PR gate uses first fails fast with a clear message.
+      - name: make version-check-monotonic
+        run: make version-check-monotonic
+
+      - name: make release-auto
+        run: make release-auto
+        env:
+          # Used by `gh release create` in the release-push target.
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
