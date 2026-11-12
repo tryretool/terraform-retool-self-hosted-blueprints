@@ -32,9 +32,10 @@ jobs:
     name: release
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # The App credentials live in the `release` Environment's secrets, which
-    # are only visible to jobs that declare this environment (and to whatever
-    # protection rules the environment sets, e.g. deployment branch = main).
+    # The App credentials live in the `release` Environment, whose secrets
+    # and variables are only visible to jobs that declare this environment
+    # (and to whatever protection rules the environment sets, e.g. deployment
+    # branch = main).
     environment: release
     # Loop avoidance: App-token pushes DO trigger workflows, unlike
     # GITHUB_TOKEN pushes, so the chore(release) / chore(changelog) commits
@@ -48,12 +49,14 @@ jobs:
       # -> Developer settings -> GitHub Apps): it has Contents: read-and-write
       # on this repo and is an "always" bypass actor on the ruleset
       # protecting main, which is what lets the pushes below through branch
-      # protection. Its credentials live in this repo's `release` Environment
-      # as RELEASE_BOT_APP_ID and RELEASE_BOT_PRIVATE_KEY.
+      # protection. Its credentials live in this repo's `release` Environment:
+      # RELEASE_BOT_APP_ID as a variable, RELEASE_BOT_PRIVATE_KEY as a secret.
       - uses: actions/create-github-app-token@v2
         id: app-token
         with:
-          app-id: ${{ secrets.RELEASE_BOT_APP_ID }}
+          # The App ID isn't sensitive, so it lives in an environment
+          # *variable*; only the private key is an environment secret.
+          app-id: ${{ vars.RELEASE_BOT_APP_ID }}
           private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
 
       - uses: actions/checkout@v4
