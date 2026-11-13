@@ -31,7 +31,7 @@ variable "retool_helm_chart_repository" {
 
 variable "retool_helm_timeout" {
   type        = number
-  description = "Seconds the Helm release waits for every Retool workload to become ready before it fails. Full-stack deploys (workflows, code executor) can take longer than 5 minutes. Only the initial install uses this value: the release ignores later changes to it, and updates keep the value it was installed with."
+  description = "Seconds the Helm release waits for every Retool workload to become ready before it fails. Full-stack deploys (workflows, code executor) can take longer than 5 minutes. The value applies to every install and upgrade, and changing it updates the release in place."
   default     = 20 * 60
 
   validation {
