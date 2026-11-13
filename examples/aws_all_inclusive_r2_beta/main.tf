@@ -64,7 +64,7 @@ module "retool" {
 
   retool_helm_name = "retool"
   # AUTOUPDATE: retool-chart 6.x.x
-  retool_helm_chart_version = "6.11.15"
+  retool_helm_chart_version = "6.13.8"
 
   db              = module.db-main.outputs
   retool_services = module.retool-services.outputs
@@ -74,7 +74,7 @@ module "retool" {
   retool_helm_extra_values = [yamlencode({
     image = {
       # AUTOUPDATE: retool-image 4.x.x-stable
-      tag = "4.0.3-stable"
+      tag = "4.86.0-stable"
     }
     podDisruptionBudget = {
       maxUnavailable = 1
