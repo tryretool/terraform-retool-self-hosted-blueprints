@@ -208,7 +208,7 @@ resource "helm_release" "agic" {
     # AGIC's scheduling lives under the `kubernetes.*` values prefix (the
     # top-level nodeSelector is legacy), so pod_scheduling is nested there. It is
     # a separate values document so Helm deep-merges it with the block above.
-    yamlencode(local.has_pod_scheduling ? { kubernetes = local.pod_scheduling } : {}),
+    local.has_pod_scheduling ? yamlencode({ kubernetes = local.pod_scheduling }) : yamlencode({}),
   ]
 
   depends_on = [

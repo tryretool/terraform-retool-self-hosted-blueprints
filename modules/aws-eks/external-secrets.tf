@@ -113,10 +113,10 @@ resource "helm_release" "external_secrets" {
         }
       }
     }),
-    yamlencode(local.has_pod_scheduling ? merge(local.pod_scheduling, {
+    local.has_pod_scheduling ? yamlencode(merge(local.pod_scheduling, {
       webhook        = local.pod_scheduling
       certController = local.pod_scheduling
-    }) : {}),
+    })) : yamlencode({}),
   ]
 
   depends_on = [module.eks]

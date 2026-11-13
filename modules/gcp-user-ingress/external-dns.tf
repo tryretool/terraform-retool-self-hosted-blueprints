@@ -86,6 +86,6 @@ resource "helm_release" "external_dns" {
         "--namespace=${local.retool_namespace}",
       ]
     }),
-    yamlencode(local.has_pod_scheduling ? local.pod_scheduling : {}),
+    yamlencode(local.pod_scheduling),
   ]
 }
