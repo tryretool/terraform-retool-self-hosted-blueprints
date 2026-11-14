@@ -47,6 +47,9 @@ resource "helm_release" "cert_manager" {
       podLabels = {
         "azure.workload.identity/use" = "true"
       }
+      # azure-user-ingress creates a namespaced Issuer, and cert-manager only lets
+      # a namespaced Issuer use the managed identity with this flag.
+      extraArgs = ["--issuer-ambient-credentials"]
     }),
     yamlencode(local.has_pod_scheduling ? merge(local.pod_scheduling, {
       webhook         = local.pod_scheduling

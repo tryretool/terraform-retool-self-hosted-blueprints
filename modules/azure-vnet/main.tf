@@ -166,7 +166,7 @@ resource "random_string" "kv_suffix" {
 
 # Use access policies (not RBAC) so the deploying identity doesn't need
 # Microsoft.Authorization/roleAssignments/* permissions (Owner role).
-# Access policies are embedded in the KV resource and take effect immediately.
+# Access policies take effect immediately.
 resource "azurerm_key_vault" "main" {
   name                       = "${var.prefix}-${random_string.kv_suffix.result}-kv"
   location                   = var.location
@@ -177,14 +177,18 @@ resource "azurerm_key_vault" "main" {
   purge_protection_enabled   = false
   rbac_authorization_enabled = false
   tags                       = var.tags
+}
 
-  # Grant the Terraform identity full secret management.
-  access_policy {
-    tenant_id = data.azurerm_client_config.current.tenant_id
-    object_id = data.azurerm_client_config.current.object_id
+# Grant the Terraform identity full secret management. This is a separate
+# resource, not an access_policy block on the vault, because an inline block
+# owns the vault's whole policy list and would remove ESO's policy, which
+# azure-retool-services adds.
+resource "azurerm_key_vault_access_policy" "terraform" {
+  key_vault_id = azurerm_key_vault.main.id
+  tenant_id    = data.azurerm_client_config.current.tenant_id
+  object_id    = data.azurerm_client_config.current.object_id
 
-    secret_permissions = [
-      "Get", "Set", "Delete", "List", "Purge", "Recover",
-    ]
-  }
+  secret_permissions = [
+    "Get", "Set", "Delete", "List", "Purge", "Recover",
+  ]
 }
