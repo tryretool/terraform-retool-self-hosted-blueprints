@@ -9,4 +9,11 @@ This is a Terraform module providing the per-deployment supporting services reco
 * Optionally generates agent sandbox secrets (JWT keypair, encryption key, API secret, Postgres URL) stored in Key Vault and synced to K8s via ESO
 * Optionally creates an Azure Storage Account and Blob container for Remote Repository storage
 
+### App hostnames
+
+`enable_app_hostnames = true` serves R² published apps and editor previews on
+their own hostnames, under `apps.<domain_name>`. `retool-helm` and the
+user-ingress module read it from this module's `outputs`. See
+[App hostnames](../../README.md#app-hostnames) in the root README.
+
 > [!NOTE] This module is intended to be used in conjunction with the other Azure-specific modules in [`retool-self-hosted-blueprints`](https://github.com/tryretool/retool-self-hosted-blueprints). See the [usage examples](https://github.com/tryretool/retool-self-hosted-blueprints/tree/main/examples) for references on how to use this module.

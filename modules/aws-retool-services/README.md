@@ -34,4 +34,11 @@ If you author your own `ExternalSecret` manifests that read secrets outside the
 `retool/{prefix}/*` namespace — credentials for a second database, say — list
 those ARNs in `extra_secret_read_arns` so ESO's IAM role can read them.
 
+### App hostnames
+
+`enable_app_hostnames = true` serves R² published apps and editor previews on
+their own hostnames, under `apps.<domain_name>`. `retool-helm` and the
+user-ingress module read it from this module's `outputs`. See
+[App hostnames](../../README.md#app-hostnames) in the root README.
+
 > [!NOTE] This module is intended to be used in conjunction with the other AWS-specific modules in [`retool-self-hosted-blueprints`](https://github.com/tryretool/retool-self-hosted-blueprints). See the [usage examples](https://github.com/tryretool/retool-self-hosted-blueprints/tree/main/examples) for references on how to use this module.

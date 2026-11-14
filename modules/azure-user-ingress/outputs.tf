@@ -1,20 +1,26 @@
 locals {
   outputs = {
-    ingress_mode        = "azure-agic"
-    ingress_class_name  = local.ingress_class_name
-    cluster_issuer_name = var.enable_https ? local.issuer_name : null
-    issuer_kind         = var.enable_https ? local.issuer_kind : null
-    tls_secret_name     = var.enable_https ? "${var.prefix}-tls" : null
-    zone_name_servers   = azurerm_dns_zone.main.name_servers
-    zone_dns_name       = azurerm_dns_zone.main.name
-    public_ip_address   = var.enable_agic ? azurerm_public_ip.appgw[0].ip_address : null
-    appgw_name          = var.enable_agic ? azurerm_application_gateway.main[0].name : null
+    app_hostnames_enabled = local.app_hostnames_enabled
+    ingress_mode          = "azure-agic"
+    ingress_class_name    = local.ingress_class_name
+    cluster_issuer_name   = var.enable_https ? local.issuer_name : null
+    issuer_kind           = var.enable_https ? local.issuer_kind : null
+    tls_secret_name       = var.enable_https ? "${var.prefix}-tls" : null
+    zone_name_servers     = azurerm_dns_zone.main.name_servers
+    zone_dns_name         = azurerm_dns_zone.main.name
+    public_ip_address     = var.enable_agic ? azurerm_public_ip.appgw[0].ip_address : null
+    appgw_name            = var.enable_agic ? azurerm_application_gateway.main[0].name : null
   }
 }
 
 output "ingress_mode" {
   description = "How Retool traffic reaches the cluster. \"azure-agic\" tells retool-helm to render the chart Ingress so the Application Gateway Ingress Controller reconciles it."
   value       = local.outputs.ingress_mode
+}
+
+output "app_hostnames_enabled" {
+  description = "Whether this module created the certificates, DNS records and routes for the R² app and sandbox hostnames. retool-helm refuses to turn the hostnames on without them."
+  value       = local.outputs.app_hostnames_enabled
 }
 
 output "ingress_class_name" {

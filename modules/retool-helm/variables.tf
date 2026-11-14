@@ -14,7 +14,7 @@ variable "retool_helm_chart_version" {
   type        = string
   description = "Version of Retool Helm chart to deploy"
   # AUTOUPDATE: retool-chart 6.x.x
-  default = "6.11.33"
+  default = "6.13.2"
 }
 
 variable "retool_helm_chart_use_unpublished_branch" {
@@ -70,6 +70,7 @@ variable "retool_services" {
     license_key_secret_name          = optional(string)
     license_key_secret_key           = optional(string)
     agent_sandbox_enabled            = optional(bool, false)
+    app_hostnames_enabled            = optional(bool, false)
     agent_sandbox_secret_name        = optional(string)
     rr_bucket_k8s_secret_name        = optional(string)
     rr_bucket_env_keys               = optional(list(string), [])
@@ -83,13 +84,14 @@ variable "retool_services" {
 
 variable "user_ingress" {
   type = object({
-    ingress_mode         = optional(string)
-    gateway_name         = optional(string)
-    gateway_section_name = optional(string)
-    ingress_class_name   = optional(string)
-    cluster_issuer_name  = optional(string)
-    issuer_kind          = optional(string)
-    tls_secret_name      = optional(string)
+    ingress_mode          = optional(string)
+    gateway_name          = optional(string)
+    gateway_section_name  = optional(string)
+    ingress_class_name    = optional(string)
+    cluster_issuer_name   = optional(string)
+    issuer_kind           = optional(string)
+    tls_secret_name       = optional(string)
+    app_hostnames_enabled = optional(bool)
   })
   default     = null
   description = "User-ingress outputs (e.g. module.user-ingress.outputs) describing how end-user traffic reaches the cluster. ingress_mode (\"targetGroupBinding\", \"httpRoute\", or \"ingress\") selects which Helm values block (ingress.* / httpRoute.* / agentSandbox.proxy.ingress.*) to render."
@@ -98,13 +100,13 @@ variable "user_ingress" {
 variable "domain_name" {
   type        = string
   default     = null
-  description = "External domain that serves Retool to end users (e.g. \"retool.example.com\"). When set, configures env.BASE_DOMAIN, agentSandbox.frontendWsProxyDomain, agentSandbox.proxy.backendDomainSuffixes, and config.useInsecureCookies. The URL scheme is selected by https_enabled."
+  description = "External domain that serves Retool to end users (e.g. \"retool.example.com\"). When set, configures env.BASE_DOMAIN, agentSandbox.proxy.backendDomainSuffixes, and config.useInsecureCookies. The URL scheme is selected by https_enabled."
 }
 
 variable "https_enabled" {
   type        = bool
   default     = true
-  description = "Whether the user-facing ingress terminates HTTPS. Drives the scheme used in BASE_DOMAIN / frontendWsProxyDomain and inverts config.useInsecureCookies (cookies are only marked Secure when HTTPS is in use)."
+  description = "Whether the user-facing ingress terminates HTTPS. Drives the scheme used in BASE_DOMAIN and inverts config.useInsecureCookies (cookies are only marked Secure when HTTPS is in use)."
 }
 
 variable "workflows_enabled" {

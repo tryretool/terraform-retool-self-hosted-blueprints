@@ -1,20 +1,26 @@
 locals {
   outputs = {
-    ingress_mode         = "gke-gateway-controller"
-    static_ip_address    = google_compute_global_address.main.address
-    zone_id              = google_dns_managed_zone.main.id
-    zone_dns_name        = google_dns_managed_zone.main.dns_name
-    zone_name            = google_dns_managed_zone.main.name
-    zone_name_servers    = google_dns_managed_zone.main.name_servers
-    cert_map_name        = google_certificate_manager_certificate_map.main.name
-    gateway_name         = "retool"
-    gateway_section_name = "https"
+    app_hostnames_enabled = local.app_hostnames_enabled
+    ingress_mode          = "gke-gateway-controller"
+    static_ip_address     = google_compute_global_address.main.address
+    zone_id               = google_dns_managed_zone.main.id
+    zone_dns_name         = google_dns_managed_zone.main.dns_name
+    zone_name             = google_dns_managed_zone.main.name
+    zone_name_servers     = google_dns_managed_zone.main.name_servers
+    cert_map_name         = google_certificate_manager_certificate_map.main.name
+    gateway_name          = "retool"
+    gateway_section_name  = "https"
   }
 }
 
 output "ingress_mode" {
   description = "How Retool traffic reaches the cluster. \"gke-gateway-controller\" tells retool-helm to disable the chart Ingress and emit a Gateway API HTTPRoute attached to this module's Gateway."
   value       = local.outputs.ingress_mode
+}
+
+output "app_hostnames_enabled" {
+  description = "Whether this module created the certificates, DNS records and routes for the R² app and sandbox hostnames. retool-helm refuses to turn the hostnames on without them."
+  value       = local.outputs.app_hostnames_enabled
 }
 
 output "static_ip_address" {

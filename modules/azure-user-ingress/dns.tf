@@ -33,3 +33,15 @@ resource "azurerm_dns_a_record" "wildcard" {
   ttl                 = 300
   target_resource_id  = azurerm_public_ip.appgw[0].id
 }
+
+# Once any name exists under apps.<domain_name> (one of these records, or a DNS-01
+# challenge), the * record above stops answering for hosts below it.
+resource "azurerm_dns_a_record" "apps" {
+  for_each = var.enable_agic ? local.apps_ingresses : {}
+
+  name                = trimsuffix(each.value.host, ".${var.domain_name}")
+  zone_name           = azurerm_dns_zone.main.name
+  resource_group_name = var.resource_group_name
+  ttl                 = 300
+  target_resource_id  = azurerm_public_ip.appgw[0].id
+}
