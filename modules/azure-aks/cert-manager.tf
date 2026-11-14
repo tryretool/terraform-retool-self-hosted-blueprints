@@ -51,11 +51,11 @@ resource "helm_release" "cert_manager" {
       # a namespaced Issuer use the managed identity with this flag.
       extraArgs = ["--issuer-ambient-credentials"]
     }),
-    yamlencode(local.has_pod_scheduling ? merge(local.pod_scheduling, {
+    local.has_pod_scheduling ? yamlencode(merge(local.pod_scheduling, {
       webhook         = local.pod_scheduling
       cainjector      = local.pod_scheduling
       startupapicheck = local.pod_scheduling
-    }) : {}),
+    })) : yamlencode({}),
   ]
 
   depends_on = [azurerm_kubernetes_cluster.main]

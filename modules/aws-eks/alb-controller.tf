@@ -188,7 +188,7 @@ resource "helm_release" "alb_controller" {
       # --default-tags CLI flag on the controller.
       defaultTags = local.alb_controller_default_tags
     }),
-    yamlencode(local.has_pod_scheduling ? local.pod_scheduling : {}),
+    yamlencode(local.pod_scheduling),
   ]
 
   depends_on = [

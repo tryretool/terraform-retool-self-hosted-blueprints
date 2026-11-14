@@ -30,11 +30,11 @@ resource "helm_release" "cert_manager" {
         fsGroup = 1001
       }
     }),
-    yamlencode(local.has_pod_scheduling ? merge(local.pod_scheduling, {
+    local.has_pod_scheduling ? yamlencode(merge(local.pod_scheduling, {
       webhook         = local.pod_scheduling
       cainjector      = local.pod_scheduling
       startupapicheck = local.pod_scheduling
-    }) : {}),
+    })) : yamlencode({}),
   ]
 
   depends_on = [module.eks]

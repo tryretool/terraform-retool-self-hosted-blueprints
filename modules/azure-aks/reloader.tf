@@ -23,7 +23,7 @@ resource "helm_release" "reloader" {
         autoReloadAll = var.reloader_auto_reload_all
       }
     }),
-    yamlencode(local.has_pod_scheduling ? { reloader = { deployment = local.pod_scheduling } } : {}),
+    local.has_pod_scheduling ? yamlencode({ reloader = { deployment = local.pod_scheduling } }) : yamlencode({}),
   ]
 
   depends_on = [azurerm_kubernetes_cluster.main]
