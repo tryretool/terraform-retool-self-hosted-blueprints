@@ -122,6 +122,32 @@ See the [scaling guide](./guides/scaling.md) for how to size the database and
 scale the Retool services (replica counts, resource requests/limits) via
 `retool_helm_extra_values`.
 
+## App hostnames
+
+By default, Retool serves published apps and editor previews in a sandboxed
+iframe with a null origin, where the browser blocks features like
+`localStorage`, cookies, and the camera. With app hostnames, each app and editor
+preview is served on its own hostname instead of in the null-origin iframe, so
+these features work. We recommend enabling this setting. See
+[App hostnames](https://docs.retool.com/self-hosted/self-managed/guides/app-hostnames)
+for more.
+
+Set `enable_app_hostnames = true` on `retool-services`, and pass
+`retool_services = module.retool-services.outputs` to both `user-ingress` and
+`retool` (the `*_all_inclusive` examples already do). Without it,
+`user-ingress` creates no routes for the new hostnames and previews fail.
+
+Differences from the Retool docs:
+
+* **Previews move in the same apply**, not a second upgrade. Set each space's
+  Permissions Policy first.
+* **On AWS**, set `enable_https_listener = true` on `user-ingress`. The AWS
+  examples default it to `false`.
+* **The hostnames are fixed** under `apps.<domain_name>`. To customize this,
+  use the Helm chart directly.
+* **`alb_authenticate_oidc` (AWS) doesn't cover these hostnames.** Apps and
+  editor previews skip the load balancer's login and use Retool's.
+
 ## Testing an unpublished Helm chart branch
 
 By default the modules install the published Retool chart from

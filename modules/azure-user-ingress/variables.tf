@@ -44,10 +44,17 @@ variable "retool_service_port" {
 
 variable "retool_services" {
   type = object({
-    retool_namespace = optional(string)
+    retool_namespace      = optional(string)
+    app_hostnames_enabled = optional(bool, false)
   })
   default     = null
   description = "Retool-services outputs (e.g. module.retool-services.outputs). The TLS Certificate, the Issuer and AGIC all live in retool_namespace, beside the Retool Ingress. When null, falls back to \"<prefix>-retool\"."
+}
+
+variable "retool_service_name" {
+  type        = string
+  description = "Name of the Kubernetes Service fronting Retool pods: the retool-helm release name, or \"<release>-retool\" when the release name doesn't contain \"retool\". The R² app and sandbox routes point at the Services named after it."
+  default     = "retool"
 }
 
 variable "enable_agic" {

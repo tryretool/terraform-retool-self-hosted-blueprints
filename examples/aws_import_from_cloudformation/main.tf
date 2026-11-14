@@ -124,5 +124,8 @@ module "user-ingress" {
 
   alb_authenticate_oidc = local.alb_authenticate_oidc
 
+  # Places the TargetGroupBinding in Retool's namespace, beside its Service.
+  retool_services = module.retool-services.outputs
+
   depends_on = [module.retool-services, module.retool]
 }

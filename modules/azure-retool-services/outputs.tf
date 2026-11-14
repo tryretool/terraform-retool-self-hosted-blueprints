@@ -13,6 +13,7 @@ locals {
     license_key_secret_name          = (nonsensitive(var.license_key != null) || var.license_key_secret_path != null) ? "license-key" : null
     license_key_secret_key           = (nonsensitive(var.license_key != null) || var.license_key_secret_path != null) ? "license-key" : null
     agent_sandbox_enabled            = var.enable_agent_sandbox
+    app_hostnames_enabled            = var.enable_app_hostnames
     agent_sandbox_secret_name        = var.enable_agent_sandbox ? "agent-sandbox" : null
     rr_bucket_k8s_secret_name        = var.enable_rr_blob ? "rr-blob-credentials" : null
     rr_bucket_env_keys               = var.enable_rr_blob ? ["RR_DEFAULT_AZURE_CONTAINER", "RR_DEFAULT_AZURE_CONNECTION_STRING", "RR_BLOB_STORAGE_PROVIDER"] : []
@@ -91,6 +92,11 @@ output "license_key_secret_key" {
 output "agent_sandbox_enabled" {
   description = "Whether agent sandbox was enabled in this retool-services deployment."
   value       = local.outputs.agent_sandbox_enabled
+}
+
+output "app_hostnames_enabled" {
+  description = "Whether R² apps are served at <app>.apps.<domain_name> and editor previews at sandbox-<id>.sandboxes.apps.<domain_name>."
+  value       = local.outputs.app_hostnames_enabled
 }
 
 output "agent_sandbox_secret_name" {

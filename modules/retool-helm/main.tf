@@ -92,6 +92,20 @@ locals {
   })] : []
 
   agent_sandbox_enabled = var.retool_services != null && var.retool_services.agent_sandbox_enabled
+  app_hostnames_enabled = var.retool_services != null && var.retool_services.app_hostnames_enabled
+
+  # 6.13.2 is the first published chart with rr.appServingLayer and wildcardSandboxes.
+  # Versions this can't parse, such as a git ref, pass.
+  chart_version_parts        = try([for part in split(".", split("-", var.retool_helm_chart_version)[0]) : tonumber(part)], null)
+  chart_supports_apps_domain = try(local.chart_version_parts[0] * 1000000 + local.chart_version_parts[1] * 1000 + local.chart_version_parts[2] >= 6013002, true)
+
+  # The ingress modules build certificates, DNS and routes for apps.<domain_name> only,
+  # so a hostname set in the extra values would have none of them.
+  extra_values_set_apps_hostnames = anytrue([
+    for values in var.retool_helm_extra_values :
+    try(yamldecode(values).rr.appServingLayer.domain, null) != null
+    || try(yamldecode(values).rr.agentSandbox.frontendWildcardDomain, null) != null
+  ])
 
   agent_sandbox_values = local.agent_sandbox_enabled ? [yamlencode({
     rr = {
@@ -121,6 +135,20 @@ locals {
       }
       gitServer = {
         enabled = var.retool_services.rr_bucket_k8s_secret_name != null
+      }
+    }
+  })] : []
+
+  # A precondition on the release requires domain_name; the null check stops this
+  # interpolation from failing first and hiding that message.
+  apps_domain_values = local.app_hostnames_enabled && var.domain_name != null ? [yamlencode({
+    rr = {
+      appServingLayer = {
+        enabled = true
+        domain  = "apps.${var.domain_name}"
+      }
+      agentSandbox = {
+        wildcardSandboxes = true
       }
     }
   })] : []
@@ -195,6 +223,7 @@ resource "helm_release" "retool" {
     local.rr_bucket_values,
     local.domain_values,
     local.agent_sandbox_values,
+    local.apps_domain_values,
     local.workflows_values,
     local.dbconnector_values,
     local.user_ingress_values,
@@ -203,4 +232,37 @@ resource "helm_release" "retool" {
     var.retool_helm_extra_values,
     local.deployment_template_values,
   )
+
+  lifecycle {
+    # The serving layer reads published apps from the git server's bucket, and this
+    # module only turns the git server on alongside the agent sandbox.
+    precondition {
+      condition = !local.app_hostnames_enabled || (
+        var.domain_name != null
+        && local.agent_sandbox_enabled
+        && try(var.retool_services.rr_bucket_k8s_secret_name, null) != null
+      )
+      error_message = "enable_app_hostnames on retool-services needs domain_name here, plus enable_agent_sandbox and R² storage on retool-services (the chart's app serving layer requires the R² git server)."
+    }
+
+    # Older charts ignore the apps values, leaving the ingress modules' routes with
+    # no Services behind them.
+    precondition {
+      condition     = !local.app_hostnames_enabled || local.chart_supports_apps_domain
+      error_message = "enable_app_hostnames on retool-services needs retool_helm_chart_version 6.13.2 or later."
+    }
+
+    # The chart moves every editor preview to the sandbox hostnames, so the
+    # user-ingress module must have built their certificates, DNS and routes.
+    # Callers that route traffic themselves pass no user_ingress.
+    precondition {
+      condition     = !local.app_hostnames_enabled || var.user_ingress == null || coalesce(var.user_ingress.app_hostnames_enabled, false)
+      error_message = "enable_app_hostnames on retool-services needs the user-ingress module to build the app and sandbox routes: pass retool_services = module.retool-services.outputs to the user-ingress module."
+    }
+
+    precondition {
+      condition     = !local.app_hostnames_enabled || !local.extra_values_set_apps_hostnames
+      error_message = "enable_app_hostnames on retool-services serves apps at apps.<domain_name>, so retool_helm_extra_values can't set rr.appServingLayer.domain or rr.agentSandbox.frontendWildcardDomain. To pick your own hostnames, deploy with the Helm chart directly."
+    }
+  }
 }

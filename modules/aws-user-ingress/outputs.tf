@@ -6,6 +6,8 @@ locals {
     zone_name             = one(aws_route53_zone.hosted_zone[*].name)
     zone_name_servers     = one(aws_route53_zone.hosted_zone[*].name_servers)
     acm_certificate_arn   = local.certificate_arn
+    app_hostnames_enabled = local.app_hostnames_enabled
+    apps_certificate_arn  = one(aws_acm_certificate.apps[*].arn)
     alb_id                = aws_lb.alb.id
     alb_dns_name          = aws_lb.alb.dns_name
     alb_internal          = var.alb_internal
@@ -45,6 +47,16 @@ output "zone_name_servers" {
 output "acm_certificate_arn" {
   description = "ARN of the certificate attached to the HTTPS listener — either the one this module minted or the acm_certificate_arn passed in. Null when HTTPS is disabled."
   value       = local.outputs.acm_certificate_arn
+}
+
+output "apps_certificate_arn" {
+  description = "ARN of the certificate covering the R² app and sandbox hostnames. Null unless retool-services has enable_app_hostnames on."
+  value       = local.outputs.apps_certificate_arn
+}
+
+output "app_hostnames_enabled" {
+  description = "Whether this module created the certificates, DNS records and routes for the R² app and sandbox hostnames."
+  value       = local.outputs.app_hostnames_enabled
 }
 
 output "alb_id" {

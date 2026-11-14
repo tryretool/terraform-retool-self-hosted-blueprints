@@ -153,6 +153,12 @@ variable "enable_agent_sandbox" {
   description = "When true, generates agent sandbox secrets (JWT keypair, encryption key, API secret, Postgres URL) synced to K8s via ESO."
 }
 
+variable "enable_app_hostnames" {
+  type        = bool
+  default     = false
+  description = "Serve R² published apps at https://<app>.apps.<domain_name>/ and editor previews at https://sandbox-<id>.sandboxes.apps.<domain_name>/ instead of in an iframe. Needs Retool 4.86.0+, Helm chart 6.13.2+, enable_agent_sandbox and R² storage. Editor previews move for every space as soon as the new pods start, so set each space's Permissions Policy first. See https://docs.retool.com/self-hosted/self-managed/guides/app-hostnames."
+}
+
 variable "db" {
   type = object({
     address                = string
