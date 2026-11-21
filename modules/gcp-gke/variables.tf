@@ -172,10 +172,10 @@ variable "external_secrets_chart" {
   type = object({
     repository = optional(string, "https://charts.external-secrets.io")
     # AUTOUPDATE: external-secrets-chart 2.x.x
-    version          = optional(string, "2.8.0")
+    version          = optional(string, "2.15.0")
     image_repository = optional(string, "ghcr.io/external-secrets/external-secrets")
     # AUTOUPDATE: external-secrets-image 2.x.x
-    image_tag = optional(string, "v2.8.0")
+    image_tag = optional(string, "v2.15.0")
   })
   default     = {}
   description = "Chart and image coordinates for the External Secrets Operator. Pinned explicitly because GCP Marketplace requires a fixed image set. Chart and image move together: the defaults pair chart 2.8.0 with image v2.8.0, so an override that bumps version should bump image_tag to match."
@@ -185,10 +185,10 @@ variable "reloader_chart" {
   type = object({
     repository = optional(string, "https://stakater.github.io/stakater-charts")
     # AUTOUPDATE: reloader-chart 2.x.x
-    version          = optional(string, "2.2.14")
+    version          = optional(string, "2.2.20")
     image_repository = optional(string, "ghcr.io/stakater/reloader")
     # AUTOUPDATE: reloader-image 1.x.x
-    image_tag = optional(string, "v1.4.19")
+    image_tag = optional(string, "v1.4.24")
   })
   default     = {}
   description = "Chart and image coordinates for Stakater reloader. Pinned explicitly because GCP Marketplace requires a fixed image set. Chart and image move together: the defaults pair chart 2.2.14 with image v1.4.19, so an override that bumps version should bump image_tag to match."
